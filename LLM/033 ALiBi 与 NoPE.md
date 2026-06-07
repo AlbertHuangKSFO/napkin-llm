@@ -9,7 +9,7 @@
 
 两者的共同卖点都是**长度外推**:ALiBi 训 1024、测 2048 困惑度不升;NoPE 在某些研究里外推甚至优于显式编码。
 
-![[pos-alibi-bias.svg]]
+![[pos-alibi-bias.png]]
 
 ## 例子:ALiBi 在 5 个 token 上手算
 

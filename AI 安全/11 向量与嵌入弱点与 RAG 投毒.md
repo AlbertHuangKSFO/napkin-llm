@@ -1,6 +1,6 @@
 [[11 向量与嵌入弱点与 RAG 投毒|向量与嵌入弱点与 RAG 投毒]]的反直觉之处:RAG 把"外部知识"接进 LLM,于是**向量库本身成了新的攻击面**——攻击者不必碰模型权重,只要往知识库里塞几篇文档,就能在检索阶段劫持生成。这是 OWASP LLM Top 10 的 **LLM08(Vector & Embedding Weaknesses)**。它和 RAG 域深度耦合:写入与检索的访问控制见 [[16 检索安全与访问控制|RAG 检索安全]],底层向量库机制见 [[04 Embedding 与向量数据库|Embedding 与向量库]],被污染后沉淀进记忆则是 [[17 Memory 与 Context Poisoning|记忆投毒]]。
 
-![[sec-RAG投毒链路.svg]]
+![[sec-RAG投毒链路.png]]
 
 ## 弱点一:embedding 反演(向量不是脱敏)
 常见误解是"存向量比存原文安全"。实际上 **embedding 反演**(embedding inversion)可从向量**部分重构原文**——尤其当能查询同一嵌入模型时。所以向量库泄露 ≈ 原文泄露,向量**不能当作脱敏手段**,必须按敏感数据同等保护(加密、ACL)。详见 [[07 敏感信息泄露与 System Prompt 泄露|信息泄露]]。

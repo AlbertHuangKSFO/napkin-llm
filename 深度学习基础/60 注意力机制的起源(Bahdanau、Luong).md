@@ -30,7 +30,7 @@ $$c_t=0.10\,h_1+0.78\,h_2+0.12\,h_3\ \approx\ h_2$$
 $$c_t=0.111\,h_1+0.740\,h_2+0.149\,h_3=[0.111,\,0.740,\,0.149]$$
 最大分量在第 2 维(对应"爱")—— $c_t$ **几乎就是 $h_2$**,说明这一步上下文聚焦在"爱"上,解码器据此输出 love。
 
-![[attn-Bahdanau对齐.svg]]
+![[attn-Bahdanau对齐.png]]
 
 ## 原理
 
@@ -71,7 +71,7 @@ $$e_{tj}=\begin{cases}s_t^\top h_j & \text{dot(点积)}\\ s_t^\top W\,h_j & \tex
 
 **Q/K/V 抽象(为后面 Transformer 打底)**:在 Bahdanau 里 query=解码状态 $s_{t-1}$、key=value=编码隐状态 $h_j`;Transformer 把三者**各自用一个投影矩阵**从同一输入生成($Q=XW_Q,K=XW_K,V=XW_V$),并区分 key(用来打分匹配)和 value(用来加权聚合)。"用 query 去匹配 key、按匹配度聚合 value"这个三件套,从 Bahdanau 的跨编解码注意力,一路用到 Transformer 的自注意力、交叉注意力,是理解一切现代注意力的统一模板。
 
-![[rnn-seq2seq瓶颈.svg]]
+![[rnn-seq2seq瓶颈.png]]
 
 ## 代码
 

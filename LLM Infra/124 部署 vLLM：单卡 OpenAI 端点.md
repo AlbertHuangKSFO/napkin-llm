@@ -35,11 +35,11 @@ curl http://localhost:8000/v1/chat/completions \
 
 **3. 暴露 OpenAI 兼容路由。** `/v1/chat/completions`、`/v1/completions`、`/v1/models`、`/v1/embeddings`(若是 embedding 模型)。流式靠 SSE:`data: {...}` 多行 + `data: [DONE]` 收尾。
 
-![[lab-vLLM单卡部署.svg]]
+![[lab-vLLM单卡部署.png]]
 
 放大看这一行命令背后的 V1 双进程结构(前端 FastAPI / EngineCore)与 OpenAI 兼容路由:
 
-![[lab-124双进程架构.svg]]
+![[lab-124双进程架构.png]]
 
 ## ④ 常用 flag 速查
 

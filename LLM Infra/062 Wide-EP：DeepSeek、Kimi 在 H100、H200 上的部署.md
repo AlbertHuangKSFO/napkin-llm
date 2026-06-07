@@ -11,7 +11,7 @@ $$
 
 Wide-EP 的逻辑:EP↑ ⇒ 每卡专家数↓(权重薄) 且 聚合全局 batch $B_{\text{global}}$↑ ⇒ 每专家 token↑(GEMM 满)。瓶颈从显存 / 算力转移到 **all-to-all 通信 + 专家负载不均**。
 
-![[ipar-WideEP部署.svg]]
+![[ipar-WideEP部署.png]]
 
 ```python
 # SGLang:Wide-EP 部署 DeepSeek-V3,PD 分离 + EPLB(2025 形态)
@@ -34,8 +34,8 @@ Wide-EP 的逻辑:EP↑ ⇒ 每卡专家数↓(权重薄) 且 聚合全局 batch
 ```
 
 
-![[ipar-062WideEP-EPLB均衡.svg]]
-![[ipar-062WideEP-PD车间.svg]]
+![[ipar-062WideEP-EPLB均衡.png]]
+![[ipar-062WideEP-PD车间.png]]
 
 ## 面试高频
 - **Wide-EP 为什么必须配 PD 分离?** prefill 算力受限、要大 batch、用高吞吐 all-to-all 内核;decode 访存受限、要低延迟、用低延迟内核且把专家摊到极致(每卡 1 专家)。两者最优 EP 度与专家摆位完全不同,聚在一起会互相拖累,所以拆成独立服务各自扩缩。

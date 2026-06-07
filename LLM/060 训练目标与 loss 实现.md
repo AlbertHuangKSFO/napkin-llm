@@ -19,7 +19,7 @@
 ```
 位置 0 的输出该预测「坐」,位置 1 该预测「在」……最后位置 4「上→?」没有下一个 token,丢弃。每个位置算一次 [[30 交叉熵与负对数似然|交叉熵]],再平均。
 
-![[train-loss计算流.svg]]
+![[train-loss计算流.png]]
 
 **为什么忘 shift 会假性低 loss。** 若错用位置 $t$ 的 logits 配 token $t$(没左移),模型只要在每个位置「复制当前输入」就全对,loss 迅速趋近 0——但它学的是恒等映射,生成时一片混乱。这是新手最常见、最隐蔽的 bug:**loss 漂亮但模型废了**。
 
@@ -33,7 +33,7 @@ padding：  [真实 token] [pad pad pad]
 ```
 PyTorch 交叉熵默认 `ignore_index=-100`:把不想算的位置 label 设成 -100,该位既不算 loss 也不回传梯度。
 
-![[train-loss-mask.svg]]
+![[train-loss-mask.png]]
 
 ## 原理
 

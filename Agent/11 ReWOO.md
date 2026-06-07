@@ -18,7 +18,7 @@ ReWOO 的洞见一句话:**模型用来"规划"的推理,和工具返回的"观�
 
 ## 机制:Planner / Worker / Solver 三件套
 
-![[ReWOO.svg]]
+![[ReWOO.png]]
 
 1. **Planner(规划者,LLM)**:一次性产出**带占位变量的蓝图**。每条形如:
 

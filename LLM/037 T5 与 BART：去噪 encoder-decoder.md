@@ -36,7 +36,7 @@ BART 对同一句话可能这样加噪:`Thank ___ me your party .`(遮挡 + 删�
 
 注意最后一行:连「打分」这种回归任务,T5 也把数字**当字符串生成**——这就是「一切皆文本」的彻底之处。
 
-![[hist-T5去噪.svg]]
+![[hist-T5去噪.png]]
 
 ## 原理:双向编码 + 自回归解码 + 去噪损失
 **结构**:标准 [[012 交叉注意力 Cross-Attention|encoder-decoder]] Transformer。Encoder 用双向自注意力(无掩码,token 互相全可见);decoder 用[[007 因果掩码与 padding 掩码|因果掩码]]的自注意力 + 对 encoder 输出做 [[012 交叉注意力 Cross-Attention|cross-attention]]。
@@ -53,7 +53,7 @@ $$\mathcal{L} = -\sum_{t=1}^{m}\log P_\theta\big(y_t \mid y_{<t},\,\tilde{x}\big
 
 **架构消融:T5 论文比过三种结构**。Raffel 等系统对比了 encoder-decoder、language model(decoder-only)、prefix-LM 三种,结论是在他们的迁移学习设定下 **encoder-decoder + span corruption 最优**——但这个结论是在「中等规模 + 有监督迁移」下得到的;到了**超大规模纯自监督**,decoder-only 反而胜出(见下方面试高频)。这是「为什么论文说 enc-dec 好、实际主流却是 decoder-only」这个常见困惑的根源。
 
-![[hist-encdec家族.svg]]
+![[hist-encdec家族.png]]
 
 ## 代码:T5 风格的 span 破坏(可运行)
 ```python

@@ -24,7 +24,7 @@ $$A^TA=\begin{bmatrix}3&4\\0&5\end{bmatrix}\begin{bmatrix}3&0\\4&5\end{bmatrix}=
 
 **交叉验证**:奇异值之积 $\sigma_1\sigma_2=\sqrt{45\cdot5}=\sqrt{225}=15=|\det A|=|3\cdot5-0\cdot4|=15$。对上了(这对应 [[08 行列式与空间缩放|行列式]] = 面积缩放,而 SVD 把面积缩放拆成各轴 $\sigma$ 之积)。
 
-![[la-SVD三步几何.svg]]
+![[la-SVD三步几何.png]]
 
 ## 原理
 
@@ -68,7 +68,7 @@ $$\|A-A_k\|_2=\sigma_{k+1},\qquad \|A-A_k\|_F=\sqrt{\sigma_{k+1}^2+\cdots+\sigma
 
 **LoRA 的数学背景**:大模型微调时,权重更新 $\Delta W$ 经验上是**低秩**的,于是用 $\Delta W=BA$($B$ 是 $d\times r$、$A$ 是 $r\times d$,$r\ll d$)只训这两个瘦矩阵——本质就是"假设更新矩阵秩低、用秩 $r$ 近似",和截断 SVD 一脉相承(Hu et al., LoRA, 2021)。
 
-![[la-SVD低秩近似.svg]]
+![[la-SVD低秩近似.png]]
 
 应用:图像压缩、潜在语义分析(LSA)、协同过滤推荐、降维得到的低维 [[04 Embedding 与向量数据库|Embedding]],本质都是"截断 SVD 保留主要方向"。
 

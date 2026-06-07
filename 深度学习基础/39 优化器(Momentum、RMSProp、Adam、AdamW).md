@@ -24,7 +24,7 @@ $v_1=0.1,\ v_2=0.19,\ v_3=0.271,\dots\to$ 稳态 $v_\infty=\frac{g}{1-\beta}=\fr
 
 **RMSProp**:某参数梯度一直是 $0.1$,二阶矩 $s\to 0.1^2=0.01$,更新 $\frac{g}{\sqrt s}=\frac{0.1}{0.1}=1$;另一参数梯度一直是 $10$,$s\to100$,更新 $\frac{10}{10}=1$。**不管原始梯度大小,都被归一化到 ~1 量级**——每个参数自适应。
 
-![[nn-优化器对比.svg]]
+![[nn-优化器对比.png]]
 
 ## 原理
 
@@ -57,7 +57,7 @@ $$\theta_t=\theta_{t-1}-\eta\,\frac{\hat m_t}{\sqrt{\hat v_t}+\epsilon}$$
 $$\theta_t=\theta_{t-1}-\eta\Big(\frac{\hat m_t}{\sqrt{\hat v_t}+\epsilon}+\lambda\,\theta_{t-1}\Big)$$
 即正则项 $\lambda\theta$ **不经过** $\sqrt{\hat v_t}$ 缩放,所有参数被均匀地往 0 拉。这让 [[42 正则化(L2、Dropout、早停、标签平滑)|权重衰减]] 行为可控、泛化更好,是当今 Transformer/LLM 的默认优化器。
 
-![[nn-adam自适应.svg]]
+![[nn-adam自适应.png]]
 
 **⑥ Lion(EvoLved Sign Momentum,Chen et al. 2023)**。用符号搜索发现的新优化器:只维护**一个动量**、更新方向取**符号**(类似 sign-SGD + 动量),不存二阶矩 → 显存约为 Adam 的一半。
 $$c_t=\beta_1 m_{t-1}+(1-\beta_1)g_t,\quad \theta_t=\theta_{t-1}-\eta\big(\text{sign}(c_t)+\lambda\theta_{t-1}\big),\quad m_t=\beta_2 m_{t-1}+(1-\beta_2)g_t$$

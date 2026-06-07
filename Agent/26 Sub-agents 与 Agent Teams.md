@@ -6,14 +6,14 @@
 - **Sub-agents(子代)**:存在于**单个会话内部**。一个主 agent(父代)在执行过程中派生出子代去做某块工作,子代完成后**把结果报告给父代**就结束。子代之间**不能直接对话**——它们彼此不知道对方存在,所有协调都经过父代这个中心。这是**中心化、单向、单层**的结构。
 - **Agent Teams**:是多个**独立、自主的会话**。它们是平等的实体,**能直接互发消息**、从一份**共享任务列表**里认领任务、甚至**互相质疑彼此的结论**。这是**去中心化、双向、对等**的结构。
 
-![[Sub-agents 与 Agent Teams.svg]]
+![[Sub-agents 与 Agent Teams.png]]
 
 两者的分界线,本质是 [[22 多智能体系统|多智能体系统]] 里「中心编排」与「自主协作」的分界。Sub-agents 更像 [[07 Orchestrator-Workers|Orchestrator-Workers]] 的工程化身——父代是 orchestrator,子代是 worker,派活、干、收,没有 worker 间的横向交流。Agent Teams 则跨过那条线,成为真正的多体协作:agent 之间能对话、能反驳、能基于彼此的产出迭代。
 
 ## Sub-agents 的机制与 context forking
 Sub-agents 的核心价值,藏在一个机制里:**context forking(上下文派生/分叉)**——给子代一份**隔离的上下文**。这解决了长程 agent 的两个真问题。
 
-![[Sub-agents 与 Agent Teams-context forking.svg]]
+![[Sub-agents 与 Agent Teams-context forking.png]]
 
 **问题一:主上下文被污染。** 一个主 agent 在做大任务时,如果亲自去「探索某个方案」——读 20 个文件、试三种写法、大半都是死路——这些**试错噪声会全部堆进主上下文**,把真正重要的任务目标和关键结论淹没,引发 [[23 Agent Harness 概览|Agent Harness 概览]] 说的上下文漂移。context forking 的解法:把「探索」这件事**派给一个子代**,子代在自己**隔离的上下文**里折腾,折腾完**只把精炼结论回报给父代**——所有噪声留在子代的上下文里,**主上下文始终干净、聚焦**。这是 [[20 上下文工程|上下文工程]] 在多 agent 层面的关键手法。
 

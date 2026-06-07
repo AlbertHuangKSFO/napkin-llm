@@ -39,7 +39,7 @@ LLaMA **不是**全新架构,而是 [[036 GPT 系列：自回归与规模化|GPT
 
 LLaMA-3 最显眼的变化是**词表从 3.2 万暴涨到 12.8 万**——压缩率更高、序列更短、多语言/代码更好(代价是嵌入表更大,见 [[050 分词总览与子词动机|分词总览]])。
 
-![[hist-LLaMA块.svg]]
+![[hist-LLaMA块.png]]
 
 ## 原理:逐零件拆解一层 decoder 块
 设输入 hidden 为 $x$,一层 LLaMA 块的前向(Pre-Norm 残差):
@@ -63,7 +63,7 @@ $$\text{FFN}(x) = W_{\text{down}}\Big(\underbrace{\text{Swish}(W_{\text{gate}}\,
 
 **SwiGLU 隐藏维到底取多少?** 经典 FFN 隐藏维 $4d$、两个矩阵,参数 $2\cdot d\cdot 4d=8d^2$。SwiGLU 有三个矩阵,若也用 $4d$ 则参数 $3\cdot d\cdot 4d=12d^2$,多了一半。为保持 $8d^2$ 不变,解 $3\cdot d\cdot h=8d^2 \Rightarrow h=\tfrac{8}{3}d$。LLaMA-2 7B:$\tfrac{8}{3}\times4096\approx10923$,再向上对齐到 256 的倍数 → **11008**。这就是「为什么是 11008 而不是 16384」的完整推导。
 
-![[hist-SwiGLU.svg]]
+![[hist-SwiGLU.png]]
 
 ## 代码:一层 LLaMA 块(可运行骨架)
 ```python

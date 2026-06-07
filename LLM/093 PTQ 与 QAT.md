@@ -9,7 +9,7 @@
 
 一句话:**PTQ 求快求省,QAT 求精度上限**。LLM 时代,因为模型动辄数十上百亿参数,QAT 重训成本难以接受,于是工程上发展出**误差补偿型 PTQ**(GPTQ 逐层修正、AWQ 保护重要权重),用 PTQ 的代价逼近 QAT 的精度。
 
-![[quant-ptq-vs-qat.svg]]
+![[quant-ptq-vs-qat.png]]
 
 ## 例子:同一个 int4 量化,两条路差在哪
 
@@ -22,7 +22,7 @@
 
 **STE 走一遍数字**。设 $w=0.47$、$s=0.10$,前向伪量化:$\text{round}(0.47/0.10)=\text{round}(4.7)=5$,$\tilde w=5\times0.10=0.50$。上游传来损失梯度 $\frac{\partial L}{\partial\tilde w}=0.3$。**真梯度** $\frac{\partial\tilde w}{\partial w}$ 几乎处处为 0(round 是阶梯),若照实用,$\frac{\partial L}{\partial w}=0.3\times0=0$,$w$ 永远不更新。**STE 假装** $\frac{\partial\tilde w}{\partial w}=1$(只要 $w/s$ 没被 clip),于是 $\frac{\partial L}{\partial w}\approx0.3$ 原样穿过——优化器据此把真实的 $w=0.47$ 往降 loss 的方向挪。几步后,$w$ 可能落到 $0.42$(更靠近格点 $0.40$,量化误差从 $0.03$ 降到 $0.02$),或者把 scale 调到让 $0.47$ 正好落格点上。**没有 STE 这一步「假装 round 可导」,QAT 完全训不动**。
 
-![[quant-ste-直通估计.svg]]
+![[quant-ste-直通估计.png]]
 
 ## 原理:校准、伪量化、STE
 

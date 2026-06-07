@@ -1,7 +1,7 @@
 [[15 Tool Misuse 与意外代码执行|工具滥用]]是 [[14 Excessive Agency 与 Goal Hijack|过度代理]] 落地的具体形态:工具是 agent 伸向真实世界的手,一旦被滥用,合法授权就被掰成攻击动作。它对应 OWASP ASI02 工具滥用 + ASI05 意外代码执行——同一次工具调用,既能是正常 [[15 Function Calling 工具调用|Function Calling]],也能是 RCE、SSRF 或 confused deputy。
 
 ## 三条滥用路径
-![[sec-工具滥用与RCE.svg]]
+![[sec-工具滥用与RCE.png]]
 
 - **code-exec 工具 → RCE**:工具能跑 `eval()`/`exec()`/shell,模型生成的代码直接执行。被注入/被诱导后,任意命令落地——这正是 ASI05 意外代码执行(agent 生成、修改或运行代码/命令,产生安全或运维风险)。
 - **fetch 工具 → SSRF**:URL 由模型或外部内容控制,agent 被引去打内网或云元数据端点(如 `169.254.169.254`)。SSRF 本质就是 confused deputy 的经典形态——应用被当成代理,替攻击者做它自身无权做的事。

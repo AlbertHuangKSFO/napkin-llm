@@ -10,7 +10,7 @@
 
 Megatron 的妙处:FFN 是两层 $Z=\text{GeLU}(XA)\cdot B$,第一层 $A$ **列切**、第二层 $B$ **行切**。列切的输出正好已按卡分块,直接喂给行切的对应分片——**中间不必通信**,只在末尾 all-reduce 一次把部分和拼回。attention 更自然:多头本就独立,**按头分卡**,每个头的注意力完全在本卡内算完,输出投影行切后 all-reduce。
 
-![[dist-Megatron行列切分.svg]]
+![[dist-Megatron行列切分.png]]
 
 ## 例子
 
@@ -24,7 +24,7 @@ Megatron 的妙处:FFN 是两层 $Z=\text{GeLU}(XA)\cdot B$,第一层 $A$ **列�
 
 **一个 transformer 层的通信账**:attention 块 1 次 + FFN 块 1 次 = **前向 2 次 all-reduce**;反向对称,**再 2 次**。一个 96 层模型,光 TP 就 $96\times4\approx 384$ 次 all-reduce/步,每次同步**完整激活**——这就是 TP 必须走机内 NVLink 的原因。
 
-![[dist-Megatron注意力切分.svg]]
+![[dist-Megatron注意力切分.png]]
 
 ## 原理
 

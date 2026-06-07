@@ -30,11 +30,11 @@ $$
 
 ## 图
 
-![[disagg-DistServe架构.svg]]
+![[disagg-DistServe架构.png]]
 
-![[disagg-049goodput非吞吐.svg]]
+![[disagg-049goodput非吞吐.png]]
 
-![[disagg-049独立并行搜索.svg]]
+![[disagg-049独立并行搜索.png]]
 
 ## 代码
 

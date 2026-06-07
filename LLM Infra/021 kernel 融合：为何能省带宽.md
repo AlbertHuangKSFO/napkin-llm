@@ -19,11 +19,11 @@ $$I = \frac{\text{FLOP}}{\text{访存字节}} \ll \text{机器平衡点}$$
 $$\text{流量}_{\text{融合}} = \underbrace{N_\text{in} + N_\text{out}}_{\text{只首尾各一次}} \;\ll\; \text{流量}_{\text{未融合}} = N_\text{in}+N_\text{out}+2(k{-}1)N$$
 
 ## 图
-![[kern-融合前后HBM往返对比.svg]]
+![[kern-融合前后HBM往返对比.png]]
 
 把上面 `y=relu(a·x+b)` 的流量逐算子记成账,7N→2N 一目了然(末尾也标了融合的代价):
 
-![[kern-021融合流量手算表.svg]]
+![[kern-021融合流量手算表.png]]
 
 ## 代码:PyTorch 视角的融合
 ```python

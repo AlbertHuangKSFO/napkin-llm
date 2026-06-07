@@ -38,9 +38,9 @@ $u$ 为算力利用率(prefill 下高,常 0.7–0.9)。
 
 ## 图
 
-![[pd-prefill计算图.svg]]
+![[pd-prefill计算图.png]]
 
-![[pd-013prefill随长度线性.svg]]
+![[pd-013prefill随长度线性.png]]
 
 ## 代码
 

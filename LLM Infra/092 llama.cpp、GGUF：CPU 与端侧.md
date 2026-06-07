@@ -11,7 +11,7 @@
 - **Apple 一等公民**:M 系列经 NEON + Accelerate + Metal 优化,MacBook 无独显也能跑 4bit 70B(慢但能跑)。
 - 这把「Llama-3.3-70B、Qwen 大模型 FP16 装不进消费硬件」的鸿沟用 4/5bit 量化补上。
 
-![[eng-092量化档位.svg]]
+![[eng-092量化档位.png]]
 
 ## ③ 原理:两个核心资产
 
@@ -21,7 +21,7 @@
 
 **生态。** Ollama、LM Studio 等「一键本地跑 LLM」工具,底层多是 llama.cpp;它把端侧推理的复杂度封装成「下个 GGUF 文件 + 一行命令」。
 
-![[eng-llama.cpp端侧.svg]]
+![[eng-llama.cpp端侧.png]]
 
 与云端引擎的本质分界:云端 = [[030 PagedAttention 深入：KV 当虚拟内存|PagedAttention]] + [[041 连续批处理：迭代级调度内幕|连续批]] 服大量并发;llama.cpp = 极致可移植 + 量化,服一个人。
 

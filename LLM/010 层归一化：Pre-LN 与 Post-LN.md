@@ -27,7 +27,7 @@ $$
 
 得 $\hat{x}=[-1.5,\,-0.5,\,-0.5,\,-0.5,\,0,\,0,\,1,\,2]$,均值 0、方差 1。**注意:这步只用到这一个 token 自己的 8 个数,和 batch 里其他样本、和句子多长都无关**。这正是它在变长序列里稳定的原因。
 
-![[tf-LN沿特征归一.svg]]
+![[tf-LN沿特征归一.png]]
 
 ## ③ 原理:LayerNorm 公式 + Pre-LN/Post-LN 位置之争
 
@@ -48,7 +48,7 @@ $\gamma,\beta\in\mathbb{R}^{d}$ 是可学习参数,$\epsilon$ 防除零。
 
 Xiong et al.(2020)用平均场理论证明:**Post-LN 在初始化时靠近输出层的梯度很大**,直接上大学习率会爆,所以必须有 learning-rate **warmup**(慢慢热身)才能稳;层数一深更难训。而 **Pre-LN 把 LN 移进残差块内部,初始化时梯度就很规整**,残差通路不被 LN 打断(那个 "+1" 高速路保持干净),因此**可以去掉或弱化 warmup**、更容易堆深、收敛更快。代价是 Pre-LN 最终精度有时略低于调好的 Post-LN,但工程稳定性的收益让它成为 GPT-2 之后的默认选择。
 
-![[tf-preLN-postLN.svg]]
+![[tf-preLN-postLN.png]]
 
 **现代变体**:很多 LLM(LLaMA 等)用 **RMSNorm**——省掉减均值,只按均方根缩放:$\text{RMSNorm}(x)=\gamma\odot\dfrac{x}{\sqrt{\frac1d\sum x_i^2+\epsilon}}$,更省算力、效果相当。详见 [[43 归一化(BatchNorm、LayerNorm、RMSNorm、GroupNorm)|归一化]]。
 

@@ -52,11 +52,11 @@ $$
 
 ## 图
 
-![[obs-基准对比.svg]]
+![[obs-基准对比.png]]
 
-![[obs-107MLPerf场景.svg]]
+![[obs-107MLPerf场景.png]]
 
-![[obs-107Pareto前沿.svg]]
+![[obs-107Pareto前沿.png]]
 
 ## 代码
 

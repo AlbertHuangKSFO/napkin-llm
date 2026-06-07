@@ -10,7 +10,7 @@ $$\bar g=\frac{1}{4}(g_0+g_1+g_2+g_3).$$
 
 一句话:**DP = 复制模型 + 切 batch + 每步梯度 all-reduce 同步**。它是 PyTorch DDP、以及 [[070 ZeRO 与 FSDP|ZeRO/FSDP]] 的基础。
 
-![[dist-数据并行流程.svg]]
+![[dist-数据并行流程.png]]
 
 ## 例子
 
@@ -26,7 +26,7 @@ $$\bar g=\frac{1}{4}(g_0+g_1+g_2+g_3).$$
 - **朴素(参数服务器)**:所有卡把 2GB 发给一个 master,master 收 $(p-1)\times2$GB、再广播——master 成单点瓶颈,卡越多越堵。
 - **环形 all-reduce**:每卡只与右邻收发,单卡总传输量 $\approx 2N\cdot\frac{p-1}{p}$。$p$ 大时趋于常数 $2N=4$GB,**与卡数几乎无关**——这是 NCCL 默认算法。
 
-![[dist-环形allreduce.svg]]
+![[dist-环形allreduce.png]]
 
 ## 原理
 

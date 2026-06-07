@@ -4,7 +4,7 @@
 
 ## 为什么安全训练会失效:两大根因
 
-![[sec-越狱手法谱系.svg]]
+![[sec-越狱手法谱系.png]]
 
 **Wei, Haghtalab, Steinhardt 2023《Jailbroken: How Does LLM Safety Training Fail?》**(arXiv 2307.02483)给出了至今最有解释力的框架,把越狱成功归到两类失效模式:
 

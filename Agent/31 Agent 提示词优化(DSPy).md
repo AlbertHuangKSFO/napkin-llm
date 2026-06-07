@@ -2,7 +2,7 @@
 
 这把 prompt engineering 从**手艺**变成了**工程**:就像没人愿意手写汇编、而是写高级语言交给编译器,DSPy 想让你写「声明式的 LM 程序」交给优化器去生成 prompt。它和 [[08 Evaluator-Optimizer|Evaluator-Optimizer]] 是同一种精神在不同层面的体现——后者是 agent 运行时让一个评估者驱动一个生成者迭代;DSPy 是**离线、在开发期**用 metric 驱动优化器迭代 prompt,产物是一份固定下来的优化程序。
 
-![[Agent 提示词优化(DSPy).svg]]
+![[Agent 提示词优化(DSPy).png]]
 
 ## 本质:prompt 是「待优化的参数」,不是手写的字符串
 

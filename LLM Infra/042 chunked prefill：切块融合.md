@@ -10,7 +10,7 @@ chunked prefill 的做法是:把这锅大菜拆成 6 段、每段炖 30 分钟,*
 
 **生活类比**:GPU 像一个安检口,一步能过的 token 数有固定预算(比如 2048)。长 prompt 是件**超大行李**(4096 token)。不切块时,它一口气独占安检口约 200ms,这 200ms 里后面 60 个小包(在飞 decode)**一个都过不去**,小包的 ITL 从 40ms 飙到 200ms,5 倍尖刺,安检口被堵死。chunked prefill 的做法:把大行李拆成 8 段 × 512,**每过完一段就插空让一批小包也过**——一段 chunk 占 512 预算,余下 1536 预算正好塞满一批小包。于是单步被预算钳在 ~30ms 有上界,小包每步稳定通过、ITL 平滑无尖刺。几乎不损吞吐,因为 chunk 已把算力吃满、小包搭便车不额外搬权重;代价只是这件大行李要 8 步才过完,TTFT 略增 +10–20%。这条「单步上界」滑块就是 `max_num_batched_tokens`。
 
-![[sched-042类比安检分段插空.svg]]
+![[sched-042类比安检分段插空.png]]
 
 ## 例子
 
@@ -46,7 +46,7 @@ $c$ 越小 → 单步越短、TPOT 越平稳,但填完整段 prefill 的步数�
 
 ## 图
 
-![[sched-chunked-prefill切块.svg]]
+![[sched-chunked-prefill切块.png]]
 
 ## 代码
 
@@ -88,7 +88,7 @@ llm = LLM(model="...", enable_chunked_prefill=False, max_num_batched_tokens=3276
 `❌` 关闭切块 + 巨大预算 = 长 prefill 独占步 = generation stall;`✅` 开启切块并用 `max_num_batched_tokens` 把单步钳小,换来平稳 TPOT。注意:`max_num_batched_tokens` 太小会损吞吐(prefill 利用不满算力),太大则 stall 抬头——它就是这条取舍线上的滑块。
 
 
-![[sched-042chunk大小取舍.svg]]
+![[sched-042chunk大小取舍.png]]
 
 ## 面试高频
 

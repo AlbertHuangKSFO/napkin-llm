@@ -32,7 +32,7 @@ $$
 
 **反过来估成本**:GPT-3 175B 训练约 3e23 FLOPs(N=175e9, D≈300e9, $6\times175e9\times300e9\approx3.15\times10^{23}$),与论文公布的算力一致。
 
-![[param-训练FLOPs6ND.svg]]
+![[param-训练FLOPs6ND.png]]
 
 **推理对比**:生成 1 个 token 只前向,约 **2N FLOPs**。7B 模型生成 1 token ≈ $1.4\times10^{10}$ FLOPs;生成 1000 token ≈ $1.4\times10^{13}$ FLOPs,**比训练便宜得多**——但推理要做无数次,长期累积的总算力可能超过训练。
 

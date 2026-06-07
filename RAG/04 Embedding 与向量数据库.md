@@ -17,7 +17,7 @@ RAG 检索用的是 **bi-encoder**:query 和 doc **各自独立**过同一个编
 
 `sentence-transformers`(SBERT)是 bi-encoder 的代表实现:在 BERT 上做对比学习,让正例对(相关句)向量拉近、负例推远,输出句向量。
 
-![[Embedding 与向量数据库.svg]]
+![[Embedding 与向量数据库.png]]
 
 ### 相似度度量
 - **cosine 余弦**:看方向夹角,忽略模长。**最常用**,对向量缩放不敏感。
@@ -40,7 +40,7 @@ RAG 检索用的是 **bi-encoder**:query 和 doc **各自独立**过同一个编
 
 此外 **ScaNN**(Google)用各向异性量化 + 部分重排,在精度/速度上很强,是另一条工业级路线。
 
-![[向量索引-ANN.svg]]
+![[向量索引-ANN.png]]
 
 ## 向量库谱(各自定位)
 

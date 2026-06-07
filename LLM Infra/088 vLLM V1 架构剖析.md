@@ -4,7 +4,7 @@
 
 V0 像一个人既在前台收银(tokenize、拼 prompt、回传)又在灶台炒菜(跑 GPU),两边互相等。**V1 把前台和后厨彻底分到两个进程**:前台(AsyncLLM)专心接客、切配、打包流式回传;后厨(EngineCore)只盯着一件事——调度 + 跑模型,灶火never 熄。两进程靠传菜窗口(IPC)对接,于是「切配」的 CPU 活和「炒菜」的 GPU 活能**重叠**,GPU 不再为 CPU 杂活停火。
 
-![[eng-088V0对V1进程.svg]]
+![[eng-088V0对V1进程.png]]
 
 ## ② 小数字例子:V1 升级带来什么
 
@@ -12,7 +12,7 @@ V0 像一个人既在前台收银(tokenize、拼 prompt、回传)又在灶台炒
 - **前缀缓存近零开销**:V0 时代开 APC 在命中率低时反而拖慢(Python 对象/驱逐开销);V1 用常数时间驱逐 + 极少对象创建,**命中率 0% 也几乎不掉性能**,于是可以**默认常开**。
 - **统一调度**:一个请求在某 step 处理多少 token 就是字典里一个数,prefill 和 decode 在同一 batch 里按 token 预算自由混合 → 不再有「prefill 撑爆一步、decode 饿着」的相位割裂。
 
-![[eng-088统一调度token预算.svg]]
+![[eng-088统一调度token预算.png]]
 
 ## ③ 原理:四个关键设计
 
@@ -24,7 +24,7 @@ V0 像一个人既在前台收银(tokenize、拼 prompt、回传)又在灶台炒
 
 **4. 近零开销前缀缓存 + 零拷贝调度。** 前缀缓存数据结构优化为**常数时间驱逐**、极少 Python 对象创建;调度按 token 数下发、避免大对象搬运。配合 PagedAttention 的块表,KV 复用与显存碎片管理都做得很轻。
 
-![[eng-vLLM-V1架构.svg]]
+![[eng-vLLM-V1架构.png]]
 
 底层仍是 [[030 PagedAttention 深入：KV 当虚拟内存|PagedAttention]]、[[041 连续批处理：迭代级调度内幕|连续批]]、[[044 调度器设计：waiting、running 队列与抢占|waiting/running 队列与抢占]]、[[045 抢占：重计算 vs swap|抢占 recompute/swap]]、[[032 前缀缓存：RadixAttention 树结构|前缀缓存]]这些概念,V1 是把它们用更干净的进程/调度结构重新组织。
 

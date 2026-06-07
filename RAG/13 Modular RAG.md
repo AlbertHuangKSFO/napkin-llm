@@ -2,7 +2,7 @@
 
 提出这个框架的是 Gao et al. 2024 的综述《Modular RAG: Transforming RAG Systems into LEGO-like Reconfigurable Frameworks》(arXiv:2407.21059)。它的洞见是:RAG 这两年冒出的方法太多、太杂,很多都塞不进经典的「retrieve-then-generate」直线里,需要一个**更高抽象的、可重构的**框架来收编它们。
 
-![[Modular RAG-乐高.svg]]
+![[Modular RAG-乐高.png]]
 
 ## 机制
 

@@ -37,7 +37,7 @@ $$\text{Attn}=\underbrace{\text{softmax}\!\big(Q\bar K^\top\big)}_{n\times k}\,\
 - **layerwise 共享**:所有层共用一套 $E,F$,参数最省。
 实测共享对质量影响很小,常用 key-value 共享或更激进的 layerwise 来压参数。
 
-![[attn-Linformer低秩投影.svg]]
+![[attn-Linformer低秩投影.png]]
 
 **和 [[023 线性注意力(Linear Transformer、Performer)|线性注意力]] 的区别**:线性注意力**去掉 softmax**、靠核函数 + 结合律换序;Linformer **保留 softmax**,只是在长度维上做**低秩投影**把 $n$ 换成 $k$。两条都把 $O(n^2)$ 变 $O(n)$,但机制不同——一个改"乘法顺序",一个改"矩阵尺寸"。
 

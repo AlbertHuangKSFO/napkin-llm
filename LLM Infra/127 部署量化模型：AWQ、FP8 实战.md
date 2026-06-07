@@ -34,11 +34,11 @@ vllm serve meta-llama/Llama-3.1-8B-Instruct --quantization fp8
 
 **硬件门槛:** FP8 W8A8 需 Hopper(H100)/Ada;Ampere/Turing 只能走 W8A16(Marlin kernel)。**精度回退:** 离群值大的层可能掉点,AWQ 靠激活感知保护重要通道,FP8 可对敏感层保留高精度(见 [[085 校准、精度回退与离群值|校准与离群值]])。
 
-![[lab-量化部署对比.svg]]
+![[lab-量化部署对比.png]]
 
 三列并排看 BF16 / FP8(W8A8)/ AWQ(W4A16)的显存、吞吐、精度与硬件门槛——核心是「省显存看 W,提吞吐看 A」:
 
-![[lab-127精度组合.svg]]
+![[lab-127精度组合.png]]
 
 ## ④ 实测对比(用 126 的尺子)
 

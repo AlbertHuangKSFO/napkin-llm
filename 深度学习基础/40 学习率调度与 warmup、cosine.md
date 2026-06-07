@@ -27,7 +27,7 @@ $$\eta_t=\eta_{\min}+\tfrac12(\eta_{\max}-\eta_{\min})\big(1+\cos(\pi p)\big)$$
 
 曲线:从 0 直线升到 $10^{-3}$,再走半个余弦平滑降到 0。**前快(陡升)、中匀、尾慢(余弦在两端导数为 0,降得轻)**。
 
-![[nn-学习率调度曲线.svg]]
+![[nn-学习率调度曲线.png]]
 
 ## 原理
 
@@ -58,7 +58,7 @@ $$\eta_t=d_{\text{model}}^{-0.5}\cdot\min\big(t^{-0.5},\ t\cdot T_w^{-1.5}\big)$
 
 **线性 warmup + 线性衰减(BERT/很多 LLM 的实际选择)**。退火段 $\eta_t=\eta_{\max}\cdot\frac{T-t}{T-T_w}$,从峰值直线降到 0。和 cosine 的区别只是"直线 vs 余弦曲线",cosine 两端更缓;实践中差别不大,都优于无调度。
 
-![[nn-warmup机制.svg]]
+![[nn-warmup机制.png]]
 
 ## 代码
 

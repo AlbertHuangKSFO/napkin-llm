@@ -37,7 +37,7 @@
 
 得到一棵树:底层是细节,越往上越抽象、越全局。**检索时跨层一起检索**(论文的 collapsed-tree:把所有层的节点放进同一个池子做最近邻)——query 既能命中 L0 的具体事实,也能命中 L1/L2 的主题/全局摘要,一次拿到「局部细节 + 全局脉络」。论文报告:RAPTOR + GPT-4 在 QuALITY 基准上比此前最佳**绝对准确率提升约 20%**,在需要多步推理的长文 QA 上是 SOTA。
 
-![[进阶索引-RAPTOR树.svg]]
+![[进阶索引-RAPTOR树.png]]
 
 ## 机制三:Late Chunking(Jina AI, 2024)
 
@@ -49,7 +49,7 @@
 
 「late」就是指:**pooling(切块)发生在 token embedding 之后**,而非之前。免训练、几乎零额外成本,直接换上长上下文 bi-encoder(如 jina-embeddings-v2/v3、bge-m3 这类长窗口模型)即可。局限:受 embedding 模型上下文窗口约束(超长文档仍需分段),且要求模型本身支持输出 token 级向量。
 
-![[Late Chunking 对比.svg]]
+![[Late Chunking 对比.png]]
 
 ## 可跑最小代码
 

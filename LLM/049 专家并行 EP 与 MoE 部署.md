@@ -40,7 +40,7 @@ dispatch 后 GPU0 上聚了 {t1, t2, t7} 三个 token 都要过 E0;GPU3 上聚�
 
 MoE 专家数多、彼此独立,**按专家整块切(EP)比按矩阵切(TP)通信更省、负载更自然**——这就是 MoE 部署默认上 EP 的原因。两者还能叠:EP 切专家、TP 再切单个专家内部的大矩阵(`EP×TP`)。
 
-![[moe-专家并行-all2all.svg]]
+![[moe-专家并行-all2all.png]]
 
 ## 原理
 
@@ -62,7 +62,7 @@ $$\underbrace{x_{\text{(按卡)}}}_{\text{dispatch}}\xrightarrow{\text{all-to-al
 
 **4. EP 与别的并行正交。** EP 切专家、TP 切单个专家内部的矩阵、DP 复制整套、PP 切层。大模型常**叠加**:`EP×TP×DP`。EP 的 all-to-all 发生在 MoE 层;非 MoE 部分(attention、稠密 FFN)走普通 TP/DP。完整谱系见 [[068 并行总览：DP、TP、PP、EP、SP|并行总览]]。
 
-![[moe-EP-vs-TP-显存.svg]]
+![[moe-EP-vs-TP-显存.png]]
 
 ## 代码
 

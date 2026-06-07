@@ -9,7 +9,7 @@
 
 两者都把 LLM 当组件,差别在**编排权归谁**。这正是 Anthropic《Building Effective Agents》(2024-12)给出的官方切分。
 
-![[Workflow 与 Agent 的边界.svg]]
+![[Workflow 与 Agent 的边界.png]]
 
 ## 机制:从同一个任务看两条路
 
@@ -46,7 +46,7 @@ agent(goal="翻译这封邮件,如有金额换算成人民币",
 | 灵活性 | 低,改流程要改码 | 高,改目标即可 |
 | 适用任务 | 步骤可预定 | 步骤不可预定、开放 |
 
-![[Workflow 与 Agent 的边界-决策树.svg]]
+![[Workflow 与 Agent 的边界-决策树.png]]
 
 ## 判定清单:能 workflow 就别上 agent
 

@@ -12,16 +12,16 @@
 ## 原理:四大支柱
 1. **智能网关 IGW + EPP**:基于 Gateway API 与新的 `InferencePool` CRD。Endpoint Picker(EPP)是 Envoy ext-proc 旁路 sidecar,逐请求经 gRPC 选 Pod,信号包括 [[015 KV-Cache 的显存账(逐层手算)|KV-Cache]] 利用率、队列深度、活跃请求数、前缀缓存命中率。
 
-![[orch-098EPP打分.svg]]
+![[orch-098EPP打分.png]]
 2. **cache-aware 路由**:KV Cache Manager 跟踪"哪些 KV block 在哪个节点",把请求路由到已持有相关前缀的 Pod,避免跨副本重算([[038 KV-aware 路由与跨引擎复用|KV-aware 路由]] 的工程化)。
 3. **PD 解耦**:Prefill 池与 Decode 池独立部署、独立扩缩。Decode 用高 TP/大显存;Prefill 用多副本/低 TP;两池间用 NIXL 点对点搬 KV。降 TTFT、稳 [[018 TTFT、TPOT、ITL 与 goodput：服务指标定义|TPOT]]。
 4. **跨节点扩展**:跨节点 TP、Wide-EP(大 MoE)、分层 KV offload(GPU/CPU/远端,[[036 KV 分层 offload：GPU、CPU、SSD(LMCache)|LMCache 思路]]),让模型大到超单节点也能服务。
 
-![[orch-098PD请求旅程.svg]]
+![[orch-098PD请求旅程.png]]
 
 **控制面**全程 K8s 原生:CRD + Operator 管理 variant 自动扩缩、scale-to-zero(v0.5 引入),并支持 NVIDIA/AMD/Gaudi 多种加速器。与 KServe 互补:KServe 给生命周期/CRD 抽象,llm-d 给分布式调度数据面。
 
-![[orch-llm-d架构.svg]]
+![[orch-llm-d架构.png]]
 
 ## 代码:InferencePool + 对接(声明 PD 解耦与 cache-aware)
 ```yaml

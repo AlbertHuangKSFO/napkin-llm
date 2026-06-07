@@ -28,9 +28,9 @@ $$
 
 **RadixAttention**(SGLang 提出)的前缀树是这套复用的基础:支持高效匹配/插入/淘汰 KV 块,把「KV 复用」普及开来;Dynamo 在分布式环境里用哈希 + RadixTree 可扩展地追踪缓存位置。
 
-![[kv-aware路由.svg]]
+![[kv-aware路由.png]]
 
-![[kv-038路由打分手算.svg]]
+![[kv-038路由打分手算.png]]
 
 ## 配置 / 代码
 ```bash

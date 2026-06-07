@@ -35,9 +35,9 @@ $$
 
 ## 图
 
-![[spec-eagle特征级草稿.svg]]
+![[spec-eagle特征级草稿.png]]
 
-![[spec-074三层融合与TTT.svg]]
+![[spec-074三层融合与TTT.png]]
 
 ## 代码
 

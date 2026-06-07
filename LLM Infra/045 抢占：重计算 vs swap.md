@@ -42,7 +42,7 @@ $$
 
 ## 图
 
-![[sched-抢占重计算vs换出.svg]]
+![[sched-抢占重计算vs换出.png]]
 
 ## 代码
 
@@ -78,7 +78,7 @@ def resume(req):
 `❌` 选错模式会让恢复延迟翻倍:长序列该 swap 却 recompute(重算爆炸),或短序列/慢 PCIe 该 recompute 却 swap(拷贝白费)。`✅` 按序列长度与 PCIe 带宽选;不确定时跟随 vLLM V1 默认的 recompute(架构下更轻)。
 
 
-![[sched-045交叉点曲线.svg]]
+![[sched-045交叉点曲线.png]]
 
 ## 面试高频
 

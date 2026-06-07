@@ -4,7 +4,7 @@
 
 **生活类比**:4 个会计合算一道大题,每人只算一截,但每过一道工序就得碰头把数凑齐对一遍(这一"凑"就是 all-reduce)。坐**同一桌**(NVLink ~900 GB/s),伸手一碰几秒搞定,80 层 × 2 次 = 160 次对账都不痛,2 卡照样拿 ≈1.84× 吞吐;改成一个在北京一个在上海、隔着走廊喊(PCIe ~64 GB/s,慢一个数量级),每道工序都打长途等回执,对账比算账还久——通信吃掉 40–50% 时间、缩放效率塌到 0.7,TP 直接废。技术对应:坐同桌=机内 NVLink,隔走廊=跨 PCIe/跨节点;"凑数对一遍"=每层 2 次 all-reduce、通信量 ∝ b·s·h。
 
-![[ipar-058类比同桌凑答案.svg]]
+![[ipar-058类比同桌凑答案.png]]
 
 为什么是 2 次?Megatron 的切法里,一层有两个并行块:**自注意力**算完要 all-reduce 一次合 head 输出,**MLP**(列并行→行并行)算完要 all-reduce 一次合行并行的部分和。所以 $L$ 层模型一次前向 = $2L$ 次 all-reduce。每次的数据量 $\propto b\cdot s\cdot h$(batch × seq × hidden),隐藏维越大、通信越重。
 
@@ -18,7 +18,7 @@ $$
 
 ($N$=TP 度,ring all-reduce 每卡收发约 $\tfrac{2(N-1)}{N}V$ 字节;BW 是互联带宽——NVLink 还是 PCIe,决定生死。)
 
-![[ipar-TP通信NVLink依赖.svg]]
+![[ipar-TP通信NVLink依赖.png]]
 
 ```python
 # 部署前先确认拓扑:有没有 NVLink 全互联
@@ -36,7 +36,7 @@ llm = LLM("meta-llama/Llama-3.1-70B-Instruct",
 ```
 
 
-![[ipar-058TP通信暴露对比.svg]]
+![[ipar-058TP通信暴露对比.png]]
 
 ## 面试高频
 - **TP 每层几次通信、什么原语?** 2 次 all-reduce(注意力 1 次 + MLP 1 次);$L$ 层 = $2L$ 次。

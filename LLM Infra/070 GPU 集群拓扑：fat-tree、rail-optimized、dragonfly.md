@@ -13,11 +13,11 @@ $$
 
 (dragonfly 用更少交换机换"非全无阻塞"和路径长度不均;超大规模才划算。)
 
-![[net-rail-optimized拓扑.svg]]
+![[net-rail-optimized拓扑.png]]
 
-![[net-070三拓扑架构.svg]]
+![[net-070三拓扑架构.png]]
 
-![[net-070PXN跨rail.svg]]
+![[net-070PXN跨rail.png]]
 
 ```bash
 # 让 NCCL 用上 rail/PXN 拓扑感知(通常默认开)

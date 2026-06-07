@@ -30,7 +30,7 @@ $$H=\begin{bmatrix}\dfrac{\partial^2 f}{\partial x^2}&\dfrac{\partial^2 f}{\part
 
 **牛顿法一步(用 Hessian 加速)**。梯度下降 $\mathbf{x}\leftarrow\mathbf{x}-\eta\nabla f$ 只用一阶;牛顿法用二阶:$\mathbf{x}\leftarrow\mathbf{x}-H^{-1}\nabla f$。对二次函数**一步到位**(因为二次泰勒展开是精确的)。例 $f=x^2+y^2$ 在 $(3,4)$:$\nabla f=(6,8)$,$H^{-1}=\tfrac12 I$,$\mathbf{x}_{\text{new}}=(3,4)-\tfrac12(6,8)=(0,0)$ —— 直达最小值。但 $H^{-1}$ 在百万参数下算不动,所以深度学习不用纯牛顿法。
 
-![[calc-雅可比Hessian形状.svg]]
+![[calc-雅可比Hessian形状.png]]
 
 ## 原理
 
@@ -56,7 +56,7 @@ $$H\in\mathbb R^{n\times n},\qquad H_{ij}=\frac{\partial^2 f}{\partial x_i\parti
 - 全 $<0$(负定):局部**极大**。
 - 有正有负(不定):**鞍点**——高维损失曲面上鞍点远多于局部极小,这是深度学习优化的关键事实。
 
-![[calc-雅可比Hessian形状.svg]]
+![[calc-雅可比Hessian形状.png]]
 
 **雅可比行列式 = 体积/密度的缩放因子**。当 $m=n$(方阵雅可比),$|\det J|$ 是该点局部体积的缩放倍数(见 [[08 行列式与空间缩放|行列式]]);概率密度做变量替换时要除以 $|\det J|$。这是归一化流(normalizing flow)的核心——设计 $\det J$ 易算的变换(如三角雅可比),就能精确算变换后的密度。
 

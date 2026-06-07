@@ -14,7 +14,7 @@ vLLM 像 3D 打印:改个设计马上重打,灵活但单件慢一点。TensorRT-
 
 结论:吞吐/尾延迟领先是真,但仅在**模型冻结 + 长期高并发 + 全 NVIDIA**时回得了本。
 
-![[eng-090vLLM对TRT权衡.svg]]
+![[eng-090vLLM对TRT权衡.png]]
 
 ## ③ 原理:编译期做了什么
 
@@ -28,11 +28,11 @@ vLLM 像 3D 打印:改个设计马上重打,灵活但单件慢一点。TensorRT-
 
 **5. 运行期 in-flight batching。** 它对[[041 连续批处理：迭代级调度内幕|连续批]]的叫法:每个生成 step 把新请求并进运行中的 batch;配 paged KV(含 encoder-decoder 也支持 in-flight batching)。
 
-![[eng-TRT-LLM编译流程.svg]]
+![[eng-TRT-LLM编译流程.png]]
 
 整条链路分两段:**编译期(离线、慢、专用)** 产出 `.engine`,**运行期(在线、快)** 执行;模型一改回到编译期重来——这正是它和 vLLM 的本质分界。
 
-![[eng-090重编译触发.svg]]
+![[eng-090重编译触发.png]]
 
 ## ④ 代码/配置:两步流程(编译 + serve)
 

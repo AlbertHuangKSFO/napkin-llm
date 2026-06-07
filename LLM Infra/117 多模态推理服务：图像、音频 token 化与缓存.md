@@ -19,7 +19,7 @@ $$
 
 prefill 计算量 ∝ 序列总长 $N+M+L$,而 $N$(visual)常远大于 $L$,故 prefill 由图像主导、**算力受限**加剧。这些 token 算出的 KV 与文本 KV 一样进分页块管理;可缓存三层:**① encoder 输出 / 图像 embedding**(同图多轮免重编码)、**② 前缀 KV**(同图+同前缀的多问命中)、**③ 多模态 KV 驱逐/压缩**(visual token 冗余高,可裁剪控显存,如 LOOK-M)。服务侧还可把 encoder 拆成独立 worker——**Encode-Prefill-Decode(EPD)解耦**:encoder 与 LM 的资源画像不同,分开扩缩。
 
-![[srv-多模态推理流水线.svg]]
+![[srv-多模态推理流水线.png]]
 
 ## 配置 / 代码
 ```python
@@ -51,8 +51,8 @@ print(out[0].outputs[0].text)
 ```
 
 
-![[srv-117三层缓存与EPD.svg]]
-![[srv-117多模态prefill膨胀.svg]]
+![[srv-117三层缓存与EPD.png]]
+![[srv-117多模态prefill膨胀.png]]
 
 ## 面试高频
 - **多模态请求服务侧多了哪些步骤?** 非文本模态先过专用 encoder(ViT/CLIP、Whisper)→ 投影对齐 → 变 token 拼进序列;比纯文本多了 encoder 前向与更长的 prefill。

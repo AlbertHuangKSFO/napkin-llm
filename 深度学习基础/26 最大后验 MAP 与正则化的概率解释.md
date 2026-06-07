@@ -30,7 +30,7 @@ $$\min_w\ \sum_i(y_i-w^\top x_i)^2+\lambda\|w\|_1$$
 $$\hat p_{\text{MAP}}=\frac{k+\alpha-1}{n+\alpha+\beta-2}$$
 取 $\alpha=\beta=2$:$\hat p=\frac{k+1}{n+2}$。这就是 **加一平滑 / 拉普拉斯平滑**:0 正 0 反时 MLE 给 $0/0$ 或 $0$,而 MAP 给 $\frac12$,避免"零概率"灾难。先验在这里相当于"凭空先塞进 1 正 1 反的虚拟观测"。这把 [[22 概率、条件概率与贝叶斯|贝叶斯]] 的共轭先验和工程里常见的平滑技巧连起来了。
 
-![[prob-MAP正则.svg]]
+![[prob-MAP正则.png]]
 
 ## 原理
 
@@ -63,7 +63,7 @@ $$\hat\theta_{\text{MAP}}=\arg\max_\theta\big[\log p(D\mid\theta)+\log p(\theta)
 - 数据无穷多($n\to\infty$)→ 似然压倒先验,MAP 与 MLE 都收敛到真值(先验被"洗掉")。
 - 数据极少 → 先验主导,MAP 接近先验众数(此时正则最该上)。
 
-![[prob-先验形状L1L2.svg]]
+![[prob-先验形状L1L2.png]]
 
 ## 代码
 

@@ -30,7 +30,7 @@ $$P(w_1,\dots,w_T)=\prod_{t=1}^{T}P(w_t\mid w_1,\dots,w_{t-1})$$
 
 **困惑度手算(直观理解"分支数")**。模型对一句 4 个词分别给概率 $0.5,0.25,0.5,0.25$。先算平均负对数概率:$-\frac14(\log0.5+\log0.25+\log0.5+\log0.25)$。用以 2 为底:$-\frac14(-1-2-1-2)=\frac64=1.5$,$\text{PPL}=2^{1.5}\approx2.83$。含义:模型每步平均像在 $\approx2.83$ 个等概率选项里犹豫。若模型完美($P=1$ 每步),PPL=1;若纯瞎猜($P=1/V$),PPL=$V$。**PPL 越低,语言模型越好。**
 
-![[rnn-时间展开.svg]]
+![[rnn-时间展开.png]]
 
 ## 原理
 
@@ -59,7 +59,7 @@ $$\text{PPL}=\exp\Big(-\frac1T\sum_t\log P(w_t\mid\text{前文})\Big)$$
 
 **神经 LM 的训练细节**。损失是逐位置交叉熵(等价最大化条件似然):$\mathcal L=-\frac1T\sum_t\log P_\theta(w_t\mid\text{前文})$。Bengio 2003 的前馈 LM 输出层是对**整个词表**的 softmax,词表一大($|V|=10^5$)softmax 计算就极贵——后续用**层级 softmax**、**噪声对比估计(NCE)**、**负采样**(word2vec)等近似加速,这也是词嵌入训练能 scale 的关键。
 
-![[rnn-seq2seq瓶颈.svg]]
+![[rnn-seq2seq瓶颈.png]]
 
 ## 代码
 

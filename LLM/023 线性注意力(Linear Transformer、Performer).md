@@ -43,7 +43,7 @@ $$o_i=\frac{\varphi(q_i)^\top S}{\varphi(q_i)^\top z}$$
 $$S_t=S_{t-1}+\varphi(k_t)v_t^\top,\qquad z_t=z_{t-1}+\varphi(k_t)$$
 $S_t$ 就是一个 $d\times d$ 的"隐状态",每步 $O(d^2)$ 更新、$O(1)$ 不依赖序列长 → **解码像 RNN**:常数显存、常数时间/步。这就是论文标题"Transformers are RNNs"的含义。
 
-![[attn-线性注意力重排.svg]]
+![[attn-线性注意力重排.png]]
 
 **两种 $\varphi$ 路线:**
 - **Linear Transformer**(Katharopoulos 2020):$\varphi(x)=\text{elu}(x)+1$,简单、恒正(保证分母正)。不追求逼近真 softmax,只要可分离即可。

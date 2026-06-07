@@ -30,9 +30,9 @@ $$
 
 ## 图
 
-![[spec-lookahead解码.svg]]
+![[spec-lookahead解码.png]]
 
-![[spec-076四种草稿路线.svg]]
+![[spec-076四种草稿路线.png]]
 
 ## 代码
 

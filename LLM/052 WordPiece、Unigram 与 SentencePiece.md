@@ -24,11 +24,11 @@ $$P([un, happ, ily]) = p(un)\,p(happ)\,p(ily)$$
 
 推理时取**概率最高**的那种切;训练时按概率**随机采样**一种(subword regularization),让模型见过同一个词的多种切法、更鲁棒。BPE/WordPiece 给定输入**只有一种确定切法**,这是 Unigram 独有的能力。
 
-![[tok-三算法对比.svg]]
+![[tok-三算法对比.png]]
 
 **SentencePiece 的空格处理**。句子 `"Hello world"` → SentencePiece 先把空格变成 `▁`:`▁Hello▁world`,再当字符序列跑算法,可能切成 `[▁Hello, ▁world]`。解码时把 `▁` 换回空格,**完美还原**(包括开头是否有空格)。中文 `"你好世界"` 没空格也照切不误,因为它根本不依赖空格分词。
 
-![[tok-三算法对比.svg]]
+![[tok-三算法对比.png]]
 
 ## 原理
 

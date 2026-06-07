@@ -19,9 +19,9 @@ CUDA 是 **SIMT**(线程级):你显式写 `threadIdx`,每线程处理一个标�
 
 编译流程:`@triton.jit` 触发即时编译,Python → **Triton IR**(块级)→ 优化/调度 → **LLVM IR** → **PTX/cubin**,结果按 (shape, dtype, 常量) 缓存,后续调用直接复用。`@triton.autotune` 在候选配置里跑基准择优,实现**跨 GPU 的性能可移植性**(同一份 Triton 代码在不同架构重新调参即可)。
 
-![[cuda-Triton编译流程.svg]]
+![[cuda-Triton编译流程.png]]
 
-![[cuda-028Triton对比CUDA抽象.svg]]
+![[cuda-028Triton对比CUDA抽象.png]]
 
 ## 真实 Triton kernel:向量加 + softmax
 ```python

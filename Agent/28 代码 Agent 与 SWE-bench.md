@@ -8,7 +8,7 @@
 
 ## 机制:读 → 定位 → 改 → 测 → 修 的 agentic loop
 
-![[代码 Agent 与 SWE-bench.svg]]
+![[代码 Agent 与 SWE-bench.png]]
 
 一个代码 Agent 解一个 issue 的标准流程:
 
@@ -22,7 +22,7 @@
 
 ## SWE-bench:事实标尺
 
-![[代码 Agent 与 SWE-bench-评测流程.svg]]
+![[代码 Agent 与 SWE-bench-评测流程.png]]
 
 **SWE-bench**(Princeton NLP,2023)是评测代码 Agent 的黄金基准。它的设计妙在"真实 + 可自动验证":
 

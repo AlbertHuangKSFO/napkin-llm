@@ -30,7 +30,7 @@
 
 再看并行:RNN 算第 5 个词的隐状态 $h_5$ 必须先算完 $h_1,h_2,h_3,h_4$;Transformer 把整句话堆成一个矩阵 $X\in\mathbb{R}^{L\times d}$,一次矩阵乘就同时算出全部 token 的表示。
 
-![[tf-RNN对比并行.svg]]
+![[tf-RNN对比并行.png]]
 
 ## 原理
 **RNN 的递推**:$h_t = f(W_h h_{t-1} + W_x x_t)$。两个结构性问题:

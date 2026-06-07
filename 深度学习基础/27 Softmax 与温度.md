@@ -30,7 +30,7 @@ $$p=\Big(\tfrac{7.389}{11.107},\tfrac{2.718}{11.107},\tfrac{1}{11.107}\Big)=(0.6
 
 **两类 softmax = sigmoid(手算验证)**。$K=2$ 时,$p_1=\frac{e^{z_1}}{e^{z_1}+e^{z_2}}=\frac{1}{1+e^{-(z_1-z_2)}}=\sigma(z_1-z_2)$:**softmax 退化成对 logit 之差的 sigmoid**。例 $z=(2,0)$:$p_1=\sigma(2)=0.881$,与直接 softmax 一致。这解释了"二分类既可用 sigmoid+1 个 logit、也可用 softmax+2 个 logit"。
 
-![[prob-softmax温度.svg]]
+![[prob-softmax温度.png]]
 
 ## 原理
 
@@ -70,7 +70,7 @@ $$\frac{\partial p_i}{\partial z_j}=p_i(\delta_{ij}-p_j)=\begin{cases}p_i(1-p_i)
 
 **softmax 在注意力里也出现**。Transformer 的注意力权重 $\text{softmax}(QK^\top/\sqrt{d_k})$ 就是对打分做 softmax,$\sqrt{d_k}$ 起的正是"温度"作用——维度越高点积方差越大、需要降温防止 softmax 过尖、梯度消失。所以"缩放点积注意力"的缩放因子本质是一个固定温度。
 
-![[prob-softmax管线.svg]]
+![[prob-softmax管线.png]]
 
 ## 代码
 

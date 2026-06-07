@@ -15,7 +15,7 @@
 
 **引擎到底由哪几块组成(拆开看就不神秘)。** 不管哪家,一个 serving 引擎都是这四层:① **API/前端**(OpenAI 兼容 HTTP 接口、流式 SSE、对话模板渲染);② **调度器**(连续批、准入、抢占、优先级,见 [[105 连续批处理 continuous batching|连续批]]);③ **显存/KV 管理**(分页、前缀缓存、swap/recompute,见 [[026 PagedAttention 与 KV 分页|PagedAttention]]);④ **执行后端**(优化 kernel:Flash-Attention、量化 GEMM、CUDA Graph、张量/流水并行)。四家的差异主要在③④的实现深度和②的策略,①基本趋同(都仿 OpenAI API)。理解这个分层,就知道「换引擎」换的是什么、benchmark 数字差在哪。
 
-![[infer-推理引擎对比.svg]]
+![[infer-推理引擎对比.png]]
 
 ## ② 例子:同一个 Llama-70B,四种场景四种选择
 
@@ -44,7 +44,7 @@
 
 记法:**产线推理用 GPTQ/AWQ(INT4)或 FP8(新卡),本地用 GGUF,微调用 NF4**。
 
-![[infer-RadixAttention前缀树.svg]]
+![[infer-RadixAttention前缀树.png]]
 
 **还有几家值得知道(面试加分)**:
 - **TGI(Text Generation Inference)**:HuggingFace 官方,生态整合好、易部署,功能与 vLLM 重叠(连续批、PagedAttention 思路、投机解码),企业里常见。

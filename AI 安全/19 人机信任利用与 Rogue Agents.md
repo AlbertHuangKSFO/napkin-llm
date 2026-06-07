@@ -16,7 +16,7 @@
 
 它常是[[14 Excessive Agency 与 Goal Hijack|目标劫持]]、[[17 Memory 与 Context Poisoning|记忆投毒]]或[[18 Agent 间通信安全与级联失败|通信失陷]]的**后果态**——前面的攻击把 agent 变「坏」,ASI10 描述的是它「坏了之后还停不下来」。
 
-![[sec-人机信任与流氓agent.svg]]
+![[sec-人机信任与流氓agent.png]]
 
 ## 对比表
 

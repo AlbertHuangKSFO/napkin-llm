@@ -9,7 +9,7 @@
 - 启动:从网络存储拉 140GB 权重 ~ 几分钟;加载进 VRAM + 编译 + 预分配 KV 再加 1–3 分钟。
 - 探针:readiness `initialDelaySeconds: 120`、startupProbe `failureThreshold: 60 × periodSeconds: 10`(10 分钟预算)。若用默认 Web 探针(几秒),Pod 会在加载途中被反复杀掉,永远 CrashLoop。
 
-![[orch-096探针时间线.svg]]
+![[orch-096探针时间线.png]]
 
 ## 原理:最小对象与节点层
 **工作负载三件套**:
@@ -28,7 +28,7 @@
 
 **为何不同于无状态服务**:启动以分钟计、权重巨大、显存常驻、整卡独占、重启代价高、且天然有可复用状态([[015 KV-Cache 的显存账(逐层手算)|KV-Cache]])。这逼出"长探针预算 + 权重预热 + 谨慎扩缩"的部署范式。
 
-![[orch-K8s部署LLM.svg]]
+![[orch-K8s部署LLM.png]]
 
 ## 代码:GPU LLM Deployment + Service
 ```yaml

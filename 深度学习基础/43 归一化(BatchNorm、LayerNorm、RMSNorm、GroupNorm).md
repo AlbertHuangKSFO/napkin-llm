@@ -11,7 +11,7 @@
 - **RMSNorm**:LayerNorm 的省事版,只按"长度"缩放,不挪中心。
 - **GroupNorm**:把科目分成几组,每组内对齐(同一样本、通道分组)。
 
-![[nn-BN与LN归一化轴.svg]]
+![[nn-BN与LN归一化轴.png]]
 
 ## 例子
 
@@ -61,7 +61,7 @@ $$\hat x_i=\frac{x_i-\mu}{\sqrt{\sigma^2+\epsilon}},\qquad y_i=\gamma\,\hat x_i+
 - **GN**:固定一个样本,把 $C$ 个通道分成 $G$ 组,每组内沿 $(H,W)$ 和组内通道求 μ、σ。$G=1$ 退化为 LN(对全部通道),$G=C$ 退化为 InstanceNorm。
 - **RMSNorm**:见下。
 
-![[nn-四种归一化对比.svg]]
+![[nn-四种归一化对比.png]]
 
 **为什么有效:内部协变量偏移(Internal Covariate Shift)**。训练中,某层的输入分布会随前面所有层参数更新而不断漂移,后层得反复适应"移动的靶子",拖慢收敛、逼小学习率。归一化把每层输入钉到固定分布,让后层站在稳定地基上 —— 这是 Ioffe & Szegedy(2015)提出 BN 的原始动机。
 
@@ -74,7 +74,7 @@ $$\hat x_i=\frac{x_i-\mu}{\sqrt{\sigma^2+\epsilon}},\qquad y_i=\gamma\,\hat x_i+
 
 **BN 还自带正则效应**:每个样本的归一化依赖同 batch 其他样本,引入了**与 batch 组成相关的噪声**(类似 dropout 的随机性),所以用了 BN 常可减小 dropout 强度。这也是 BN 和 dropout 同时用容易"打架"(variance shift)的原因之一。
 
-![[nn-内部协变量偏移.svg]]
+![[nn-内部协变量偏移.png]]
 
 **为什么序列模型 / LLM 用 LN 不用 BN**(面试核心):
 

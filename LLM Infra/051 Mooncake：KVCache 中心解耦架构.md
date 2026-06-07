@@ -34,11 +34,11 @@ $$
 
 ## 图
 
-![[disagg-Mooncake架构.svg]]
+![[disagg-Mooncake架构.png]]
 
-![[disagg-051KVCache池复用.svg]]
+![[disagg-051KVCache池复用.png]]
 
-![[disagg-051预测性早拒.svg]]
+![[disagg-051预测性早拒.png]]
 
 ## 代码
 

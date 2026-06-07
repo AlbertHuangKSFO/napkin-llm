@@ -28,7 +28,7 @@
 
 **残差方差膨胀(小数字)**。设每层 $f(x)$ 输出方差 $\approx \mathrm{Var}(x)$,残差 $x+f(x)$ 后方差约翻倍:第 1 层方差 1,第 2 层 ~2,第 $N$ 层 ~$N$。Pre-LN 因为每个子层输入先被 LN 归一,方差不会这样线性堆积。
 
-![[tf-PreLN与warmup.svg]]
+![[tf-PreLN与warmup.png]]
 
 ## 原理
 
@@ -61,7 +61,7 @@ $$g\leftarrow g\cdot\min\!\Big(1,\ \frac{c}{\lVert g\rVert_2}\Big)$$
 
 **bf16 时归一化层和 softmax 仍用 fp32 累加**:LayerNorm 的均值方差、softmax 的 $\sum e^z$、loss 累加这些"归约"操作在 bf16 下误差累积明显,实现里常强制用 fp32 算(混合精度的细节),否则也会不稳。
 
-![[tf-训练稳定工具箱.svg]]
+![[tf-训练稳定工具箱.png]]
 
 ## 代码
 

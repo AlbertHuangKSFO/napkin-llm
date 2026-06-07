@@ -1,6 +1,6 @@
 [[12 Unbounded Consumption 成本型 DoS|Unbounded Consumption 成本型 DoS]]的核心洞察:LLM 的每次推理都直接烧钱,于是**传统 DoS 升级成"成本型 DoS"**——攻击者用极低成本的输入,撬动你极高的算力/账单,既能拖垮服务,也能单纯把你的钱包掏空。这是 OWASP LLM Top 10 的 **LLM10(Unbounded Consumption)**,把旧版的 "Denial of Service" 与 "Model Theft" 合并扩展。它向下游会变成 [[18 Agent 间通信安全与级联失败|级联放大]];与之对偶的正向优化视角见跨域 [[35 Agent 成本与延迟优化|成本优化]]。
 
-![[sec-成本型DoS.svg]]
+![[sec-成本型DoS.png]]
 
 ## 五条放大路径
 - **昂贵查询**:超长上下文、强制大输出、高频并发——单条请求成本被放大几个量级。

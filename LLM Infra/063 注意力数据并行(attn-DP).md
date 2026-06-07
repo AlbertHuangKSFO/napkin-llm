@@ -4,7 +4,7 @@
 
 **生活类比**:MLA 的 KV 是「一份所有注意力头共享的笔记」(压到约 576 维,很小)。如果按头切(TP=8),这份笔记被全头共用、根本切不开,只能让 **8 张卡每张都抄一整份**——KV 显存 ×8,能服务的并发被压到 1/8,白白重复抄。改成按请求分(attn-DP=8):8 张卡各管 1/8 的病人、**各存各的那份笔记**,KV 总量不变、并发不缩水,谁也不用替别人抄。MoE 那一层仍按科室分(EP),两种切法靠 all-to-all 衔接,常见恒等式 EP = DP × TP。技术对应:共享笔记=MLA 低秩潜向量 KV、抄一份=TP 复制、各管各的病人=按请求 DP。
 
-![[ipar-063类比共享笔记抄几份.svg]]
+![[ipar-063类比共享笔记抄几份.png]]
 
 小数字感受。MLA 把每 token 的 KV 压到约一个 512+64 维的潜向量(远小于 MHA 的几千维)。若注意力走 **TP=8**,这份潜向量 KV 要在 8 张卡上各存一份 → KV 显存 ×8,可服务的并发请求数被压到 1/8;改用 **attn-DP=8**,8 张卡各存自己那 1/8 请求的 KV,**KV 总量不变、并发不缩水**。配合 MoE 的 EP,常见恒等式是 **EP = DP × TP**:注意力 DP 度 × 注意力内 TP 度,正好等于 MoE 的 EP 度,token 在两种切法间用 all-to-all 衔接。
 
@@ -16,7 +16,7 @@ $$
 \text{KV 显存}_{\text{TP}}=\text{TP}\times\text{KV}_{\text{单份}}\quad(\text{复制,浪费})\ \ \text{vs}\ \ \text{KV 显存}_{\text{attn-DP}}=\text{KV}_{\text{单份}}\quad(\text{各存各的})
 $$
 
-![[ipar-attnDP组合EP.svg]]
+![[ipar-attnDP组合EP.png]]
 
 ```python
 # vLLM:DeepSeek-V3 标准形态 = attn-DP + EP(2025)
@@ -38,7 +38,7 @@ $$
 ```
 
 
-![[ipar-063attnDP-KV对比.svg]]
+![[ipar-063attnDP-KV对比.png]]
 
 ## 面试高频
 - **为什么 MLA 注意力不适合 TP?** MLA 的 KV 是一个被**所有注意力头共享的低秩潜向量**,沿头维做 TP 切不开它;只能让每个 TP rank 复制整份潜向量 KV,并重复算 kv_a_proj / kv_b_proj,纯浪费显存与算力。

@@ -25,9 +25,9 @@
 
 关键洞察:六家底层概念高度重叠([[LLM/026 PagedAttention 与 KV 分页|PagedAttention]]、[[041 连续批处理：迭代级调度内幕|连续批]]、[[042 chunked prefill：切块融合|chunked prefill]]、前缀缓存、量化都被多家采用),差异在**侧重与实现深度**,而非「有没有」。理解 [[094 OpenAI 兼容 API 与引擎抽象|引擎四层抽象]](API/调度/显存/后端)就知道换引擎换的是哪几层。
 
-![[eng-引擎四层抽象.svg]]
+![[eng-引擎四层抽象.png]]
 
-![[eng-六引擎选型矩阵.svg]]
+![[eng-六引擎选型矩阵.png]]
 
 ## ④ 决策矩阵(速查)
 
@@ -67,7 +67,7 @@ tritonserver --model-repository=/models
 ✅ 正解:**vLLM 起步打磨产品**;模型冻结、吞吐直接等于钱、且全 NVIDIA,再评估迁 TensorRT-LLM;共享前缀重就换 SGLang;端侧就 llama.cpp。
 
 
-![[eng-087运维成本谱.svg]]
+![[eng-087运维成本谱.png]]
 
 ## 面试高频
 

@@ -30,7 +30,7 @@ $$c_t=f_t\cdot c_{t-1}+i_t\cdot\tilde c_t=1\cdot 0.8+0\cdot(\dots)=0.8$$
 
 **梯度沿 cell 跨 3 步手算**。若遗忘门连续三步是 $f=[1.0,\,0.9,\,1.0]$,则 $\frac{\partial c_t}{\partial c_{t-3}}=1.0\times0.9\times1.0=0.9$ —— 跨 3 步梯度只掉到 0.9。对比朴素 RNN 同样三步 $\lambda=0.5$ 则 $0.5^3=0.125$。**遗忘门接近 1 时,梯度几乎无损穿过**,这就是 LSTM 抗消失的数值证据。
 
-![[rnn-LSTM门控.svg]]
+![[rnn-LSTM门控.png]]
 
 ## 原理
 
@@ -58,7 +58,7 @@ $$\frac{\partial c_t}{\partial c_{t-1}}=f_t$$
 
 **窥孔连接(peephole)**:Gers & Schmidhuber(2000)让三个门除了看 $[h_{t-1},x_t]$,还能直接"窥视"$c_{t-1}$(门的输入加上 $c_{t-1}$ 项)。这让门能基于精确的 cell 内容做开合,在需要精确计时的任务(如数节拍)上更好;但大多数任务非必需,主流实现常省略。
 
-![[rnn-梯度沿时间.svg]]
+![[rnn-梯度沿时间.png]]
 
 ## 代码
 

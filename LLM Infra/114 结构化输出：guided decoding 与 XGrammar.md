@@ -27,13 +27,13 @@ $$
 
 三类约束(正则 / JSON Schema / CFG)对应两种自动机:扁平结构 FSM 够用,递归嵌套必须 PDA(带栈)——这也是 XGrammar 一套通吃的根因:
 
-![[srv-114三类约束对比.svg]]
+![[srv-114三类约束对比.png]]
 
-![[srv-guided-decoding下推自动机.svg]]
+![[srv-guided-decoding下推自动机.png]]
 
 逐步看「掩码 + jump-ahead」如何在每个解码步把非法 token 钉成 -∞、并在唯一续写时直接跳步:
 
-![[srv-114约束解码时序.svg]]
+![[srv-114约束解码时序.png]]
 
 ## 配置 / 代码
 ```python

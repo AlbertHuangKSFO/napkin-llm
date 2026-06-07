@@ -11,7 +11,7 @@ Gao et al. 2023 综述(见[[#来源]])把 RAG 演进归为三段:
 ## 机制:失败发生在哪一侧
 失败分两侧:**检索侧**(没捞到 / 捞错 / 切坏)和**生成侧**(捞到了也用不好)。
 
-![[Naive RAG 与失败模式.svg]]
+![[Naive RAG 与失败模式.png]]
 
 ### 检索侧失败(Retrieval-side)
 - **召回不全 / top-k 选偏**:单一稠密向量召不全,关键文档排在 k 之外。→ 用 [[08 混合检索 Hybrid Search|混合检索 Hybrid Search]] 补稀疏召回、[[10 重排序 Reranking|重排序 Reranking]] 把对的顶上来。

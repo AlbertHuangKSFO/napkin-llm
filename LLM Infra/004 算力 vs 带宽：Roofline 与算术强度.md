@@ -4,20 +4,20 @@
 
 **生活类比**:想象用一台超猛水泵抽水池。泵的马力强得吓人,**每秒能抽 989 桶**(对应 H100 算力 989 TFLOPS);可惜进水的水管太细,**每秒只供得上 3.35 桶**(对应带宽 3.35 TB/s)。decode 单请求就是"每来 1 桶水只搅一下就放走"(算术强度 ≈ 1),泵根本没活干——真正干成的活被水管锁死在 3.35 桶/秒,989 的泵实际只用上了约 0.3%。这就是 memory-bound:此时换更猛的泵(堆算力)毫无用处,要么**换更粗的水管**(加带宽),要么**一次抽很多桶共用一趟进水**(batch 抬高算术强度)。屋顶线就是把这两条上限画成两道屋檐——你的活落在哪道屋檐下,就是被谁卡住。
 
-![[mem-004类比水管水泵.svg]]
+![[mem-004类比水管水泵.png]]
 
 H100 数字手算脊点(FP16):
 $$I^{*} = \frac{\text{峰值算力}}{\text{带宽}} = \frac{989\text{ TFLOPS}}{3.35\text{ TB/s}} = \frac{9.89\times10^{14}}{3.35\times10^{12}} \approx 295 \text{ FLOP/Byte}$$
 - **Decode** 单步算术强度:读 1 个权重(FP16,2 字节)做 1 次乘加(2 FLOP),$I \approx 2/2 = 1 \ll 295$ → 死贴斜屋顶,**memory-bound**。要提速只能加带宽,或靠 batching 让多请求共用一次权重搬运(把 $I$ 抬高)。
 - **Prefill**(或大 batch)处理 $B$ 个 token 复用同一份权重:$I \approx B$,$B$ 一大就越过脊点 → **compute-bound**。要提速靠提算力(用 [[005 数值格式：FP32、TF32、BF16、FP8、FP4|FP8]]、提 MFU)。
 
-![[mem-004batch爬过脊点.svg]]
+![[mem-004batch爬过脊点.png]]
 
 原理:任一 kernel 的可达性能被两条屋顶夹住——
 $$P = \min\big(\underbrace{P_{\text{peak}}}_{\text{平屋顶,算力}},\ \underbrace{I \times \text{BW}}_{\text{斜屋顶,带宽}}\big)$$
 当 $I < I^{*}$,$I \times \text{BW} < P_{\text{peak}}$,性能被带宽锁住(memory-bound);当 $I > I^{*}$,被算力锁住(compute-bound)。脊点 $I^{*} = P_{\text{peak}}/\text{BW}$ 正是两条线的交点。注意:换更低位宽会同时改变两条屋顶——FP8 让 $P_{\text{peak}}$ 翻倍**且**每字节搬运的有效数据更多,等效右移又抬高屋顶。
 
-![[mem-Roofline屋顶线.svg]]
+![[mem-Roofline屋顶线.png]]
 
 把 Roofline 写成判定器:
 
@@ -44,7 +44,7 @@ for I, tag in [(1, "decode 单请求"), (256, "prefill/大batch")]:
 可达 3 TFLOPS 对峰值 989 —— decode 时算力利用率仅 ~0.3%,数字直观说明"为什么 decode 该优化带宽不该堆算力"。
 
 
-![[mem-004算术强度数轴.svg]]
+![[mem-004算术强度数轴.png]]
 
 ## 面试高频
 - **Q:什么是算术强度,怎么算?** A:算术强度 $I$ = 计算量(FLOPs) ÷ 访存量(Bytes),衡量"每搬一字节做多少浮点运算"。它与脊点 $I^{*}=P_{\text{peak}}/\text{BW}$ 比较即可判定瓶颈。陷阱:把访存量只算输入、漏掉权重读取——decode 的访存大头是权重。

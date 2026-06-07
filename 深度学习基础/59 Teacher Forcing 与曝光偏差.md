@@ -35,7 +35,7 @@
 
 **Scheduled Sampling 退火手算**。设 $\epsilon$ 从 1.0 线性退火到 0(训练 10 个 epoch)。第 0 epoch $\epsilon=1.0$(全喂真词,等于纯 Teacher Forcing);第 5 epoch $\epsilon=0.5$(一半步喂真词、一半喂模型自己的预测);第 9 epoch $\epsilon\approx0.1$(主要喂预测,逼近推理分布)。**让模型从"温室"逐步过渡到"野外"**,慢慢适应"看自己的错误前缀",缩小训练/推理鸿沟。
 
-![[rnn-seq2seq瓶颈.svg]]
+![[rnn-seq2seq瓶颈.png]]
 
 ## 原理
 
@@ -59,7 +59,7 @@ $$\hat y_t=\arg\max_{y}P_\theta(y\mid \underbrace{\hat y_{<t}}_{\text{自己的�
 
 **曝光偏差到底有多严重(学界争议)**。早期普遍认为它是 Seq2Seq 性能瓶颈;但近年观点更冷静:① 大模型 + 海量数据下,模型在自己的高质量前缀上也很稳,影响有限;② Scheduled Sampling 引入了**目标偏置**(训练目标不再是干净的极大似然),收益不稳定,现代大模型基本弃用;③ 真正缓解长文本退化的,更多是更好的解码策略(采样而非贪心/beam)和 RLHF 等后训练。所以面试可以这样收口:**曝光偏差是真实存在的训练/推理失配,但在大模型时代它的危害被显著高估,纯 Teacher Forcing 仍是事实标准。**
 
-![[attn-Bahdanau对齐.svg]]
+![[attn-Bahdanau对齐.png]]
 
 ## 代码
 

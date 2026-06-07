@@ -35,7 +35,7 @@ $$g \leftarrow g\cdot\frac{c}{\lVert g\rVert} = g\cdot\frac{1.0}{50} = g\cdot 0.
 3. 略**降学习率**、确认梯度裁剪开启,从 11900 继续。
 4. loss 平稳回到 2.0 附近并继续下降——一次成功恢复。这正是 PaLM 训练里采用的手段:回滚 + 跳过坏 batch。
 
-![[train-loss-spike与恢复.svg]]
+![[train-loss-spike与恢复.png]]
 
 ## 原理
 

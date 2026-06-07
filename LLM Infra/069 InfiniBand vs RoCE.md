@@ -13,11 +13,11 @@ $$
 
 (大 $M$ 时 $\tfrac{M}{\text{BW}}$ 主导,$\alpha$ 差被淹没→训练吞吐接近;小 $M$/延迟敏感场景 IB 占优。)
 
-![[net-IB-vs-RoCE对比.svg]]
+![[net-IB-vs-RoCE对比.png]]
 
-![[net-069IB-RoCE矩阵.svg]]
+![[net-069IB-RoCE矩阵.png]]
 
-![[net-069无损流控机制.svg]]
+![[net-069无损流控机制.png]]
 
 ```bash
 # 确认 RDMA 设备与链路类型

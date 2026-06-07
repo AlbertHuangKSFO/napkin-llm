@@ -46,7 +46,7 @@ $$
 
 ## 图
 
-![[sched-prefill干扰stall.svg]]
+![[sched-prefill干扰stall.png]]
 
 ## 代码
 
@@ -79,7 +79,7 @@ if __name__ == "__main__":
 `❌` prefill 优先让单个长 prompt 的 ITL 尖刺直接传导给所有在飞请求;`✅` chunked 把尖刺摊平成多个小步、`✅` 分离把 prefill 彻底移出 decode 实例。注意 chunked 在单实例内零额外硬件成本,分离则需要额外 GPU + KV 传输带宽。
 
 
-![[sched-043stall传导.svg]]
+![[sched-043stall传导.png]]
 
 ## 面试高频
 

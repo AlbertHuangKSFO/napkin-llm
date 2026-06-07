@@ -36,9 +36,9 @@ $$
 
 ## 图
 
-![[mem-decode访存图.svg]]
+![[mem-decode访存图.png]]
 
-![[mem-014搬运碾压计算.svg]]
+![[mem-014搬运碾压计算.png]]
 
 ## 代码
 

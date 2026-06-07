@@ -26,9 +26,9 @@ $$
 
 只要命中前缀够长、所在层带宽 $B_{\text{layer}}$ 够高(或被流水线掩盖),$\Delta T>0$ 即划算。
 
-![[kv-分层offload存储金字塔.svg]]
+![[kv-分层offload存储金字塔.png]]
 
-![[kv-036offload对比驱逐手算.svg]]
+![[kv-036offload对比驱逐手算.png]]
 
 ## 配置 / 代码
 ```python

@@ -9,15 +9,15 @@ H100 的数量级速查(SXM5):
 - **寄存器堆**:每 SM 256 KB。
 SRAM 比 HBM 快约一个数量级,但容量小约 6 个数量级——这个鸿沟是所有 GPU kernel 优化的起点。
 
-![[mem-003内存层级延迟容量对比.svg]]
+![[mem-003内存层级延迟容量对比.png]]
 
 原理:decode 单 token 的时间下限由"搬运全部权重"决定,与算力无关:
 $$t_{\text{token}} \ge \frac{\text{权重字节数}}{\text{HBM 带宽}} = \frac{2P}{\text{BW}_{\text{HBM}}}$$
 70B、FP16:$t \ge \frac{2 \times 70\text{e}9}{3.35\text{e}12} \approx 42$ ms,即 [[004 算力 vs 带宽：Roofline 与算术强度|memory-bound]]。FlashAttention 的洞见是:朴素 attention 把 $N\times N$ 的注意力矩阵写回 HBM 再读回,产生 $O(N^2)$ 的 HBM 流量;改成**在 SRAM 里分块(tiling)累加、永不落地完整矩阵**,HBM 流量降到 $O(N^2 \cdot d / M)$($M$ 为 SRAM 容量),从而把 attention 从 memory-bound 拉回来。这就是"留在 SRAM"的威力。相关[[LLM/076 显存占用估算(参数、梯度、优化器、激活、KV)|显存估算]]决定 HBM 够不够装,本篇关注的是**搬得多快**。
 
-![[mem-003FlashAttention留SRAM.svg]]
+![[mem-003FlashAttention留SRAM.png]]
 
-![[mem-GPU内存层级金字塔.svg]]
+![[mem-GPU内存层级金字塔.png]]
 
 用脚本验证 decode 是 HBM 带宽下限主导,以及"读全权重"的直觉:
 

@@ -34,7 +34,7 @@ $$\hat\sigma^2_{\text{MLE}}=\frac1n\sum_i(x_i-\hat\mu)^2$$
 
 **泊松估 $\lambda$**。$p(k\mid\lambda)=\frac{\lambda^k e^{-\lambda}}{k!}$,对数似然对 $\lambda$ 求导置零得 $\hat\lambda=\bar k$:**MLE 就是样本平均计数**。一连串例子都指向同一直觉:MLE 往往把参数估成最自然的样本统计量。
 
-![[prob-似然曲线.svg]]
+![[prob-似然曲线.png]]
 
 ## 原理
 
@@ -66,7 +66,7 @@ $$\hat\theta_{\text{MLE}}=\arg\max_\theta\ \ell(\theta)=\arg\min_\theta\ \underb
 
 **MLE = 最小化与经验分布的 KL**(把本篇和信息论接上)。最大化对数似然等价于最小化数据经验分布 $\hat p$ 与模型 $p_\theta$ 的 [[31 KL 散度与 JS 散度|KL 散度]] $D_{KL}(\hat p\|p_\theta)$,也等价于最小化二者的 [[30 交叉熵与负对数似然|交叉熵]]——这就是"分类损失 = 交叉熵 = NLL = MLE"四位一体的来源。
 
-![[prob-MLE分布拟合.svg]]
+![[prob-MLE分布拟合.png]]
 
 ## 代码
 

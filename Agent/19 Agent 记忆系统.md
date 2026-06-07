@@ -16,7 +16,7 @@
 
 ## 机制:四类记忆(借自认知科学)
 
-![[Agent 记忆系统.svg]]
+![[Agent 记忆系统.png]]
 
 主流框架(LangGraph、Letta、CrewAI…)沿用认知科学对人类记忆的分类,把 agent 记忆分四类。两条正交的轴帮你定位:**短期↔长期**、**具体经历↔抽象知识/技能**。
 
@@ -46,7 +46,7 @@
 
 ## MemGPT / Letta:把上下文当「分页内存」
 
-![[Agent 记忆系统-MemGPT分页.svg]]
+![[Agent 记忆系统-MemGPT分页.png]]
 
 **MemGPT**(Packer et al., UC Berkeley,2023 年 10 月 arXiv,论文 _MemGPT: Towards LLMs as Operating Systems_;后演化为开源框架 **Letta**)给了记忆系统一个极漂亮的统一隐喻:**把 LLM 当操作系统,把上下文窗当物理内存 RAM,把外部存储当磁盘,用虚拟内存的「分页(paging)」思想管理记忆。**
 

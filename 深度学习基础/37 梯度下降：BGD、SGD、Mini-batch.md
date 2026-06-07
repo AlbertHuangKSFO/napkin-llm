@@ -40,7 +40,7 @@
 
 **SGD 的抖动**:若梯度被替换成"真梯度 + 随机噪声",$w$ 不会平滑下降,而是大方向朝 0、局部来回抖——在谷底附近永远停不下来,要靠**学习率衰减**才能收住。
 
-![[nn-梯度下降三种.svg]]
+![[nn-梯度下降三种.png]]
 
 ## 原理
 
@@ -67,7 +67,7 @@ $$\underbrace{\nabla\mathcal L=\frac1N\sum_{i=1}^N\nabla\ell_i}_{\text{BGD:全�
 - 批量 $\uparrow$:梯度方差 $\downarrow\propto 1/B$、GPU 利用率 $\uparrow$、但每步算量 $\uparrow$、且太大时**泛化变差**(易陷尖锐极小),通常需配合**线性放大学习率** $\eta\propto B$ 来补偿。
 - 一个 **epoch** = 遍历完整个数据集一次;BGD 一个 epoch 走 1 步,Mini-batch 走 $N/B$ 步,SGD 走 $N$ 步。
 
-![[nn-梯度下降轨迹.svg]]
+![[nn-梯度下降轨迹.png]]
 
 **梯度下降找的是局部极小**。损失非凸时不保证全局最优,但深度网络的高维损失面里"差的局部极小"很少,实践中能找到足够好的解。配合 [[39 优化器(Momentum、RMSProp、Adam、AdamW)|动量/自适应优化器]]、[[41 权重初始化(Xavier、He、正交)|好的初始化]]、[[40 学习率调度与 warmup、cosine|学习率调度]],收敛又快又稳。
 

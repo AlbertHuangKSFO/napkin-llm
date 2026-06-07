@@ -43,11 +43,11 @@ $$
 
 ## 图
 
-![[pd-服务指标时间轴.svg]]
+![[pd-服务指标时间轴.png]]
 
-![[pd-goodput概念图.svg]]
+![[pd-goodput概念图.png]]
 
-![[pd-018吞吐与goodput废产.svg]]
+![[pd-018吞吐与goodput废产.png]]
 
 ## 代码
 

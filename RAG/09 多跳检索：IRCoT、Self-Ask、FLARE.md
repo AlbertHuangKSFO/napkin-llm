@@ -8,7 +8,7 @@
 
 多跳的关键结构:**检索与推理交替成环**,每一跳的检索结果喂给下一跳的推理,推理产物又当作下一跳的检索 query。这正是 [[09 ReAct|ReAct]] 的 Thought→Action(retrieve)→Observation 在检索场景的落地。
 
-![[多跳检索-交织.svg]]
+![[多跳检索-交织.png]]
 
 跟 [[07 查询变换 Query Transformation|查询变换 Query Transformation]] 里的 **Decompose** 区分:分解是**一次性把子问题列全、可并行**;多跳是**串行依赖——前跳结果决定后跳查什么**,不到上一跳出结果你都不知道下一跳要问啥(像"CEO 是谁"没查出来,就没法构造"他的航天公司"这一跳)。
 

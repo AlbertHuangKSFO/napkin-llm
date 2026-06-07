@@ -23,7 +23,7 @@ Plan-and-Execute 的洞见:**很多任务的步骤是可以预先排布的**。�
 
 ## 机制:Plan → Execute(逐步)→ Replan 回路
 
-![[Plan-and-Execute.svg]]
+![[Plan-and-Execute.png]]
 
 标准三段:
 

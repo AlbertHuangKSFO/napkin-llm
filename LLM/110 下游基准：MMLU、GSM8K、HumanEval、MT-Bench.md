@@ -22,7 +22,7 @@
 
 记法:**老四件套测基础能力但易饱和/被污染,新一代(MMLU-Pro/GPQA/MATH/SWE-bench/Live*)更难更抗污染**——面试问「现在用什么基准」别只答 MMLU。
 
-![[eval-基准雷达图.svg]]
+![[eval-基准雷达图.png]]
 
 ## 例子
 
@@ -41,7 +41,7 @@
 
 关键直觉:**$k$ 越大 pass@k 越高**(更多机会碰到对的),但**产品体验更接近 pass@1**(用户通常只看一次结果)。pass@1 与 pass@100 差距大 = 模型「有解但不稳」,这正是采样 + verifier/重排(见 GSM8K 的 verifier)能涨分的地方。
 
-![[eval-fewshot与passatk.svg]]
+![[eval-fewshot与passatk.png]]
 
 ## 原理
 
@@ -67,7 +67,7 @@ $$\boxed{\ \text{pass@}k=\mathbb{E}_{\text{题}}\Big[\,1-\dfrac{\binom{n-c}{k}}{
 
 **MT-Bench 用 LLM-as-judge。** 没有 $y^\star$,改成裁判模型 $J$ 给回答打分 $s=J(\text{prompt},\text{answer})\in[1,10]$,取多题平均。裁判有位置/冗长/自我增强等偏置,需去偏(详见 [[112 人评、LLM-as-judge 与 Arena|112]])。
 
-![[eval-基准雷达图.svg]]
+![[eval-基准雷达图.png]]
 
 ## 代码
 

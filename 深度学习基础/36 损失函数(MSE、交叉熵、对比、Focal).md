@@ -24,7 +24,7 @@
 - Huber($\delta=1$):误差大于 $\delta$ 时走线性段 $\delta(|r|-\tfrac12\delta)=1\times(10-0.5)=9.5$(几乎和 MAE 一样不被放大)。
 而小误差 $r=0.5$ 时:MSE $=0.25$,Huber $=\tfrac12 r^2=0.125$(走二次段,平滑可导)。**Huber = 小误差像 MSE(平滑)、大误差像 MAE(抗离群)**,$\delta$ 是切换阈值(δ≈1.345 对应正态下 5% 离群的稳健选择)。PyTorch 的 `SmoothL1Loss` 就是 $\delta=1$ 的 Huber。
 
-![[nn-损失函数对比.svg]]
+![[nn-损失函数对比.png]]
 
 ## 原理
 
@@ -58,7 +58,7 @@ $$\mathcal L_{\text{focal}}=-\alpha_t(1-p_t)^{\gamma}\ln p_t$$
 - 论文默认 $\gamma=2,\ \alpha=0.25$。
 直觉:**让一万个简单背景样本不再主导梯度**,模型把力气花在少数难样本上。
 
-![[nn-focal调制因子.svg]]
+![[nn-focal调制因子.png]]
 
 ## 代码
 

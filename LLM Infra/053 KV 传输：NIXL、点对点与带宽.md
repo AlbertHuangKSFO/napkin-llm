@@ -36,11 +36,11 @@ $$
 
 ## 图
 
-![[disagg-KV传输路径.svg]]
+![[disagg-KV传输路径.png]]
 
-![[disagg-053传输vs重算交叉.svg]]
+![[disagg-053传输vs重算交叉.png]]
 
-![[disagg-053链路带宽账.svg]]
+![[disagg-053链路带宽账.png]]
 
 ## 代码
 

@@ -14,7 +14,7 @@
 
 所以不是二选一,而是**两路都跑、各取所长**。
 
-![[混合检索 Hybrid Search.svg]]
+![[混合检索 Hybrid Search.png]]
 
 ## 机制
 

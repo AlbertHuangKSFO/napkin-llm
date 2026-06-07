@@ -22,7 +22,7 @@ Chinchilla 参数只有 Gopher 的 1/4,但喂了约 4.7 倍数据,**同样的算
 
 这直接改变了行业:后来的 [[038 LLaMA 架构解剖|LLaMA]] 把 7B 模型喂到 1T+ token(D/N≈140),远超 20——因为推理省钱比训练最优更重要(见下文「面试高频」)。
 
-![[param-scaling-power-law.svg]]
+![[param-scaling-power-law.png]]
 
 ## 原理:幂律公式与算力最优的拉格朗日
 
@@ -57,7 +57,7 @@ $$
 
 直观看「IsoFLOP 曲线」:固定算力时,Loss 关于 N 是一条 **U 形**——参数太大(数据被挤少)欠训,参数太小(浪费算力)也不优,**谷底**才是最优 N。把不同算力的谷底连起来,就是那条「最优配比轨迹」。
 
-![[param-chinchilla-optimal.svg]]
+![[param-chinchilla-optimal.png]]
 
 ## 拉格朗日完整推导:为什么 N、D 同比放大
 

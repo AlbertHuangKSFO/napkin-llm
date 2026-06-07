@@ -11,7 +11,7 @@ Orchestrator-Workers 把「拆分」这件事本身**交给一个 LLM 在运行�
 正因为「拆分由模型运行时决定」,它在 [[02 Workflow 与 Agent 的边界|Workflow 与 Agent 的边界]] 上**把 workflow 往 agent 推了一步**:仍有固定的「拆—派—合」骨架(像 workflow),但骨架里填什么由模型自主(像 agent)。
 
 ## 机制:拆 → 派 → 合
-![[Orchestrator-Workers.svg]]
+![[Orchestrator-Workers.png]]
 
 1. **接任务**:编排者拿到一个边界不预知的任务。
 2. **动态分解**:编排者 LLM **运行时**决定把它拆成哪些子任务、拆几个——子任务的**数量和内容都是模型生成的**,不是代码里枚举的。

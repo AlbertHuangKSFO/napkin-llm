@@ -50,7 +50,7 @@ $$q_{t,i}^\top k^{C}_{s,i}=q_{t,i}^\top\big(W^{UK}_i\,c^{KV}_s\big)=\underbrace{
 
 整体上,MLA 在 [[014 注意力复杂度 O(n²) 与瓶颈|瓶颈]]的"显存/带宽"维度做到 MQA 级别,而表达力维度保持 MHA 级别。
 
-![[attn-MLA低秩KV.svg]]
+![[attn-MLA低秩KV.png]]
 
 ## 代码:MLA 前向骨架
 ```python

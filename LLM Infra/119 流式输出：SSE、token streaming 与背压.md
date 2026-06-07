@@ -30,11 +30,11 @@ $$
 \text{TTFT} = T_{\text{prefill}} + T_{\text{first-decode}}, \qquad \text{ITL} \approx \frac{1}{r_{\text{gen}}}
 $$
 
-![[srv-SSE流式背压.svg]]
+![[srv-SSE流式背压.png]]
 
 并排看 SSE 单向传送带(无反向通道 → 缓冲发散)与 WebSocket 借 TCP 流控天然回压的本质差异:
 
-![[srv-119SSE对比WebSocket.svg]]
+![[srv-119SSE对比WebSocket.png]]
 
 ## 配置 / 代码
 ```python

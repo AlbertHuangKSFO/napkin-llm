@@ -27,7 +27,7 @@
 
 **WSD**:warmup 同上;$t=10\sim90$ 一直恒为 $3\times10^{-4}$(stable);$t=90\sim100$ 才从 $3\times10^{-4}$ 快速退火到 $3\times10^{-5}$。如果训到 90 步发现还想继续,直接延长 stable 平台即可——这是 cosine 做不到的。
 
-![[train-warmup-cosine-WSD曲线.svg]]
+![[train-warmup-cosine-WSD曲线.png]]
 
 ## 原理
 

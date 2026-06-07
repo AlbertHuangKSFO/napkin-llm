@@ -13,7 +13,7 @@
 
 Query Transformation 的统一思路:**别拿原话硬查**,先用 LLM 把它变成检索器爱吃的形式。
 
-![[查询变换 Query Transformation.svg]]
+![[查询变换 Query Transformation.png]]
 
 ## 机制:六种技法逐一拆
 

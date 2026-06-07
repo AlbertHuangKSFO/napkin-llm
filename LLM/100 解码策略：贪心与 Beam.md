@@ -27,7 +27,7 @@
 
 可见 **$\alpha$ 是一个连续旋钮**:从「只看总概率(偏短)」平滑过渡到「强烈奖励长句」。HF 的 `length_penalty` 即此 $\alpha$,>1 鼓励长、<1 鼓励短。
 
-![[infer-贪心vsBeam搜索树.svg]]
+![[infer-贪心vsBeam搜索树.png]]
 
 ## 原理
 

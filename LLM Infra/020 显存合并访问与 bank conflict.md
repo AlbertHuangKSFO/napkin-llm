@@ -17,11 +17,11 @@ $$\text{有效带宽} \approx \frac{\text{真正需要的字节}}{\text{实际�
 shared memory bank 号:`bank = (地址 / 4) mod 32`。一个 warp 内若 $k$ 个线程命中同一 bank(且非同址广播),则该访问串行化为 $k$ 拍,吞吐降为 $1/k$。**例外**:全 warp 读同一地址触发广播,仅 1 拍。
 
 ## 图
-![[cuda-合并访问与bank-conflict.svg]]
+![[cuda-合并访问与bank-conflict.png]]
 
 下面把两类访存的"罚款"逐笔算给你看——合并与否差 32 笔事务,bank conflict 差 32 拍:
 
-![[cuda-020合并访问事务数手算.svg]]
+![[cuda-020合并访问事务数手算.png]]
 
 ## 代码:转置 kernel 的访存修复
 ```cuda

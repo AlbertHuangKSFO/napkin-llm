@@ -11,9 +11,9 @@ $$
 
 为什么有 $u_{\text{SLO}}$ 这个「不能跑满」的扣减?排队论(M/G/c)告诉你,每卡的负荷 $\rho=\lambda S/c$ 越接近 1,等待时间越是**陡峭发散**——利用率从 0.7 提到 0.9,P99 等待可能翻几倍。所以 SLO 工作点通常压在 $\rho\approx0.6\!-\!0.8$,把延迟尾巴留在悬崖之前。$\text{Thr}_{\text{gpu}}$ 怎么来?靠 [[107 基准：MLPerf Inference 与 InferenceMAX|基准]]实测,且**强依赖** [[LLM/078 推理算力、吞吐与延迟、Roofline|Roofline]]、batch、量化与 prefill/decode 配比;输入/输出 token 比例不同,每卡吞吐差很多。规划完不是静态买死:配 [[101 自动扩缩：HPA、KEDA、scale-to-zero 与冷启动|自动扩缩]]按日内曲线伸缩,基线扛峰值、弹性吃尖峰。
 
-![[obs-容量规划计算.svg]]
+![[obs-容量规划计算.png]]
 
-![[obs-113利用率悬崖.svg]]
+![[obs-113利用率悬崖.png]]
 
 ```python
 import math

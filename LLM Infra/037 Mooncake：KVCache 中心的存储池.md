@@ -25,9 +25,9 @@ $$
 
 KVCache 命中率越高,prefill 负担越轻,可服务的 goodput 越高——这正是 KVCache 中心设计的杠杆。
 
-![[kv-Mooncake架构.svg]]
+![[kv-Mooncake架构.png]]
 
-![[kv-037闲置资源攒池手算.svg]]
+![[kv-037闲置资源攒池手算.png]]
 
 ## 配置 / 概念示意
 ```text

@@ -18,9 +18,9 @@ $$
 
 基座那项整批一起算(高效)。难点在第二项:batch 内每条请求用**不同的 $A,B$**(甚至不同 rank)。**SGMV(Segmented Gather Matrix-Vector multiplication)** 用一个 CUDA kernel 按请求的 adapter id **分段**,gather 出各自的低秩矩阵并批量做乘加——把 $B$ 个零碎小乘法合成一次高效内核。下图对比「逐 adapter 循环」与「SGMV 分段融合」为何吞吐差几倍:
 
-![[srv-115SGMV内核.svg]]**Unified paging** 则把不同 rank 的 adapter 权重和不同长度的 KV-Cache 放进**同一个分页内存池**:消除碎片,允许冷 adapter 换出到 CPU、热的留 GPU,无需为每个 adapter 预留固定显存。
+![[srv-115SGMV内核.png]]**Unified paging** 则把不同 rank 的 adapter 权重和不同长度的 KV-Cache 放进**同一个分页内存池**:消除碎片,允许冷 adapter 换出到 CPU、热的留 GPU,无需为每个 adapter 预留固定显存。
 
-![[srv-多LoRA服务架构.svg]]
+![[srv-多LoRA服务架构.png]]
 
 ## 配置 / 代码
 ```python

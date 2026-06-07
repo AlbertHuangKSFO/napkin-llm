@@ -12,7 +12,7 @@
 
 训练一句话:**反复四步**——前向算 loss、清梯度、反传、AdamW 更新(见 [[061 优化器与超参(AdamW)|AdamW]])。健全性检查:初始 loss 应约 $\ln V$。
 
-![[impl-tinyGPT架构.svg]]
+![[impl-tinyGPT架构.png]]
 
 ## 例子
 
@@ -45,7 +45,7 @@ the lazy dog. to be or not to be that is the question. h
 ④ clip + optimizer.step()           裁剪梯度 + AdamW 更新参数
 ```
 
-![[impl-训练循环四步.svg]]
+![[impl-训练循环四步.png]]
 
 ## 原理
 

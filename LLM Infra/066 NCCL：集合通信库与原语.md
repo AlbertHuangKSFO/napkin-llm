@@ -14,11 +14,11 @@ $$
 
 ($N$=参与卡数,$M$=每卡数据量。两段各搬 $\tfrac{N-1}{N}M$,合起来 $\tfrac{2(N-1)}{N}M$。)
 
-![[net-NCCL原语总览.svg]]
+![[net-NCCL原语总览.png]]
 
-![[net-066五原语映射.svg]]
+![[net-066五原语映射.png]]
 
-![[net-066环allreduce两阶段.svg]]
+![[net-066环allreduce两阶段.png]]
 
 ```bash
 # 拿 nccl-tests 量真实带宽(busbw 才是有效带宽,别看 algbw)

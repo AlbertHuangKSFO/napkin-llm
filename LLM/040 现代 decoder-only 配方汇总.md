@@ -34,7 +34,7 @@
 
 注意有些「微创新」:Gemma-2 同时在子层**前后各加一次** RMSNorm(sandwich norm)进一步稳训练,FFN 用 GeGLU(GELU 门控,与 SwiGLU 同类);Qwen2.5 加 QK-Norm。这些都属于「在五个旋钮里微调」,不动大格局。
 
-![[hist-配方表.svg]]
+![[hist-配方表.png]]
 
 ## 原理:每个旋钮为什么是现在这个默认
 **① Pre-RMSNorm**:Pre-Norm 把归一化放在子层输入端,残差主干是干净恒等路径,[[009 残差连接与梯度流|梯度]]畅通 → 深层好训(对比 [[010 层归一化：Pre-LN 与 Post-LN|Post-LN]] 深层易爆/难训)。[[43 归一化(BatchNorm、LayerNorm、RMSNorm、GroupNorm)|RMSNorm]] 去掉减均值与平移:

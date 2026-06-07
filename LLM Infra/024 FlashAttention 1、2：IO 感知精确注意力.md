@@ -5,7 +5,7 @@
 
 **生活类比**:在图书馆查资料。书库(HBM)容量大但离桌子远,来回搬一趟很慢;桌上的白板(SRAM)又快又近但很小。**朴素做法**:把整整一箱 4096×4096 的大名册从书库搬到桌上,写满、读回、又写……桌子早被占满,人坐着干等搬运——这就是反复进出 HBM,访问量 Θ(n²)、显存 O(n²),搬书时间远超真正"握手计算"的时间。**Flash 做法**:每次只从书库取一小叠 Q 和一小叠 K/V 放白板上,当场算完这块得分、用 online softmax 把结果累加进总账,然后擦掉白板换下一叠——那张大名册**从头到尾没落过地**。HBM 访问降到 Θ(n²d²/M);取 d=128、白板 M≈100KB 时,搬运量约少 6 倍,长序列墙钟快 2–4×。关键:省的是"搬书"不是"握手",计算量一点没变,结果精确无近似。
 
-![[flash-024类比图书馆取书.svg]]
+![[flash-024类比图书馆取书.png]]
 
 ## 小数字例子
 序列 $n=4096$、头维 $d=128$、SRAM 约 $M=100\text{KB}$:
@@ -25,15 +25,15 @@ $$\Theta\!\left(\frac{n^2 d^2}{M}\right)$$
 当 $M \gg d^2$ 时远小于 $n^2$。配合 online softmax 的递推 $\ell^\text{new}=e^{m^\text{old}-m^\text{new}}\ell^\text{old}+\sum e^{x_k-m^\text{new}}$,输出同步重缩放累加,无需物化 $P$。**FA2 的改进**:① 把并行维度从 batch×head 扩到 **序列维**,长序列也能占满更多 [[019 CUDA 执行模型：grid、block、warp|block]],提高 occupancy;② 重排循环、减少非 matmul 的 rescale 运算(GPU 上非 matmul FLOP 比 matmul 慢得多);③ 优化 warp 间 work 划分,减少 SRAM 读写争用——综合带来约 **2×** 提速。
 
 ## 图
-![[flash-分块数据流SRAM.svg]]
+![[flash-分块数据流SRAM.png]]
 
 把标准与 Flash 的 HBM IO 与显存逐项对比,IO 减少因子 ≈ M/d²:
 
-![[flash-024IO复杂度对比.svg]]
+![[flash-024IO复杂度对比.png]]
 
 FA1 到 FA2 这 ~2× 提速,具体来自三处工程改进(算法没动):
 
-![[flash-024FA1到FA2改进.svg]]
+![[flash-024FA1到FA2改进.png]]
 
 ## 代码:物化矩阵 vs 分块融合
 ```python

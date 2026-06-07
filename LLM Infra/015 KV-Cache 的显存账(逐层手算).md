@@ -40,9 +40,9 @@ $$
 
 ## 图
 
-![[mem-KV显存堆叠账.svg]]
+![[mem-KV显存堆叠账.png]]
 
-![[mem-015GQA压KV八倍.svg]]
+![[mem-015GQA压KV八倍.png]]
 
 ## 代码
 

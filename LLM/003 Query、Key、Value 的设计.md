@@ -30,7 +30,7 @@ $$W^Q=\begin{bmatrix}1&0\\0&0\\0&1\\0&0\end{bmatrix},\quad W^K=\begin{bmatrix}0&
 
 **$q_1\cdot k_2=2 \ne q_2\cdot k_1=0$**:同一对词,"猫关注累"和"累关注猫"得到完全不同的分数。若用一套权重($Q=K$),这两个分数必然相等。这就是 $W^Q\ne W^K$ 带来的非对称表达力,一个数字就能看穿。
 
-![[tf-QKV投影.svg]]
+![[tf-QKV投影.png]]
 
 ## 原理
 **三个投影**($X\in\mathbb{R}^{L\times d}$):

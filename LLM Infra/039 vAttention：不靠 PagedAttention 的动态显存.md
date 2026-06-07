@@ -5,7 +5,7 @@
 
 **生活类比**:把一层楼想成一个序列的 KV。vAttention 像「门牌连续编好、房间住到才装修」:一次性把整层门牌 101～108 连号挂好(虚拟地址连续,够 8192 token 用),但只有真住进去的房间才花钱装修(`cuMemMap` 按需挂物理页)。某请求只生成到 4000 token,就只装修 4 间(101~104),剩下 4 间挂着门牌却不占一分钱;房客从 101 顺着往下连续翻,压根不知道后台是按需装修的——所以**任何读书人(attention 内核)都不用改**,原版 FlashAttention/FlashInfer 直接跑。对比 PagedAttention:它把房间打散塞进楼里各处空格,再加一本「索引卡」记每页在哪,虽然也省了连续大房,但每个读书人都得**先学会查索引卡(改写 kernel)**,每出一版新内核就得再适配一遍。vAttention 省掉这支「改装修队」,论文报吞吐最高 ↑1.23×。
 
-![[kv-039类比连续门牌按需装修.svg]]
+![[kv-039类比连续门牌按需装修.png]]
 
 ## 小数字例子
 一个请求最终生成 4000 token,但事先不知道会多长。
@@ -26,7 +26,7 @@ $$
 
 代价/工程点:CUDA VMM 的页粒度较粗、映射有开销,vAttention 引入若干 LLM 专属优化(如**预先映射/重叠分配、更细的分配粒度**)来掩盖映射延迟,逼近 PagedAttention 的显存效率而保住内核兼容性。
 
-![[kv-vAttention对比PagedAttention.svg]]
+![[kv-vAttention对比PagedAttention.png]]
 
 ## 配置 / 代码
 ```cpp
@@ -51,9 +51,9 @@ flash_attn(q, /*K,V=*/kv, ...);                  // 无需 block_table、无需�
 ✅ vAttention:CUDA VMM 让虚拟连续 + 物理按需 → 同样无碎片,但 FA/FlashInfer 原版内核开箱即用
 ```
 
-![[kv-vAttention显存生命周期.svg]]
+![[kv-vAttention显存生命周期.png]]
 
-![[kv-039VMM调用序列.svg]]
+![[kv-039VMM调用序列.png]]
 
 ## 面试高频
 - **vAttention 和 PagedAttention 区别?** 都做「按需分配 KV 显存、去碎片」。PagedAttention 在**软件层**把 KV 切非连续块、改 attention 内核;vAttention 在**驱动/硬件虚拟内存层**保持虚拟连续、物理按需,**不改内核**。

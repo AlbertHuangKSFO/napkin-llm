@@ -25,7 +25,7 @@ $$
 
 ## 图
 
-![[sq-引擎量化集成.svg]]
+![[sq-引擎量化集成.png]]
 
 ## 代码
 
@@ -46,7 +46,7 @@ vllm serve model-AWQ --quantization awq
 ✅ 正解:加速绑定 **格式 × kernel × 硬件**。AWQ 需 Marlin 内核、FP8 需 Hopper+;格式或硬件不匹配会退化到慢速反量化路径,等于白量化。部署前确认引擎版本支持该格式的 kernel。
 
 
-![[sq-084格式核硬件矩阵.svg]]
+![[sq-084格式核硬件矩阵.png]]
 
 ## 面试高频
 

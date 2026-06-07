@@ -22,7 +22,7 @@
 
 **为什么效果还更好**。Press & Wolf(2017)发现:绑定后,梯度从「输出端」也能直接更新词向量,词向量被训得更充分;且共享空间避免了「输入和输出各学一套互不相干的词义」的浪费,在多个语言模型基准上 perplexity 显著下降。
 
-![[tf-tied-embedding.svg]]
+![[tf-tied-embedding.png]]
 
 ## 原理
 
@@ -56,7 +56,7 @@ $$\text{logits}=H\,E^\top,\qquad \text{logit}_{b,i,v}=\langle H_{b,i},\,E_v\rang
 
 **7. logit lens(可解释性彩蛋)**。既然 $\text{logits}=H E^\top$,可以把**中间层**的 hidden 也乘 $E^\top$ 提前"翻译"成词分布,看模型在第几层就"想好"了下一个词——这叫 logit lens,是探查 Transformer 内部的经典工具,靠的正是 tied embedding 让中间表示和词表同空间。
 
-![[tf-logits到概率.svg]]
+![[tf-logits到概率.png]]
 
 ## 代码
 

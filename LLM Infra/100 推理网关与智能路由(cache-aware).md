@@ -24,7 +24,7 @@
 
 **3. 和 prefill/decode 解耦联动。** 在 [[048 为何分离 prefill 与 decode|PD 分离]] 架构里,网关还要区分把 prefill 请求送到 prefill 池、decode 送到 decode 池,并跨池传 KV(NIXL,见 [[053 KV 传输：NIXL、点对点与带宽|KV 传输]])。这正是 [[052 NVIDIA Dynamo：分布式推理框架与 SLO Planner|Dynamo]]、llm-d router 在做的事。
 
-![[orch-cache-aware路由.svg]]
+![[orch-cache-aware路由.png]]
 
 ## ④ 配置:从普通 LB 到 InferencePool
 
@@ -59,7 +59,7 @@ spec:
 ✅ 正解:用 **InferencePool + EPP**,以 KV 利用率 / 队列深度 / 前缀命中为路由信号;把同前缀粘到已缓存副本(prefix affinity),过载副本自动避让。换引擎/扩副本时,网关层不动,只改 pool 成员。
 
 
-![[orch-100命中vs打偏.svg]]
+![[orch-100命中vs打偏.png]]
 
 ## 面试高频
 

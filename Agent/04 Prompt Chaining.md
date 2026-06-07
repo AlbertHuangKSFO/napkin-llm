@@ -8,7 +8,7 @@
 它属于 [[02 Workflow 与 Agent 的边界|Workflow 与 Agent 的边界]] 里 **workflow 一侧**:步骤是开发者**预先写死**的编排,不是模型运行时自己决定的。与全自主、自己决定下一步的 [[09 ReAct|ReAct]] 形成鲜明对照。
 
 ## 机制:链 + gate,分步讲透
-![[Prompt Chaining.svg]]
+![[Prompt Chaining.png]]
 
 1. **分解(设计期完成)**:开发者把任务切成 N 个有固定顺序的子步。切分的标准是——每个子步能用一个聚焦的 prompt 干净地完成,且后一步**真的依赖**前一步的产物。
 2. **串行执行**:`out1 = LLM(prompt1, 输入)` → `out2 = LLM(prompt2, out1)` → … 前一步输出是后一步输入。

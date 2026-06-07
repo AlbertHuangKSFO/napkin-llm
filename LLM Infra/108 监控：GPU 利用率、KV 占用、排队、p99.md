@@ -52,9 +52,9 @@ decode 阶段典型 `GPU_UTIL≈99%` 而 `SM_ACTIVE≈0.4`、`TENSOR_ACTIVE≈0.
 
 ## 图
 
-![[obs-监控面板.svg]]
+![[obs-监控面板.png]]
 
-![[obs-108假满载与先行指标.svg]]
+![[obs-108假满载与先行指标.png]]
 
 ## 代码
 

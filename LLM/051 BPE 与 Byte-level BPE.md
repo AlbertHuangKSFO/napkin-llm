@@ -39,7 +39,7 @@ w i d e s t _  (×3)
 
 现在**编码一个训练时没整词见过的 `lowest`**:按规则套——`l o w e s t _` →(es)`l o w est _` →(est 已合)→(lo)`lo w est _` →(low)`low est _`。结果 `[low, est, _]`,**没 OOV、还共享了 `low` 这个语义片**。这就是 [[050 分词总览与子词动机|子词动机]]里说的好处落地。
 
-![[tok-bpe-合并过程.svg]]
+![[tok-bpe-合并过程.png]]
 
 **Byte-level 的必要性**。上面在字符上做,基词表是「所有出现过的字符」。可全 Unicode 有十几万字符,且总有没收进去的生僻字/emoji → 仍可能 `[UNK]`。GPT-2 的解法:**先把文本编成 UTF-8 字节**,基词表就恒为 **256**,任何字节串(任意语言、emoji、二进制)都能切,**零 OOV**。GPT-2 词表 `50257 = 256 字节 + 50000 合并 + 1 个 <|endoftext|>`。它还用特殊符号 `Ġ`(可见空格)标记「这个 token 前面有空格」,这样 ` the` 和 `the` 是不同 token,解码能精确还原空格。
 
@@ -53,7 +53,7 @@ w i d e s t _  (×3)
 
 一句话:**BPE 看频次、WordPiece 看似然增益、Unigram 看「删了它似然掉多少」**。细节见 [[052 WordPiece、Unigram 与 SentencePiece|052]]。
 
-![[tok-byte-level-bpe.svg]]
+![[tok-byte-level-bpe.png]]
 
 ## 原理
 

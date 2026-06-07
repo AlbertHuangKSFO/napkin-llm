@@ -34,7 +34,7 @@
 
 **这就是 chunked prefill 的本质交换**:牺牲少量 TTFT(首 token 稍慢)换 TPOT 全程平稳 + 整体吞吐提升。对「重交互、低抖动」的 chat SLA 极划算。块大小决定这个折中点:块=128 时 TPOT 几乎零抖但 TTFT 升、调度开销大;块=2048 时 TTFT 好但偶有小 spike。
 
-![[infer-chunked-prefill.svg]]
+![[infer-chunked-prefill.png]]
 
 ## ③ 原理:piggybacking、decode-maximal batching 与 PD 分离
 
@@ -64,7 +64,7 @@
 
 **两者关系**:chunked prefill 是「在一台机器内把两阶段融合得更顺」,PD 分离是「把两阶段彻底拆开各自优化」。前者简单省机器、适合中小规模;后者复杂但在大规模、强 SLA(同时要低 TTFT 和低 TPOT)下收益大。可叠加:分离后 decode 池内部仍用连续批 + chunked prefill 处理零散 prefill。
 
-![[infer-PD分离部署.svg]]
+![[infer-PD分离部署.png]]
 
 ## ④ 代码:chunked prefill 调度(伪代码)
 

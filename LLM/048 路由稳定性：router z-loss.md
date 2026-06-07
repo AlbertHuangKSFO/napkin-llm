@@ -26,7 +26,7 @@ z-loss 在 logits 还没涨到危险区时就提供了把它们往下拽的梯�
 
 **验证「softmax 只看相对差」**。把 $[1,2,0.5,-0.5]$ 和 $[41,42,40.5,39.5]$(每个都 +40)分别 softmax:由于 softmax 对**所有 logits 同时加常数 $c$ 不变**($\frac{e^{\ell_i+c}}{\sum_j e^{\ell_j+c}}=\frac{e^{\ell_i}}{\sum_j e^{\ell_j}}$),两组输出**完全相同**(都约 $[0.21,0.58,0.13,0.08]$)。可见门控的「选谁、信多少」只由相对差决定,绝对尺度对决策毫无用处——却会在 bf16 下惹出溢出。z-loss 正是「砍掉这个无用又危险的绝对尺度」。
 
-![[moe-zloss.svg]]
+![[moe-zloss.png]]
 
 ## ③ 原理:router z-loss 公式与总损失
 
@@ -63,7 +63,7 @@ ST-MoE 推荐 $c_z=10^{-3}$ 量级(均衡损失 $\alpha=10^{-2}$ 量级)。系�
 
 **和 LLM 主干的 z-loss 区别**。PaLM 等也用一个 **logit z-loss** 稳定**最终输出 softmax**(词表上),公式同样是 $\log Z$ 的平方;router z-loss 则作用在 **MoE 路由 logits**(专家上)。同一招、两个地方用,别张冠李戴。
 
-![[moe-门控topk.svg]]
+![[moe-门控topk.png]]
 
 ## ④ 代码:router z-loss 实现与总损失组合
 

@@ -29,9 +29,9 @@ batch 越大,每步梯度估计越准(噪声越小),理论上可以走更大、�
 - batch 从 50 万 → 100 万 token:步数约从 20 万 → 10 万(线性缩放区,翻倍省一半,划算)。
 - batch 从 200 万 → 400 万 token:步数仅从 5 万 → 4.5 万(过了 CBS,多花一倍算力只省 10%,不划算)。
 
-![[train-梯度累积等效大batch.svg]]
+![[train-梯度累积等效大batch.png]]
 
-![[train-critical-batch-size曲线.svg]]
+![[train-critical-batch-size曲线.png]]
 
 ## 原理
 

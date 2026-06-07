@@ -30,11 +30,11 @@ $$
 
 ## 图
 
-![[disagg-Splitwise异构分工.svg]]
+![[disagg-Splitwise异构分工.png]]
 
-![[disagg-050硬件错配套利.svg]]
+![[disagg-050硬件错配套利.png]]
 
-![[disagg-050异构集群部署.svg]]
+![[disagg-050异构集群部署.png]]
 
 ## 代码
 

@@ -14,7 +14,7 @@ ZeRO 分三阶段,**切得越多省得越狠,通信也越多**:
 
 **FSDP = ZeRO-3**:平时每卡只存参数分片,算某层前 all-gather 凑齐完整权重、算完立刻丢。
 
-![[dist-ZeRO三阶段.svg]]
+![[dist-ZeRO三阶段.png]]
 
 ## 例子
 
@@ -39,7 +39,7 @@ ZeRO 分三阶段,**切得越多省得越狠,通信也越多**:
 
 ZeRO-3 把 120GB 砍到不到 2GB——这就是它能训万亿参数的原因。代价:ZeRO-3 通信量约为纯 DP 的 **1.5 倍**(每层前 all-gather 参数 + 反向 reduce-scatter 梯度)。
 
-![[dist-FSDP流程.svg]]
+![[dist-FSDP流程.png]]
 
 ## 原理
 

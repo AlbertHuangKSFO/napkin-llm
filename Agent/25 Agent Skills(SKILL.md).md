@@ -7,7 +7,7 @@ Agent Skills 的解法是把专长**封装成一个自包含、可移植的目�
 
 它和 [[16 工具设计与工具层|工具设计与工具层]] 里的「工具」有本质区别——这点后面专门讲;一句话先记住:**工具是「能调的动作」,Skill 是「怎么做的知识」**。
 
-![[Agent Skills(SKILL.md)-目录结构.svg]]
+![[Agent Skills(SKILL.md)-目录结构.png]]
 
 ## 来源:Anthropic 的两个时间点
 - **Anthropic 2025 年 10 月推出 Skills**:作为让 agent 装载可复用专长的机制,登陆 Claude 各产品面(Claude.ai、Claude Code、Agent SDK)。
@@ -18,7 +18,7 @@ Agent Skills 的解法是把专长**封装成一个自包含、可移植的目�
 ## 机制:渐进式披露的三层加载
 Skills 最精巧的设计是**渐进式披露(progressive disclosure)**——按「便宜的先加载、昂贵的晚加载」分三层,核心目标是**让上下文保持精简**。
 
-![[Agent Skills(SKILL.md)-渐进式披露.svg]]
+![[Agent Skills(SKILL.md)-渐进式披露.png]]
 
 **第一层:name / description —— 总在上下文(常驻)。** 每个已安装 skill 的 `name` 和 `description` **始终在上下文里**。它们极短(几十个 token),作用只有一个:让模型**知道「有这个技能、什么时候该用它」**。这一层是「目录卡片」,不含任何执行细节。哪怕你装了 50 个 skill,常驻成本也只是 50 张小卡片。
 

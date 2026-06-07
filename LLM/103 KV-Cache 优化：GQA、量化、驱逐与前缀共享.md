@@ -48,7 +48,7 @@ $$
 
 可见 KV 压缩不是「省一点显存」,而是**直接决定能开多大 batch、跑多高吞吐**——同一张卡,优化后服务能力差一个数量级。这就是为什么所有生产引擎都把 KV 优化放在第一优先级。
 
-![[infer-KV-Cache四类优化.svg]]
+![[infer-KV-Cache四类优化.png]]
 
 ## ③ 原理:四类各自的机制与代价
 
@@ -66,7 +66,7 @@ $$
 
 **驱逐的根本代价(必须讲清)**:一旦某 token 的 KV 被丢,它就**永久消失**,后续再也无法回看——这是有损且不可逆的。所以驱逐适合「近期信息主导」的任务(闲聊、流式日志),不适合「需要回看全文」的任务(长文档 QA、代码库理解)。H2O 这类「按注意力分数留」比 StreamingLLM「按位置留」更聪明,但也更可能误删——因为「过去注意力高」不代表「未来还需要」(贪心驱逐的固有风险)。
 
-![[infer-StreamingLLM驱逐.svg]]
+![[infer-StreamingLLM驱逐.png]]
 
 **④ 前缀共享(prefix caching)。** 多请求常共享前缀:同一个长 system prompt、few-shot 示例、RAG 检索拼接的文档、或并行采样从同一前缀分叉。这些公共前缀的 KV **算一次、存一份**,多请求共指(写时复制,见 [[026 PagedAttention 与 KV 分页|PagedAttention]] 的 copy-on-write)。既省显存又省去重复 prefill 计算。这是 vLLM 的 prefix caching、SGLang 的 [[108 推理引擎：vLLM、TensorRT-LLM、llama.cpp、SGLang|RadixAttention]] 的核心价值——聊天/RAG/Agent 这类「共享前缀 + 短续写」场景收益巨大。
 

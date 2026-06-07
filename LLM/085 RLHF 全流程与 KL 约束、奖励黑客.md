@@ -8,7 +8,7 @@
 
 解药很朴素:**别让新策略离原来的 SFT 模型太远**。每生成一个 token,就在奖励里扣一笔「你偏离参考模型多少」的 KL 罚款。模型既要追 RM 分,又要交 KL 税,自然不敢狂奔去钻漏洞。一句话:**RLHF = 在「离 SFT 不远」的信赖球里,小步爬 RM 的奖励山**。
 
-![[post-rlhf-loop.svg]]
+![[post-rlhf-loop.png]]
 
 ## 例子:KL 惩罚怎么改变奖励(小数字)
 
@@ -56,7 +56,7 @@ $$
 
 **4)显存账(PPO 为何贵)**。训练时要同时常驻**四份模型**:actor($\pi_\theta$)、critic($V_\phi$)、RM($r_\phi$)、ref($\pi_{\text{ref}}$)。这是 RLHF 工程难、DPO 受欢迎的直接动因。
 
-![[post-reward-hacking.svg]]
+![[post-reward-hacking.png]]
 
 ## 最优解的完整推导(DPO 的起点)
 

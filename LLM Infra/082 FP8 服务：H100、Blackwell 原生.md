@@ -24,7 +24,7 @@ $$
 
 ## 图
 
-![[sq-FP8服务流程.svg]]
+![[sq-FP8服务流程.png]]
 
 ## 代码
 
@@ -43,7 +43,7 @@ trtllm-build --checkpoint_dir ./llama --dtype bfloat16 --use_fp8 ...
 ✅ 正解:FP8 收益**只在 Hopper(H100/H200)、Ada、Blackwell 原生**;Ampere/A100 无 FP8 Tensor Core,会走软件模拟反而变慢——A100 上要量化激活请用 **INT8 W8A8**。
 
 
-![[sq-082FP8耐离群.svg]]
+![[sq-082FP8耐离群.png]]
 
 ## 面试高频
 

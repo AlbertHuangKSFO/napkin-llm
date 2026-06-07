@@ -33,11 +33,11 @@ Reflexion 把上面的循环装进一个**带记忆的多尝试框架**,四个�
 
 完整流程:**Actor 尝试 → Evaluator 评判 → 失败则 Self-Reflection 写反思 → 存 Memory → 下一轮 Actor 带着反思重试**,直到成功或到最大尝试数。
 
-![[Reflection 与 Reflexion.svg]]
+![[Reflection 与 Reflexion.png]]
 
 关键洞察:**不更新任何模型权重**。强化学习的「试错改进」效果,这里完全靠「把教训写成自然语言、塞回上下文」来实现——所以叫 verbal RL。代价小(无需训练)、迭代快(改 prompt 即生效)、可解释(反思是人能读的文字)。
 
-![[Reflection 与 Reflexion-记忆回灌.svg]]
+![[Reflection 与 Reflexion-记忆回灌.png]]
 
 ## 原论文
 

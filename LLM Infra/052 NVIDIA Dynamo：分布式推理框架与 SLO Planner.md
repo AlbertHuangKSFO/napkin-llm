@@ -33,11 +33,11 @@ KV Block Manager 把 KV 切块分级(HBM→CPU→存储),NIXL 负责块在卡间
 
 ## 图
 
-![[disagg-Dynamo组件.svg]]
+![[disagg-Dynamo组件.png]]
 
-![[disagg-052SLOPlanner闭环.svg]]
+![[disagg-052SLOPlanner闭环.png]]
 
-![[disagg-052KV感知路由.svg]]
+![[disagg-052KV感知路由.png]]
 
 ## 代码
 

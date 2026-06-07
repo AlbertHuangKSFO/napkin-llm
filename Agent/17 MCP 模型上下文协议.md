@@ -4,7 +4,7 @@
 
 ## 本质:用一个标准口子,消灭 N×M 集成爆炸
 
-![[MCP 模型上下文协议-NxM 集成.svg]]
+![[MCP 模型上下文协议-NxM 集成.png]]
 
 在 MCP 之前,要让某个 AI 应用接某个外部系统(GitHub、Slack、数据库…),得**为这对组合专门写一份集成**。N 个应用 × M 个工具 = **N×M 套各不相同的定制代码**,每加一个应用或一个工具都要重写一遍,且彼此不复用——这就是集成爆炸。
 
@@ -17,7 +17,7 @@ MCP 的洞见和 **LSP(Language Server Protocol)之于编辑器、USB-C 之于�
 
 ## 机制:client-server 架构与三原语
 
-![[MCP 模型上下文协议.svg]]
+![[MCP 模型上下文协议.png]]
 
 **角色**:
 - **Host(宿主)**:用户实际用的 AI 应用——Claude Desktop、IDE 插件、或你自己写的 agent。它管理若干 client、持有 LLM、对接用户。

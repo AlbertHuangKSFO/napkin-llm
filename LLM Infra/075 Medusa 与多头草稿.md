@@ -30,9 +30,9 @@ $$
 
 ## 图
 
-![[spec-medusa多头.svg]]
+![[spec-medusa多头.png]]
 
-![[spec-075树注意力验证.svg]]
+![[spec-075树注意力验证.png]]
 
 ## 代码
 

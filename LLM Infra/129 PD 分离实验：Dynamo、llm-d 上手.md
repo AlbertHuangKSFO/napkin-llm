@@ -40,11 +40,11 @@ Dynamo 用 **NIXL** 把 KV 从 prefill 引擎 VRAM **非阻塞**直传 decode �
 
 **独立扩缩。** prefill 重则多加 prefill worker,decode 重则多加 decode worker,不必整机等比扩(见 [[054 PD 配比与独立扩缩|PD 配比]];Dynamo 的 SLO Planner 自动调,见 [[052 NVIDIA Dynamo：分布式推理框架与 SLO Planner|Dynamo Planner]])。
 
-![[lab-PD分离部署.svg]]
+![[lab-PD分离部署.png]]
 
 放大看 KV 如何经 NIXL 点对点直传 decode 卡、两侧如何独立配比扩缩,以及 Dynamo(框架)vs llm-d(K8s 原生)的形态差异:
 
-![[lab-129KV传输.svg]]
+![[lab-129KV传输.png]]
 
 ## ④ llm-d:K8s 原生 PD 分离
 

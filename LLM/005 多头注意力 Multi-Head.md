@@ -30,7 +30,7 @@ $$\text{concat}=[\underbrace{1.0,0.5,0.0,2.0}_{\text{head 1}},\ \underbrace{0.3,
 $$\text{QKV 投影} = 3\times d\times d = 3d^2,\quad W^O = d^2,\quad \text{合计}\ 4d^2$$
 和"单个 $d$ 维头 + 输出投影"参数量**完全一样**($4d^2$)。多头是把同样的 $4d^2$ 参数**重新切分**成多个子空间,不是叠加。FLOPs 同理守恒。
 
-![[tf-多头切分.svg]]
+![[tf-多头切分.png]]
 
 ## 原理
 每个头 $i$ 用**自己的一套**投影:

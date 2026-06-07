@@ -34,11 +34,11 @@ $$m^{new}=\max(m,\ \tilde m_j),\quad \ell^{new}=e^{m-m^{new}}\ell+e^{\tilde m_j-
 $$O^{new}=e^{m-m^{new}}\,O+e^{\tilde m_j-m^{new}}\,\tilde P_j V_j$$
 即把"旧结果"乘 $e^{m_{old}-m_{new}}$ **rescale 到新基准**再加上新块贡献。逐块流式处理,结果与一次性 softmax **逐位相等**——所以是**精确**,不是近似。
 
-![[attn-online-softmax.svg]]
+![[attn-online-softmax.png]]
 
 **③ Recomputation 重计算。** 反向传播本需要 $n\times n$ 的 $S,P$。FlashAttention **不存它们**(只存 $O$ 和标量 $m,\ell$),反向时在 SRAM 里用 $m,\ell$ **现场重算**注意力。多花一点点算力,换来不必把 $n\times n$ 留在 HBM——再次用 IO 换 FLOPs,净赚。
 
-![[attn-FlashAttention分块IO.svg]]
+![[attn-FlashAttention分块IO.png]]
 
 **为何是"精确"?** 这点面试常被追问。Linformer/线性注意力/稀疏注意力都是**近似**(丢信息);FlashAttention 只是改了**计算与存储的顺序**,数学上算的是和标准注意力**完全相同**的 $\text{softmax}(QK^\top)V$,误差只来自浮点舍入。它直击 [[014 注意力复杂度 O(n²) 与瓶颈|O(n²)]] 里的**显存**那一维,算力级别仍是 $O(n^2)$(但常数和 IO 大降)。
 

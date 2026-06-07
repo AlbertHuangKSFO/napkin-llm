@@ -29,7 +29,7 @@ mask B: 1 1 1 0 0                     # pad 位置 mask=0，注意力忽略它
 
 补齐才能堆成 `(2, 5)` 的矩阵喂模型;mask 保证 pad 不被「注意到」、也不算进 loss。**EOS 控停**:推理时模型逐 token 生成,一旦采样出 `<eos>`(或对话里的 `<|im_end|>`/`<|eot_id|>`)就停止解码——这就是回答自然结束的原理。
 
-![[tok-词表与特殊token.svg]]
+![[tok-词表与特殊token.png]]
 
 **chat template 渲染一遍**。结构化输入:
 
@@ -58,7 +58,7 @@ ChatML 风格(OpenAI 提出,Qwen 等用)渲染成:
 
 最后那行 `<|im_start|>assistant`(后面留空)是**生成提示**:告诉模型「现在轮到 assistant 说」,它从这里续写。**Llama-3** 用另一套:`<|begin_of_text|>` 开头,每条消息 `<|start_header_id|>{role}<|end_header_id|>\n\n{内容}<|eot_id|>`。模板长得不同,但思想一致:**用特殊 token 划角色边界**。
 
-![[tok-对话模板.svg]]
+![[tok-对话模板.png]]
 
 ## 原理
 

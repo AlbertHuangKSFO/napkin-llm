@@ -4,7 +4,7 @@
 
 不同品牌的硬盘、键盘、网卡能插同一个 USB 口,因为**接口标准化**,设备内部怎么实现不重要。`/v1/chat/completions` 就是 LLM 推理界的 USB 标准口:vLLM、SGLang、TGI、TensorRT-LLM、llama.cpp 内部架构天差地别,但都「长出一个 OpenAI 形状的口」。于是你的应用(openai SDK、LangChain、自研网关)像「插 U 盘」一样,改个 `base_url` 就换引擎,代码一行不动。
 
-![[eng-094引擎热插拔.svg]]
+![[eng-094引擎热插拔.png]]
 
 ## ② 小数字例子:契约统一带来的实操收益
 
@@ -21,11 +21,11 @@
 
 **2. 流式 SSE。** 流式用 **Server-Sent Events**:服务端逐 token 推 `data: {…}` 行,结束发 `data: [DONE]`。vLLM/SGLang/TGI 都按此实现,客户端可边生成边渲染(关系到 [[018 TTFT、TPOT、ITL 与 goodput：服务指标定义|TTFT/ITL]] 等服务指标)。
 
-![[eng-094SSE流式契约.svg]]
+![[eng-094SSE流式契约.png]]
 
 **3. 引擎抽象 = 四层里的 ① 趋同。** 各引擎 ②调度 ③显存 ④后端实现差异巨大(见 [[088 vLLM V1 架构剖析|vLLM V1]]/[[089 SGLang：RadixAttention、HiCache 与前端|SGLang]]/[[090 TensorRT-LLM：编译式极致优化|TRT-LLM]]/[[091 TGI 与 Hugging Face 生态|TGI]]/[[092 llama.cpp、GGUF：CPU 与端侧|llama.cpp]]),但 **①API 层全部对齐 OpenAI 形状**。vLLM 的兼容 server 基于 FastAPI、是 HTTP 客户端与 EngineCore 的桥;SGLang 有专门的 `serving_chat.py` 处理 `/v1/chat/completions`;TGI 由 Rust router 暴露。正因 ① 可互换,「引擎」才成为可替换组件。
 
-![[eng-OpenAI兼容API.svg]]
+![[eng-OpenAI兼容API.png]]
 
 ## ④ 代码/配置:同一份代码打不同引擎
 

@@ -18,9 +18,9 @@ $$\text{Bytes} \approx 2 \cdot T \cdot d \cdot \text{(bytes/elem)} \cdot \frac{p
 关键不是总量大,而是**它在每层、每 token 的关键路径上**,且无法被计算掩盖。所以 TP 的有效带宽必须 ≥ 计算速度配比,否则 GPU 等通信。这把 TP 牢牢锁进 NVLink 域:跨 PCIe 或网络做 TP,带宽掉一个数量级,直接不可行。
 
 ## 图
-![[hw-NVLink互联拓扑.svg]]
+![[hw-NVLink互联拓扑.png]]
 
-![[hw-008互联搬1GB耗时.svg]]
+![[hw-008互联搬1GB耗时.png]]
 
 ## NVLink 代际与互联类型(已验证,2025–2026)
 
@@ -55,7 +55,7 @@ nvidia-smi topo -m
 ```
 
 
-![[hw-008TP与PP通信对比.svg]]
+![[hw-008TP与PP通信对比.png]]
 
 ## 面试高频
 - **NVLink、NVSwitch、PCIe 各是什么、差多少?** NVLink = GPU 间专用高带宽链路(900 GB/s~1.8 TB/s);NVSwitch = 把 NVLink 扩成无阻塞全互联的交换芯片;PCIe ≈ 128 GB/s 是数量级更慢的通用总线。差 7~14 倍。

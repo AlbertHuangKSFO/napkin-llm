@@ -13,9 +13,9 @@ $$\text{FLOPs} = 2 \cdot M \cdot N \cdot K$$
 $$\text{MFU} = \frac{\text{模型实际有效 FLOPs/s}}{\text{Tensor Core 峰值 FLOPs/s}}$$
 [[001 LLM 推理的系统视角：从一次请求到一张卡|prefill]] 大 batch 能到 40–60%,[[004 算力 vs 带宽：Roofline 与算术强度|decode]] 因带宽瓶颈常 <5%(算力被晾着)。底层数学见 [[深度学习基础/06 矩阵乘法的几何意义|矩阵乘法]]。
 
-![[hw-002MFU手算对比.svg]]
+![[hw-002MFU手算对比.png]]
 
-![[hw-GPU架构SM层级.svg]]
+![[hw-GPU架构SM层级.png]]
 
 用 PyTorch 直接看 Tensor Core 是否被启用,以及对吞吐的影响:
 
@@ -49,7 +49,7 @@ print(p.name, 'SM=', p.multi_processor_count)"   # H100 → SM= 132
 ```
 
 
-![[hw-002SM内部结构.svg]]
+![[hw-002SM内部结构.png]]
 
 ## 看懂 Tensor Core:从「单个计算器」到「整块冲压机」
 
@@ -59,9 +59,9 @@ print(p.name, 'SM=', p.multi_processor_count)"   # H100 → SM= 132
 
 **Tensor Core = 一台矩阵冲压机。** 它不接受「单个数」,只接受「整块小矩阵」:一条指令直接吞下两个小矩阵 A、B,猛地一压,**一次就盖出整块乘加结果** `D = A·B + C`。用最小的例子感受:一台 4×4×4 的冲压机,一条指令同时完成 **64 个乘加**(输出 4×4=16 个元素,每个元素含 4 次乘加,16×4=64)。同样这 64 个乘加,交给 CUDA Core 要 64 步,冲压机只要 1 拍。
 
-![[hw-002类比计算器vs冲压机.svg]]
+![[hw-002类比计算器vs冲压机.png]]
 
-![[hw-002TensorCore一次吞两矩阵.svg]]
+![[hw-002TensorCore一次吞两矩阵.png]]
 
 **为什么 LLM 几乎全靠 Tensor Core?** 因为 Transformer 的算力 99% 是矩阵乘(QKV 投影、FFN、注意力打分),全是冲压机的主场;只有那 1% 的逐元素操作才轮到计算器。冲压机比单个计算器快几十倍,谁决定 LLM 跑多快,一目了然。
 

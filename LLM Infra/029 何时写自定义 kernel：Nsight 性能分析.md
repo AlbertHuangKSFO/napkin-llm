@@ -24,9 +24,9 @@ $$
 
 工具分工:**Nsight Systems(nsys)** 给**全局时间线**——哪些 kernel 占比最大、有没有空泡、CPU↔GPU 拷贝/同步等待;先定位。**Nsight Compute(ncu)** 给**单 kernel 深剖**——roofline、占用率、warp stall 原因、内存事务效率;再深挖。**先 Systems 后 Compute**,别上来就 ncu 全量(很慢)。
 
-![[cuda-性能分析流程.svg]]
+![[cuda-性能分析流程.png]]
 
-![[cuda-029roofline三种bound.svg]]
+![[cuda-029roofline三种bound.png]]
 
 ## 命令与判断
 ```bash

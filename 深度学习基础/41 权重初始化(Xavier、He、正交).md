@@ -16,7 +16,7 @@
 
 **"尺度"到底要控多准?** 直觉量级:深度 $L$ 层,若每层方差放大率是 $r$,信号方差按 $r^L$ 走。$L=50$ 时,$r=1.1$ 给 $1.1^{50}\approx117$ 倍(还能撑),$r=1.5$ 给 $1.5^{50}\approx6\times10^8$(直接爆),$r=0.9$ 给 $0.9^{50}\approx0.005$(几乎归零)。可见**深度把微小的尺度偏差指数放大**,这正是初始化必须精确到"方差守恒 $r\approx1$"而不能凭感觉拍一个 $0.01$ 的原因。
 
-![[nn-初始化方差.svg]]
+![[nn-初始化方差.png]]
 
 ## 例子
 
@@ -39,7 +39,7 @@ $$\text{Var}(z)=n_{\text{in}}\cdot\sigma_W^2\cdot\text{Var}(a)=100\,\sigma_W^2$$
 
 **手算例 3:均匀分布版的界怎么来。** 想用 $U[-a,a]$ 实现 Xavier。$U[-a,a]$ 的方差是 $\frac{(2a)^2}{12}=\frac{a^2}{3}$。令它等于目标 $\frac{2}{n_{\text{in}}+n_{\text{out}}}$:$\frac{a^2}{3}=\frac{2}{n_{\text{in}}+n_{\text{out}}}\Rightarrow a=\sqrt{\frac{6}{n_{\text{in}}+n_{\text{out}}}}$。这就是那个"神秘的 6"的出处——不是 2 也不是 3,正是 $2\times3$。He 均匀版同理:$\frac{a^2}{3}=\frac2{n_{\text{in}}}\Rightarrow a=\sqrt{\frac6{n_{\text{in}}}}$。
 
-![[nn-初始化信号传播.svg]]
+![[nn-初始化信号传播.png]]
 
 ## 原理
 

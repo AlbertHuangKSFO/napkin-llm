@@ -31,7 +31,7 @@ LLM 只会处理 token 序列。要让它看图,核心思路朴素得惊人:**�
 
 Q-Former 用一组固定数量的可学习 query 去「问」576 个 patch,把信息压成 32 个 token,**省上下文但可能丢细节**;MLP 简单粗暴一一对应,**保信息但占上下文**。这是工程取舍。
 
-![[hist-ViT-CLIP.svg]]
+![[hist-ViT-CLIP.png]]
 
 ## 原理:三个组件各自在做什么
 **① ViT(Vision Transformer)**:把图 $x\in\mathbb{R}^{H\times W\times3}$ 切成 $P\times P$ 的 patch,展平后线性投影成 patch embedding,加位置编码,前面拼一个 `[CLS]` token,过标准 Transformer encoder:
@@ -50,7 +50,7 @@ $$H_{\text{img-tok}} = W\,H_v\in\mathbb{R}^{N\times d}$$
 - 阶段 1(对齐):**冻结视觉 encoder 和 LLM,只训投影器**,用图文对让图 token 落进 LLM embedding 空间;
 - 阶段 2(指令微调):**解冻投影器 + LLM**,用“图-问-答”三元组教模型看图对话(视觉 encoder 常仍冻结)。
 
-![[hist-投影对齐.svg]]
+![[hist-投影对齐.png]]
 
 ## 代码:LLaVA 式前向骨架(可运行结构)
 ```python

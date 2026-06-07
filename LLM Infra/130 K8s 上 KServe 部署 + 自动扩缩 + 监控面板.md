@@ -48,11 +48,11 @@ kubectl get llminferenceservice llama3-8b      # READY=True 即可用
 
 **3. 监控。** vLLM 在 `/metrics` 暴露 Prometheus 指标:`vllm:num_requests_running/waiting`(排队)、`vllm:gpu_cache_usage_perc`([[031 KV 显存碎片与 block 管理|KV]] 占用)、`vllm:time_to_first_token_seconds`(TTFT 直方图)、`vllm:time_per_output_token_seconds`。Grafana 画 p99 TTFT/TPOT、KV 占用、排队、[[002 GPU 架构：SM、CUDA Core 与 Tensor Core|GPU]] 利用率(DCGM exporter)。
 
-![[lab-K8s全栈部署.svg]]
+![[lab-K8s全栈部署.png]]
 
 把三层拼图叠起来看——KServe 声明式编排 → KEDA 按业务指标扩缩(含 scale-to-zero)→ Prometheus+Grafana 监控闭环喂回扩缩:
 
-![[lab-130三层拼图.svg]]
+![[lab-130三层拼图.png]]
 
 ## ④ 自动扩缩:KEDA 按 KV 占用扩
 

@@ -29,7 +29,7 @@
 
 YaRN 在此基础上再加**注意力温度缩放**(补偿长序列下 logits 分布的变化),仅需 **~0.1% 的预训练数据微调**就达到 SOTA 的窗口扩展效果。DeepSeek、Qwen 等长文模型广泛采用。详细推导见 [[032 RoPE 外推：NTK-aware、位置插值、YaRN|RoPE 外推]]。
 
-![[infer-位置插值与YaRN.svg]]
+![[infer-位置插值与YaRN.png]]
 
 **StreamingLLM(免微调)**:不碰位置、不扩窗口,只改 KV 保留策略——留前 4 个 token(attention sink)+ 最近 2048 个 token 的滑窗,中段全丢。模型能稳定地一路生成下去(实测到 400 万 token 不崩),KV 显存恒定。但它**记不住 2048 窗口外的内容**,所以不能用来做「读完整本书再回答」。
 
@@ -59,7 +59,7 @@ $$
 
 证据:注意力热图里开头几列总是异常亮;实验把它们删掉(只留滑窗),困惑度立刻爆炸;保留它们,流式生成稳如初。所以 StreamingLLM = **4 个 sink(泄洪口)+ 滑窗(真正有用的近期上下文)**,KV 显存 = 常数。
 
-![[infer-StreamingLLM注意力sink.svg]]
+![[infer-StreamingLLM注意力sink.png]]
 
 **训练侧也要 sink(一个延伸事实)。** 与其推理期被动留 sink,不如**训练时主动加一个专门的「sink token」**(如一个可学习占位 token 放在序列最前),让模型显式拥有「泄洪口」,对 sink 的依赖更干净、长上下文外推更稳——这把「StreamingLLM 的事后补丁」前移成了「架构设计」。
 

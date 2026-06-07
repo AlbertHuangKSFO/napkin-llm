@@ -4,7 +4,7 @@
 
 vLLM/TRT-LLM 是飞机(具体引擎),Triton 是**机场塔台 + 调度中心**:它自己不飞,但统一管理跑道(GPU)、排班(动态批)、多机型(多框架后端)、转机流程(ensemble:一次请求内部走 tokenize→LLM→detokenize 多步)。所以问「Triton vs vLLM 谁快」是问错层——正确问法是「**用 Triton 包住哪个后端**」。
 
-![[eng-093塔台分层.svg]]
+![[eng-093塔台分层.png]]
 
 ## ② 小数字例子:什么时候非 Triton 不可
 
@@ -12,7 +12,7 @@ vLLM/TRT-LLM 是飞机(具体引擎),Triton 是**机场塔台 + 调度中心**:�
 - **动态批提吞吐**:请求突发或单条很小时,动态批把零碎请求**聚合**成大 batch 喂 GPU,显著提利用率。
 - **ensemble 流水**:把「前处理 → LLM → 后处理」定义成一条 ensemble,客户端发**一次**请求,Triton 内部串起多模型,省掉多次网络往返。
 
-![[eng-093ensemble流水.svg]]
+![[eng-093ensemble流水.png]]
 - **企业级设施**:多模型版本管理、负载均衡、并发执行、Prometheus 指标 API——大厂多模型平台常以它为底座。
 
 ## ③ 原理:三块能力
@@ -26,7 +26,7 @@ vLLM/TRT-LLM 是飞机(具体引擎),Triton 是**机场塔台 + 调度中心**:�
 
 **3. ensemble + 全生命周期管理。** ensemble 把多模型串成 DAG 流水线(前处理→推理→后处理),对外是一次调用。再加多模型并发执行、负载均衡、版本管理、Prometheus 指标——这是它「企业级」的实体。
 
-![[eng-Triton多框架后端.svg]]
+![[eng-Triton多框架后端.png]]
 
 一句话定位:**Triton 管「服务/编排」,把 vLLM/TRT-LLM 当「引擎后端」**——和它们是包含关系,不是替代关系。
 

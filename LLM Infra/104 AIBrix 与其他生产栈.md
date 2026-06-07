@@ -12,7 +12,7 @@ vLLM 像一台高性能发动机(数据面引擎)。AIBrix / llm-d / KServe 是�
 
 **注意对比维度。** 第三方基准里 vLLM Production Stack 在 prefill-heavy 工作负载上比 AIBrix 更快(AIBrix 早期 PyTorch 版 KV offload 在高 QPS 下 TTFT 抬升);说明「分布式 KV」收益强依赖实现成熟度,选型要看版本与场景。
 
-![[orch-104分布式KV收益.svg]]
+![[orch-104分布式KV收益.png]]
 
 ## ③ 原理:三栈各管什么、怎么组合
 
@@ -29,9 +29,9 @@ vLLM 像一台高性能发动机(数据面引擎)。AIBrix / llm-d / KServe 是�
 
 **4. 怎么组合(关键认知)。** 这三者不全是竞品——**KServe + llm-d 是经典组合**:KServe 当控制面(模型生命周期、API 抽象、发布),llm-d 当底层分布式智能调度层。AIBrix 则更像「自成一体的替代栈」。再加上 [[052 NVIDIA Dynamo：分布式推理框架与 SLO Planner|NVIDIA Dynamo]](带 SLO Planner 的分布式推理框架),构成 2025-2026 的主流候选。选型轴:① 要不要分布式 KV(长上下文/prefill-heavy → 是);② 要不要标准 CRD 可移植(KServe);③ 要不要开箱即用一站式(AIBrix);④ 多租户 LoRA 密度需求(AIBrix 强)。
 
-![[orch-生产栈对比.svg]]
+![[orch-生产栈对比.png]]
 
-![[orch-104栈组合选型.svg]]
+![[orch-104栈组合选型.png]]
 
 ## ④ 配置:AIBrix 部署形态 vs KServe CRD
 

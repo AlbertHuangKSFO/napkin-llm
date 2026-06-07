@@ -23,7 +23,7 @@ ToT 把「思维」当作搜索单元,四个要素:
 3. **状态评估(evaluation)**:用 LLM 给每个候选状态打分——「这条路能不能通到解?」可以是数值打分,或多个状态间投票比较。这是剪枝的依据。
 4. **搜索算法**:用 **BFS** 或 **DFS** 遍历这棵树;BFS 每层保留 top-k 最有希望的节点(beam),DFS 一路深入、撞死路就**回溯**。低分节点直接**剪枝**。
 
-![[树搜索：ToT 与 LATS-思维树.svg]]
+![[树搜索：ToT 与 LATS-思维树.png]]
 
 ToT 是**纯推理**的搜索(原版不强调调外部工具),核心贡献是证明了「让 LLM 显式地探索+评估+回溯」能在需要前瞻/试错的任务上大幅超过 Chain-of-Thought。
 
@@ -42,7 +42,7 @@ LATS 把 **蒙特卡洛树搜索(MCTS)** 引入 LLM agent,并融合 [[09 ReAct|R
 
 额外地,当某条路径**失败**时,LATS 借用 [[13 Reflection 与 Reflexion|Reflection 与 Reflexion]] 生成一段**言语反思**,注入到后续的扩展中(纠正方向)——把「搜索 + 行动 + 反思」三件事统一进同一棵树。
 
-![[树搜索：ToT 与 LATS-MCTS.svg]]
+![[树搜索：ToT 与 LATS-MCTS.png]]
 
 ### 原论文
 **Zhou, Geng, Zhao, Wu, Bai, Kim, ... ,_Language Agent Tree Search Unifies Reasoning, Acting, and Planning in Language Models_**(UIUC,ICML 2024,arXiv 2023-10)。一句话定位:把 ToT 的纯推理树升级为**能调工具、能反思、用 MCTS 搜索**的 agent 树;在 HumanEval、WebShop、HotpotQA 等推理+行动混合任务上达到当时 SOTA。
@@ -122,7 +122,7 @@ def uct(n):  # 选择公式:利用项 + 探索项
 
 把这一簇范式按关键维度排成一行行——这是理解「自主推理架构」演进的主线图:
 
-![[树搜索：ToT 与 LATS-谱系对比.svg]]
+![[树搜索：ToT 与 LATS-谱系对比.png]]
 
 | 范式 | 观测时机 | 并行度 | token 成本 | 搜索 / 回溯 | 适用场景 |
 |---|---|---|---|---|---|

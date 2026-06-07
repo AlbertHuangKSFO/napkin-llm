@@ -29,7 +29,7 @@
 
 注意一个数字:整条链上**唯一会「膨胀」的中间张量**只有两处——注意力权重 `A` 的 `(2, 2, 4, 4)`(其中 `L×L = 4×4`)和 FFN 中间层的 `(2, 4, 32)`(其中 `4d = 32`)。`L×L` 这一块正是长序列的瓶颈(见 [[014 注意力复杂度 O(n²) 与瓶颈|O(n²) 瓶颈]])。
 
-![[tf-整体数据流.svg]]
+![[tf-整体数据流.png]]
 
 ## 原理
 
@@ -75,7 +75,7 @@ $$\text{logits}=\mathrm{LN}(x^{(N)})\,W_{\text{out}}\in\mathbb{R}^{B\times L\tim
 
 权重绑定(tied embedding)时 $W_{\text{out}}=E^\top$(见 [[016 输出层、tied embedding 与 logits|输出层与 tied embedding]])。
 
-![[tf-block逐张量.svg]]
+![[tf-block逐张量.png]]
 
 ## 代码
 

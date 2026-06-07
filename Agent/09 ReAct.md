@@ -18,7 +18,7 @@ ReAct 的洞见:**这两者本该互补**。
 
 ## 机制:Thought → Action → Observation 的循环
 
-![[ReAct.svg]]
+![[ReAct.png]]
 
 一轮迭代分三段,循环往复直到模型主动收尾:
 
@@ -34,7 +34,7 @@ ReAct 的洞见:**这两者本该互补**。
 
 ### 一段真实 trace 长什么样
 
-![[ReAct-trace示例.svg]]
+![[ReAct-trace示例.png]]
 
 这是论文里的经典多跳例子:问"Apple Remote 最初设计来控制的程序,后来还能被哪些设备控制"。模型先 `Search[Apple Remote]` 拿到"控制 Front Row",再 `Search[Front Row]` 拿到"也可由键盘功能键控制",两条真实 Observation 集齐后才 `Finish`。纯 CoT 在第二跳会直接"脑补"一个设备名而答错——这正是 Observation 的价值。
 

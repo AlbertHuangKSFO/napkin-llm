@@ -23,7 +23,7 @@ QLoRA 把它和 [[091 高效微调：LoRA、QLoRA、Adapter、Prefix|LoRA]] 拼�
 
 **双重量化的两层账(算清)**:第一层,块大小 64,每块 1 个 FP32 scale → $32/64=0.5$ bit/参。第二层,把这些 scale 按外层块(256 个 scale 一组)用 8-bit 量化 + 1 个 FP32 二级 scale → scale 的存储从 32 bit 降到约 8 bit,省下约 $\frac{32-8}{64}\approx0.37\sim0.5$ bit/参。合计平均位宽 $\approx4.1$ bit/参,几乎逼近理论 4 bit,而精度几乎不掉。
 
-![[quant-NF4分位量化.svg]]
+![[quant-NF4分位量化.png]]
 
 ## 原理
 
@@ -47,7 +47,7 @@ $$
 
 只有 $A\in\mathbb R^{r\times d}$、$B\in\mathbb R^{d\times r}$($r$ 很小)有梯度。再配**分页优化器(Paged Optimizers)**,用统一内存在显存尖峰时把优化器状态临时换到 CPU,避免 OOM。详见 [[091 高效微调：LoRA、QLoRA、Adapter、Prefix|QLoRA]]。
 
-![[quant-QLoRA数据流.svg]]
+![[quant-QLoRA数据流.png]]
 
 ## 代码
 

@@ -24,7 +24,7 @@
 
 **约 1.78× 提升**——而且这还是「短长差距不大」的温和例子;真实流量里请求长度从几十到几千 token 不等,木桶效应更严重,连续批相对静态批的实测吞吐提升常达 **数倍到 20+ 倍**(Orca 论文量级)。核心就一句:**decode 一步的成本几乎与 batch 无关,所以把 batch 填满 = 几乎免费地多产出 token**。
 
-![[infer-连续批处理对比.svg]]
+![[infer-连续批处理对比.png]]
 
 ## ③ 原理:iteration-level scheduling + 与 PagedAttention 的耦合
 
@@ -34,7 +34,7 @@
 2. **准入**:从等待队列取新请求填补空槽,直到显存/批容量上限。
 3. **拼批**:把「正在 decode 的老请求」与「刚进来要 prefill 的新请求」可能拼进同一步执行(涉及 prefill 与 decode 混跑,见 [[106 chunked prefill 与 prefill、decode 解耦|chunked prefill]])。
 
-![[infer-迭代级调度循环.svg]]
+![[infer-迭代级调度循环.png]]
 
 **为什么能这样拼?** 不同请求当前长度不同、KV-Cache 长度不同。要让它们在一个 batch 里跑,KV 不能再要求「整块连续预留」——否则换进换出会产生大量碎片。这正是 [[026 PagedAttention 与 KV 分页|PagedAttention]] 的用武之地:KV 按页分配,请求随到随分页、完成随时整页归还,**碎片极小、槽位复用灵活**。所以「连续批处理 + PagedAttention」是绝配:前者是调度策略,后者是支撑它的显存管理。
 

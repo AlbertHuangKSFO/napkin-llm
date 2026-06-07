@@ -8,7 +8,7 @@ MCP host(agent)的工作流是:连接 server → 读工具描述 → 调工具 �
 - **③ 间接提示注入(经工具结果回流)**:恶意指令藏在**工具返回的结果**里(抓来的网页、文件、DB 记录),随结果流回 agent 上下文,劫持其后续行为(链 [[05 Prompt Injection 提示注入|提示注入]])。
 - **④ SSRF → 云元数据窃取**:server 不校验 URL,被引向 `http://169.254.169.254`(IMDSv1)即可取出 **AWS IAM 临时凭证**——属于 MCP04 供应链/依赖与宿主环境穿透。
 
-![[sec-MCP攻击面.svg]]
+![[sec-MCP攻击面.png]]
 
 ## 关键事实(含出处)
 - **BlueRock** 分析 **7000+ MCP server**,发现约 **36.7% 疑似存在 SSRF** 暴露。来源:[BlueRock — MCP fURI / Markitdown SSRF](https://www.bluerock.io/post/mcp-furi-microsoft-markitdown-vulnerabilities)。

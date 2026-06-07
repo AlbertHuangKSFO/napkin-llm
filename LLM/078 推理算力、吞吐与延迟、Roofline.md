@@ -25,9 +25,9 @@
 
 **prefill 对比**:读 2048 个 token 的 prompt,一次大 GEMM,计算量 $\approx 2N\times2048$,但权重还是读一遍 14GB → 算术强度高达约 2048,**远在脊点右侧,吃满算力**。
 
-![[param-Roofline模型.svg]]
+![[param-Roofline模型.png]]
 
-![[param-吞吐与延迟权衡.svg]]
+![[param-吞吐与延迟权衡.png]]
 
 ## ③ 原理:Roofline、算术强度与吞吐延迟权衡
 

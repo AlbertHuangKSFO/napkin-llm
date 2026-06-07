@@ -35,7 +35,7 @@ $$
 
 **「7× 提速」到底是怎么算出来的(别误读)**。Switch 论文报告的 7× 是「**在相同算力(FLOPs)预算下,达到同等预训练 loss 所需的时间**」——即同样的钱(算力),Switch-Base 比稠密 T5-Base 快约 7 倍达标。注意这**不是**「同参数量下快 7 倍」(MoE 参数量远大于稠密),而是「同算力下、靠稀疏带来的更大有效容量,收敛更快」。面试若问「MoE 为什么快」,要答清是「同算力预算下收敛更快」,不是「单次前向更快」。
 
-![[moe-Switch路由.svg]]
+![[moe-Switch路由.png]]
 
 ## ③ 原理:Switch 层的前向与三个关键设计
 
@@ -61,7 +61,7 @@ GShard 的另一贡献是**工程**:它提出 `SPMD` + 自动分片注解,让 Mo
 
 **GShard 的容量因子细节**:它把 token 按位置分到专家 buffer,溢出走残差;并提出 **expert capacity = $\frac{2N}{E}$**(top-2 下)这类经验设置。GShard 用这套在 2048 个 TPU 上训了 600B 参数的多语言翻译模型(覆盖 100 种语言),是首个真正「巨型 + 能跑」的 Transformer MoE。
 
-![[moe-门控topk.svg]]
+![[moe-门控topk.png]]
 
 ## ④ 代码:top-1(Switch) vs top-2(GShard) 路由对比
 

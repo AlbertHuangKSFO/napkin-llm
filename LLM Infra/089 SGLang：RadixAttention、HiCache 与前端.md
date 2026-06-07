@@ -16,15 +16,15 @@
 
 **1. RadixAttention —— 前缀树自动复用。** 在 [[030 PagedAttention 深入：KV 当虚拟内存|PagedAttention]] 之上,把所有请求前缀组织成 radix 树,节点存对应 token 前缀的 KV。新请求沿树匹配**最长已缓存前缀**,命中部分**直接复用 KV、跳过 prefill 重算**,只为新增 token 算 KV;树节点用 LRU 驱逐管显存。比「整段精确前缀」粒度更细——**任意分叉处都能共享**(见 [[032 前缀缓存：RadixAttention 树结构|RadixAttention 树结构]]、[[033 自动前缀缓存的命中与失效|命中与失效]])。
 
-![[eng-089基数树复用.svg]]
+![[eng-089基数树复用.png]]
 
 **2. HiCache —— 分层 KV(L1/L2/L3)。** 扩展 RadixAttention:GPU 显存=L1、host CPU 内存=L2、分布式存储/SSD=L3(可接 Mooncake store)。热 KV 留 GPU,温/冷 KV 下沉,需要时调回。本质是把 [[036 KV 分层 offload：GPU、CPU、SSD(LMCache)|KV 分层 offload]] 与 [[037 Mooncake：KVCache 中心的存储池|Mooncake]] 思想做进引擎。2025 还引入 UnifiedRadixTree、DeepSeek 适配、SSD offload 等。
 
-![[eng-089HiCache三层.svg]]
+![[eng-089HiCache三层.png]]
 
 **3. 前端 DSL —— 结构化 LLM 程序。** 提供 `gen`/`fork`/控制流/约束解码(JSON、正则)的前端语言,把「多步、有分支、要结构化输出」的 LLM 程序写得像普通代码;编译后**天然产出大量共享前缀的请求**,与 RadixAttention 形成正反馈。再叠加 EAGLE/EAGLE-3 [[073 投机解码系统：draft-verify 全流程|投机解码]]、wide-EP 等并行,覆盖 LLM 与多模态。
 
-![[eng-SGLang架构.svg]]
+![[eng-SGLang架构.png]]
 
 底层仍是连续批 + PagedAttention 显存,与 [[088 vLLM V1 架构剖析|vLLM]] 同源概念;差异在 ③ 显存/前缀复用做得更激进(树 + 分层)和前端 DSL。
 

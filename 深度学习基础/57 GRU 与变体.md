@@ -31,7 +31,7 @@ $$h_t=(1-0)\cdot 0.8+0\cdot\tilde h_t=0.8$$
 
 **梯度跨步手算(对应 LSTM 的 $f$)**。GRU 沿 $h$ 的梯度主项是 $\frac{\partial h_t}{\partial h_{t-1}}\supseteq(1-z_t)$。若连续三步 $z=[0.1,0,0.1]$,则保留系数 $(1-z)=[0.9,1.0,0.9]$,跨 3 步 $\approx0.9\times1.0\times0.9=0.81$ —— 和 LSTM 遗忘门 $f\approx1$ 一样,提供近恒等的梯度通道。
 
-![[rnn-GRU门.svg]]
+![[rnn-GRU门.png]]
 
 ## 原理
 
@@ -61,7 +61,7 @@ $$\boxed{\,h_t=(1-z_t)\odot h_{t-1}+z_t\odot\tilde h_t\,}\quad\text{凸组合更
 
 **整体定位(RNN 家族的句号)**:GRU/LSTM 是 2014–2017 年 NLP 的主力,之后被 Transformer 大面积取代(注意力可并行、长程一跳直达,见 [[60 注意力机制的起源(Bahdanau、Luong)|注意力起源]])。但在**算力受限、序列不太长、流式/在线推理(逐步到达、低延迟)**场景,门控 RNN 仍有价值;近年的状态空间模型(S4/Mamba)某种意义上是"现代化的、可并行的 RNN",让循环结构重新受到关注。
 
-![[rnn-时间展开.svg]]
+![[rnn-时间展开.png]]
 
 ## 代码
 

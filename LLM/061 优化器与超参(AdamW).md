@@ -20,7 +20,7 @@
 
 注意衰减项只跟 $\theta$ 自己的大小有关($0.5$ 越大、衰减越多),**完全不被 $\sqrt{\hat v}$ 影响**。换成老 Adam 的 L2,这 $0.00005$ 会先混进梯度、再被 $\sqrt{\hat v}+\varepsilon$ 除一遍——梯度大的参数那一除,衰减就被稀释了,这正是 [[39 优化器(Momentum、RMSProp、Adam、AdamW)|Adam]] 泛化不如 AdamW 的根因。
 
-![[train-AdamW更新.svg]]
+![[train-AdamW更新.png]]
 
 ## 原理
 

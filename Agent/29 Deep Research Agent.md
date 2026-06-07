@@ -8,7 +8,7 @@ Deep Research Agent 就是把这套"研究方法论"做成 agent 循环。它跟
 
 ## 机制:plan → 扇出 → 核验 → 综合(分步)
 
-![[Deep Research Agent.svg]]
+![[Deep Research Agent.png]]
 
 标准管线分四步,且第三步可回灌迭代:
 

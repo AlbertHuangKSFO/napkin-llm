@@ -11,7 +11,7 @@
 它属于 [[02 Workflow 与 Agent 的边界|Workflow 与 Agent 的边界]] 里的 **workflow 一侧**:循环结构是预设的,生成与评估的角色固定,与全自主的 [[09 ReAct|ReAct]] 对照。但它已带「自我改进」的味道,是 workflow 里最像 agent 的形态之一。
 
 ## 机制:生成 ↔ 评估闭环
-![[Evaluator-Optimizer.svg]]
+![[Evaluator-Optimizer.png]]
 
 1. **生成草稿**:Generator 据输入产出第一版。
 2. **评估**:Evaluator 按既定标准审草稿——打分 + 指出**具体问题**(措辞生硬?漏了要点?事实错误?)。反馈越具体,下一轮改得越准。

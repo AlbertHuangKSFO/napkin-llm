@@ -31,7 +31,7 @@ prompt:`「写一句鼓励考研失败的人的话」`
 
 注意第三段**不再需要人写答案**——模型自己生成,RM 打分当奖励,人力成本骤降。
 
-![[post-three-stage-pipeline.svg]]
+![[post-three-stage-pipeline.png]]
 
 ## 原理:三个目标函数,一脉相承
 

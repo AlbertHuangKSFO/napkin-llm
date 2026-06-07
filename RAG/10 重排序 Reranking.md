@@ -8,11 +8,11 @@
 
 **cross-encoder** 反过来:把 `[query | SEP | doc]` **拼成一条**喂进同一个 Transformer,query 的每个 token 能和 doc 的每个 token 做**交叉注意力**,直接输出一个相关性分。精度高得多,但**每个 query-doc 对都得现场过一遍模型**,无法预算、无法建索引——扫百万库不可能。
 
-![[bi-vs-cross-encoder.svg]]
+![[bi-vs-cross-encoder.png]]
 
 结论是显而易见的分工:**别让 cross-encoder 扫全库,只让它精排 bi-encoder 海选出的小候选集**。
 
-![[重排序 Reranking.svg]]
+![[重排序 Reranking.png]]
 
 典型配置:bi-encoder/混合检索海选 **top-100** → cross-encoder 精排 → 取 **top-5** 喂生成。100 次 cross-encoder 前向是可接受的延迟,百万次则不可能。
 

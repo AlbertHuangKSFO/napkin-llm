@@ -9,7 +9,7 @@
 
 两侧独立、可多层叠加,任一层失守仍有下一层兜底,这就是**纵深防御(defense in depth)**。
 
-![[sec-guardrails管线.svg]]
+![[sec-guardrails管线.png]]
 
 ## spotlighting:让模型分清"数据"与"指令"
 提示注入的根因是 LLM 把不可信文档里的文字误当成可执行指令。**spotlighting**(Hines et al. 2024,Microsoft,arXiv:2403.14720)给出三种把不可信内容"打上聚光灯"的手法,让模型明确哪段是纯数据:

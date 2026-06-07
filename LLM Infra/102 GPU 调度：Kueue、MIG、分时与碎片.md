@@ -25,9 +25,9 @@
 
 **3. GPU 碎片(fragmentation)= 核心痛点。** 当集群里散落着一堆小 MIG 切片或被分时占用的零碎卡,新来的大作业(如 8×H100 的 gang)凑不齐连续完整的卡 → 明明总量够,却调度不上。解法:bin-packing 紧凑放置、按作业类型分池(推理池 vs 训练池)、拓扑感知放置(同作业的卡尽量同 NVLink 域/同 rail,见 [[058 TP 的通信：每层 all-reduce 与 NVLink 依赖|TP 的 NVLink 依赖]])、定期重整(reschedule)。
 
-![[orch-GPU调度全景.svg]]
+![[orch-GPU调度全景.png]]
 
-![[orch-102共卡与碎片.svg]]
+![[orch-102共卡与碎片.png]]
 
 ## ④ 配置:Kueue 配额 + gang,与 MIG 资源声明
 

@@ -39,7 +39,7 @@ $$h_t=\bar A\,h_{t-1}+\bar B\,x_t,\qquad y_t=C\,h_t$$
 
 **为什么递推能并行(结合律 → 前缀扫描)。** 把每步写成 $h_t=a_t h_{t-1}+b_t$(标量示意),定义二元操作 $(a_2,b_2)\bullet(a_1,b_1)=(a_2a_1,\ a_2b_1+b_2)$——这个操作**满足结合律**。满足结合律的序列归约可用**并行前缀扫描(parallel/Blelloch scan)**在 $O(\log n)$ 深度、$O(n)$ 工作量内算完,而非朴素 RNN 的 $O(n)$ 串行深度。于是 Mamba 训练时虽不能用 FFT 卷积(参数随时变),仍能靠 scan 在 GPU 上并行——这是"选择性"与"可并行训练"得以兼得的关键。
 
-![[attn-Mamba状态空间扫描.svg]]
+![[attn-Mamba状态空间扫描.png]]
 
 **与 [[023 线性注意力(Linear Transformer、Performer)|线性注意力]] 的血缘**:线性注意力的因果形式 $S_t=S_{t-1}+\varphi(k_t)v_t^\top$ 本就是个线性 RNN 隐状态递推(见 023 的"Transformers are RNNs")。Mamba 同属"可并行训练 + 类 RNN 推理"的状态递推家族(还有 RWKV、RetNet),区别是用**选择性 + 离散化的 SSM** 把表达力做强。
 

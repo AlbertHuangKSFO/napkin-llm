@@ -19,9 +19,9 @@ KServe/llm-d 像用"建筑图纸+施工队"(CRD/YAML + Operator)盖楼:声明每
 
 **与 K8s 优先方案的取舍**:Python 优先 = 编排即代码、灵活组合、迭代快,适合研究/复杂图/重前后处理;K8s 优先(KServe/llm-d)= 声明式、与 K8s 生态(HPA/KEDA/Gateway)无缝、运维标准化。两者不互斥:Ray 可经 KubeRay 跑在 K8s 上。
 
-![[orch-099扩缩比例.svg]]
+![[orch-099扩缩比例.png]]
 
-![[orch-RayServe架构.svg]]
+![[orch-RayServe架构.png]]
 
 ## 代码:Ray Serve LLM deployment graph
 ```python
