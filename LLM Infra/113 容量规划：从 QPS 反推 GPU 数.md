@@ -6,6 +6,8 @@
 
 **为什么 bursty 125 vs 平滑 16 差到 8 倍**。容量必须按**瞬时峰值 $\lambda_{\text{peak}}$** 而非平均 $\bar\lambda$ 配:同样日均请求,平滑流量 $\lambda_{\text{peak}}\approx\bar\lambda$,而尖峰流量(如 400 req/min 突刺)$\lambda_{\text{peak}}$ 可达 $\bar\lambda$ 的好几倍。设平滑工作点 $\rho=0.7$ 要 16 卡,则平滑需求 $\propto 16\times0.7=11.2$。突发把瞬时 $\lambda$ 拉高约 $8\times\to\rho$ 名义会冲到 $5.6$——但 $\rho<1$ 是硬约束,只能靠加卡把 $\rho$ 压回安全区:$\rho=0.7$ 时需 $11.2\times8/0.7\approx128\approx125$ 卡。关键在 $W_q\propto\rho/(1-\rho)$ 这条**悬崖**:平滑流量可贴着 $\rho=0.7$ 省着用,突发流量为了让峰值时刻仍 $\rho<1$,平时必须把 $\rho$ 压得很低、大量卡闲置等尖峰——这就是 8 倍差距的来源。
 
+![[obs-113突发倍数账.png]]
+
 $$
 N_{\text{gpu}}=\Big\lceil\frac{\text{QPS}_{\text{peak}}\times \bar{T}_{\text{out}}}{\text{Thr}_{\text{gpu}}\times u_{\text{SLO}}}\Big\rceil\times f_{\text{burst}}\times f_{\text{fail}},\qquad
 \rho=\frac{\lambda S}{c}<1
