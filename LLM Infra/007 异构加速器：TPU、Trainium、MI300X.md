@@ -16,6 +16,8 @@ $$\text{算术强度} = \frac{\text{FLOPs}}{\text{Bytes from HBM}} \uparrow \qua
 
 TPU v6e 的 MXU 是 $256\times256$(前代 $128\times128$),一拍吞 $256^2$ 个 MAC;但矩阵维度凑不满 256 时,边缘 PE 空转,利用率掉。
 
+**复用 256 次的算术强度手算**。把一块 $256\times256$ 权重 tile **驻留**进 MXU(只从 HBM 读一次),再让 $M=256$ 行激活像传送带一样流过:每个权重元素和流过的 **256 行**各做一次 MAC,即**被复用 256 次**,而不是每次重读。算一笔账(bf16,2 B/元素):FLOPs $=2\cdot256\cdot256\cdot256\approx3.4\times10^7$;从 HBM 搬的字节 $=\underbrace{256^2}_{\text{权重读 1 次}}+\underbrace{256\cdot256}_{\text{激活读}}+\underbrace{256\cdot256}_{\text{输出写}}=3\times256^2$ 元素 $\approx3.9\times10^5$ B。算术强度 $\approx\frac{3.4\times10^7}{3.9\times10^5}\approx\mathbf{85}$ FLOP/B——远在 [[004 算力 vs 带宽：Roofline 与算术强度|Roofline]] 拐点右侧,稳进 compute-bound。**对比**:若不驻留、每个 MAC 都现读权重,算术强度只有 $O(1)$,直接卡死在带宽。脉动阵列的全部价值就是这一步:用「权重驻留 + 数据流过」把复用次数从 1 拉到 $n=256$,算术强度同比抬高约两个数量级。
+
 ![[hw-007脉动阵列逐拍.png]]
 
 ## 图

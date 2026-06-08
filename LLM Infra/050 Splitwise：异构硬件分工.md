@@ -22,7 +22,13 @@ $$
 \text{Cost}_{\text{homo}} = (n_p+n_d)\,c_p
 $$
 
-只要 decode 在便宜卡上仍满足 TPOT,即 $\text{TPOT}_{\text{decode-card}} \le \tau_{\text{tpot}}$ 成立,这笔替换就净赚。功耗同理——decode 卡可在更低功耗档运行,因为它不需打满算力:
+只要 decode 在便宜卡上仍满足 TPOT,即 $\text{TPOT}_{\text{decode-card}} \le \tau_{\text{tpot}}$ 成立,这笔替换就净赚。把这条硬前提**公式化**:decode 访存受限,每步耗时 $\approx$ 每 token 要读的字节数除以该卡 HBM 带宽,
+
+$$
+\text{TPOT}_{\text{decode-card}} \approx \frac{2N_{\text{params}}\,b_{\text{w}} + S_{\text{kv}}}{B_{\text{card}}}\;\le\;\tau_{\text{tpot}}
+$$
+
+($2N_{\text{params}}b_{\text{w}}$ 是读一遍权重的字节,$S_{\text{kv}}$ 是读全量 KV 的字节,$B_{\text{card}}$ 是该卡带宽)。判据只看分母 $B_{\text{card}}$:A100 的 ~2 TB/s 仍能把 TPOT 压在 $\tau$ 内,就用它接 decode——**带宽达标即可,算力余量再多对 decode 也无用**。功耗同理——decode 卡可在更低功耗档运行,因为它不需打满算力:
 
 $$
 \text{Goodput per Watt} \uparrow\quad\text{当 decode 迁到低功耗、够带宽的卡}

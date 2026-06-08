@@ -32,7 +32,7 @@ $$
 \underbrace{\frac{2\,L\,N_{\text{params}}}{C_{\text{FLOPS}}}}_{\text{decode 卡重算 prefill}}
 $$
 
-左边随 **prompt 长度线性增**但被带宽除;右边是重算的算力代价。长 prompt + 快网 → 左小右大,传输胜;短 prompt + 慢网 → 重算胜。点对点 RDMA/GPU-Direct 的意义就是把 $B_{\text{link}}$ 顶到 HBM 量级、并绕开 CPU 拷贝,让左边尽量小。
+左边随 **prompt 长度线性增**但被带宽除;右边是重算的算力代价。**澄清右项是「prefill FLOPs」不是「decode 算力」**:所谓「decode 卡重算」,是让 decode 卡把整条 prompt 再跑一遍 **prefill**(并行处理 $L$ 个 token,$\approx 2LN_{\text{params}}$ FLOPs,**计算受限**),而非按 decode 那样逐 token 自回归。所以这里掏的是 decode 卡的**峰值算力 $C_{\text{FLOPS}}$**(分母),不是它平时受限的 HBM 带宽——别把这项误当成 decode 的访存代价。长 prompt + 快网 → 左小右大,传输胜;短 prompt + 慢网 → 重算胜。点对点 RDMA/GPU-Direct 的意义就是把 $B_{\text{link}}$ 顶到 HBM 量级、并绕开 CPU 拷贝,让左边尽量小。
 
 ## 图
 

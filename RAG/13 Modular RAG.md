@@ -42,6 +42,8 @@ Modular RAG 最有价值的部分,是把 **Orchestration 能编排出的流程�
 
 可以这样串记:**Naive=linear,Adaptive/路由=conditional,多查询/多源=branching,自评纠错/多跳=loop(→ Agentic RAG)**。
 
+**branching vs loop 别混(一个具体例子)**。同一个 query「比较 A 和 B 公司的营收与员工数」:**branching** 把它拆成 2 个子查询(「A 的营收员工」「B 的营收员工」)**同时并行**各检索一次,4 路结果**一次性汇聚**——分支之间无依赖、无回头,DAG 没有回边。**loop** 则是同一个 query **改写 3 次串行迭代**:第 1 轮查得不够 → 自评「证据不足」→ 改写 query → 第 2 轮再查 → 仍不够 → 再改 → 第 3 轮……带**回边**反复跑同一条路,直到收敛或撞 `max_iter`。一句话:**branching 是"并行铺开、一次汇总"(无回边),loop 是"串行试错、反馈重来"(有回边)**。
+
 ## 可跑最小代码
 
 下面用极简的模块注册 + flow 编排器,演示「同一组模块如何拼成四种不同 flow」:

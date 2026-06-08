@@ -15,6 +15,8 @@ t_{\text{ring}}\approx 2(N-1)\alpha+\frac{2(N-1)}{N}M\beta,\qquad
 t_{\text{tree}}\approx 2\log_2 N\cdot(\alpha+ M\beta)
 $$
 
+**ring 带宽最优手算(4 卡 reduce-scatter 分步)**。设 $N=4$,每卡持一段长 $M$ 的向量,先按卡切 4 块 $a,b,c,d$,每块 $M/4$。reduce-scatter 走 $N-1=3$ 步,每步每卡只发出 1 块 $M/4$、收进 1 块累加:第 1 步卡 $i$ 把第 $i$ 块发给右邻、收左邻的块加到本地;3 步后,卡 0 攒齐全 4 卡的 $a$ 块之和、卡 1 攒齐 $b$ 块之和……即「分片求和已就位」。再 all-gather 同样 3 步把这 4 个部分和传一圈让人人补齐。每卡总收发 $=2(N-1)\cdot\frac{M}{N}=2\cdot3\cdot\frac{M}{4}=1.5M$,$N\!\to\!\infty$ 时 $\to 2M$——**与卡数几乎无关**,这就是「带宽最优」。对比 tree:每步沿树边搬整段 $M$,带宽项 $2\log_2 4\cdot M=4M>1.5M$,步数少但每步搬得多,大消息上吃亏。
+
 (注意 tree 每步沿树边搬的是**整段 $M$**,不像 ring 每步只搬 $M/N$;所以 tree 带宽项 $2\log_2 N\cdot M$ 反而 $\ge$ ring 的 $2M$——步数少但每步搬得多,大消息上 tree 吃亏。消息越大 $\beta$ 项主导→偏 ring;越小 $\alpha$ 项主导→偏 tree。NCCL 以 `NCCL_TREE_THRESHOLD` 为界切换。)
 
 ![[net-ring-tree-SHARP对比.png]]

@@ -162,6 +162,8 @@ async for msg in query(prompt="研究 agent 框架并写成 report.md", options=
 - **任务成功率基准**(第三方,口径各异):中等任务 LangGraph ~76% > CrewAI ~71% > AutoGen ~68%;复杂任务 LangGraph ~62% > CrewAI ~54%,差距来自 LangGraph 的图状态机**对失败节点的优雅处理**(可重试、可续跑)。
 - **成本**:CrewAI 的多角色协作有 ~18% 的 token 开销(3-agent crew 比等价 LangGraph 实现多花 token)——多体的协调代价是真实的(呼应 [[22 多智能体系统|多智能体系统]])。
 
+**这 18% 从哪来——选型算例**。假设一条「研究员→作家→审校」3-agent 流水线,等价 LangGraph 实现单次跑掉 100k token。CrewAI 多出的 ~18% 即 $100\text{k}\times0.18=18\text{k}$ token/次,主要来自每个 Agent 的 `role/goal/backstory` 系统提示被反复注入、以及成员间用自然语言交接(而非 LangGraph 那种结构化 State 直传)。按 $\$3/\text{M}$ 输入 token 估,单次多花 $18\text{k}\times\$3/10^6=\$0.054$;日均 10 万次请求,一天就是 $0.054\times10^5=\$5400$ 的纯协调溢价。**选型结论**:原型期这 18% 换「几十行就跑通」很值;但高频生产核心链路上,它会被请求量放大成实打实的钱,这正是「原型 CrewAI → 生产重写 LangGraph」的成本动因之一。
+
 **部署侧的关键差异——LangGraph Platform(2026 已 GA)。** LangGraph 不只是库,还有配套的**持久化执行平台**:
 - 内建 **task queue + 状态持久化 + 断点续跑**,把本篇说的「checkpoint 一等公民」做成了托管服务,长程/有状态 agent 不用自己搭 [[34 Agent 部署与持久化执行|持久化执行]]。
 - 部署形态:**Cloud SaaS**(Plus $49/月单部署、Pro $99/月五部署)、**Hybrid**(SaaS 控制面 + 自托管数据面,Enterprise)、**完全自托管**(数据不出 VPC)。

@@ -30,6 +30,8 @@
 
 实战里两条路常**混合**:DOM 为主拿结构,模型看不懂或元素拿不到时,回退到截图用视觉定位(hybrid)。browser-use 等库就走这种 DOM + 截图标注的混合方案。
 
+**成本手算(为什么 DOM 路便宜得多)。** 视觉 token 量级粗估按 $\frac{w\times h}{750}$ 算,一张 $1280\times800$ 截图 $\approx\frac{1024000}{750}\approx1365$ 视觉 token;DOM 路一段精简后的可访问性树约 $600$ 文本 token。**单步**视觉路约是 DOM 路的 $1365/600\approx2.3$ 倍观察成本。放到一个 $30$ 步的「订机票」任务上:视觉路光观察就 $1365\times30\approx4.1\times10^4$ token,DOM 路 $600\times30\approx1.8\times10^4$ token——单这一项差 $2.3\times$;再叠加视觉 token 单价通常更高、且大图还拖慢首 token 延迟,整体差距进一步放大。这就是规模化首选「**DOM 为主、视觉兜底**」的硬账。
+
 ## 来源:产品与时间线
 
 - **Anthropic Computer Use**(2024-10):Claude 3.5 Sonnet 首次开放 computer-use 能力的公开 API,纯视觉路线——模型看截图、输出坐标动作。是第一个把"通用桌面操作"做成产品级 API 的。后续演进为 Claude 的屏幕交互底座(消费端 Claude Cowork 即建于其上)。

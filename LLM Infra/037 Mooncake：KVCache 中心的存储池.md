@@ -17,6 +17,8 @@ LLM 推理两阶段资源画像截然不同:[[013 Prefill 阶段：计算受限|
 3. **前缀去重/复用**:同前缀只存一份,跨请求/跨节点命中即取,免重算。
 4. **KVCache 中心调度器**:在「最大化有效吞吐」与「满足延迟 SLO」之间权衡,过载时**预测式提前拒绝**。
 
+**「预测式」拒什么、靠什么预测(澄清)**。不需要预知请求内容,只需对**已知量**做一次资源外推:① 请求自带 prompt 长度 $L_{\text{in}}$ 与期望输出长度 $L_{\text{out}}$(用户给或按经验分布估);② 先查 KVCache 池命中前缀 $L_{\text{hit}}$,得实际待算 prefill $=L_{\text{in}}-L_{\text{hit}}$;③ 据当前各池排队深度估 $\widehat{\text{TTFT}}$(排队+剩余 prefill)与 $\widehat{\text{TPOT}}$(decode 池 KV 带宽÷在途请求数);④ 任一项超 SLO 就**早拒**。逻辑近似 `if predict_TTFT(qlen, L_in−L_hit) > SLO_ttft or predict_TPOT(decode_load) > SLO_tpot: reject(429)`。本质是拿「队列状态 + 长度估计」预判 SLO 能否兑现,不是预测黑箱里会生成什么——是**容量预测**,不是**内容预测**。
+
 调度目标可粗略写成在 SLO 约束下最大化 goodput:
 
 $$

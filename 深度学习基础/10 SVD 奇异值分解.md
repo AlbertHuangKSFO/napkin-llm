@@ -24,6 +24,13 @@ $$A^TA=\begin{bmatrix}3&4\\0&5\end{bmatrix}\begin{bmatrix}3&0\\4&5\end{bmatrix}=
 
 **交叉验证**:奇异值之积 $\sigma_1\sigma_2=\sqrt{45\cdot5}=\sqrt{225}=15=|\det A|=|3\cdot5-0\cdot4|=15$。对上了(这对应 [[08 行列式与空间缩放|行列式]] = 面积缩放,而 SVD 把面积缩放拆成各轴 $\sigma$ 之积)。
 
+**凑齐 $V$ 与 $U$**。$V$ 的列是 $A^TA$ 的单位特征向量。$\lambda=45$:$(25-45)v_1+20v_2=0\Rightarrow v_1=v_2$,得 $\mathbf{v}_1=\tfrac{1}{\sqrt2}(1,1)^T$;$\lambda=5$:$v_1=-v_2$,得 $\mathbf{v}_2=\tfrac{1}{\sqrt2}(1,-1)^T$。$U$ 不用再解 $AA^T$,直接用 $\mathbf{u}_i=A\mathbf{v}_i/\sigma_i$:
+$$A\mathbf{v}_1=\tfrac{1}{\sqrt2}(3,9)^T,\quad \mathbf{u}_1=\frac{A\mathbf{v}_1}{3\sqrt5}=\frac{1}{\sqrt{10}}(1,3)^T;$$
+$$A\mathbf{v}_2=\tfrac{1}{\sqrt2}(3,-1)^T,\quad \mathbf{u}_2=\frac{A\mathbf{v}_2}{\sqrt5}=\frac{1}{\sqrt{10}}(3,-1)^T.$$
+合起来 $A=U\Sigma V^T$,其中
+$$U=\frac{1}{\sqrt{10}}\begin{bmatrix}1&3\\3&-1\end{bmatrix},\ \Sigma=\begin{bmatrix}3\sqrt5&0\\0&\sqrt5\end{bmatrix},\ V=\frac{1}{\sqrt2}\begin{bmatrix}1&1\\1&-1\end{bmatrix}.$$
+关键是 **$U$ 由 $\mathbf{u}_i=A\mathbf{v}_i/\sigma_i$ 一步算出**,省掉解第二个特征问题,也自动保证 $U,V$ 的奇异向量按 $\sigma$ 配对。
+
 ![[la-SVD三步几何.png]]
 
 ## 原理

@@ -28,6 +28,10 @@
 ### Ragas:四指标如何无标注地算
 [[20 RAG 开源生态全景|Ragas]](`explodinggradients/ragas`)的卖点是**reference-free**——多数指标不需要人写标准答案,靠 LLM 拆解+判定:
 - **Faithfulness**:LLM 把答案拆成一组**原子论断(claims)**,逐条问"检索上下文支持/矛盾/沉默?",得分 = 被支持论断的比例。
+
+**Faithfulness 手算**。答案「RAG 由 Lewis 等人 2020 年提出,**首次发表在 ICML**」,检索上下文只说「RAG 由 Lewis et al. 2020 NeurIPS 论文提出」。LLM 拆出 2 条原子 claim:① 「Lewis 等人 2020 年提出 RAG」——上下文**支持**(✓);② 「首次发表在 ICML」——上下文说的是 NeurIPS,**矛盾**(✗)。于是
+> $$\text{Faithfulness} = \frac{\text{被支持的 claim 数}}{\text{总 claim 数}} = \frac{1}{2} = 0.5$$
+读法:0.5 意味着**一半内容在证据外编造**(这里把 NeurIPS 错写成 ICML)。把答案拆到原子粒度,正是为了让「编了一句」也能被定位扣分,而不是整段一个模糊的「对/错」。
 - **Answer Relevancy(新版文档称 Response Relevancy)**:让 LLM 由答案**反推可能的问题**,与原问题算嵌入相似度——答案越切题,反推出的问题越像原问题。
 - **Context Precision**:检索回来的片段里,相关片段是否排在前面(信噪+排序)。
 - **Context Recall**:把标准答案拆成句子,看每句能否从检索上下文推出——衡量证据**够不够全**(这一项需要 reference)。

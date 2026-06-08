@@ -12,6 +12,8 @@
 | RAPTOR | 递归聚类+摘要,建一棵从细节到全局的树 | 建库时,递归 | 多轮聚类+LLM 摘要 |
 | Late Chunking | 先整篇 embedding 让每 token 看过全文,再切 | embedding 阶段改顺序 | 几乎为零(只改流程) |
 
+**一句类比记住三条路**:像给一张从书里撕下来的散页补回出处——Contextual Retrieval 是**在散页顶上贴张便利贴**写「本页出自 ACME 2023 年报第三章」(LLM 写前缀);RAPTOR 是**另做一本目录/摘要册**,从章节摘要到全书主旨层层向上(摘要树);Late Chunking 是**先把整本书通读一遍再撕页**,撕下来时每页都还记得全书在讲什么(先整篇 embedding 再切)。
+
 ## 机制一:Contextual Retrieval(Anthropic, 2024-09)
 
 来自 **Anthropic 2024 年 9 月工程博客《Contextual Retrieval》**。做法朴素而有效:**建库时,对每个 chunk,把「整篇文档 + 这个 chunk」喂给一个便宜 LLM(如 Claude Haiku),让它生成一两句话说明「这个 chunk 在全文里讲的是什么背景」,把这段上下文前缀拼到 chunk 前面,再做 embedding 和 BM25 索引。** 于是上例的 chunk 被改写成「[本段出自 ACME 公司 2023 年报,讨论营收] 2023 年公司营收增长 3%」——「ACME」「2023 年报」进了向量,召回就成了。

@@ -93,7 +93,15 @@ def react(question, llm, max_steps=8):
 | [[10 Plan-and-Execute|Plan-and-Execute]] | 先规划再批量执行 | 规划1次+偏差时 | 较省 | 中 | 长程、步骤可预先排布 |
 | [[11 ReWOO|ReWOO]] | 规划/取证/合成三段解耦 | 仅 Plan+Solve | 最省(中间不回灌) | 中(蓝图错难纠) | 步骤可静态规划、要省 token |
 
-ReAct 的**软肋**正是它的代价:每一步都要把"到目前为止的全部 Thought/Action/Observation"重新发给大模型 → **token 随步数线性甚至更快膨胀、延迟高**;长程任务里上下文越滚越长,容易迷失方向。[[10 Plan-and-Execute|Plan-and-Execute]] 和 [[11 ReWOO|ReWOO]] 正是为压住这个成本而生——把"每步都问模型"砍成"只在关键点问"。
+ReAct 的**软肋**正是它的代价:每一步都要把"到目前为止的全部 Thought/Action/Observation"重新发给大模型 → **token 随步数线性甚至更快膨胀、延迟高**;长程任务里上下文越滚越长,容易迷失方向。
+
+**膨胀手算**。设每步新增约 200 token(一段 Thought + 一条 Observation),跑 10 步。第 $i$ 步的 prompt 含前 $i-1$ 步全部历史 + 本步,约 $200i$ token,送进模型处理的输入 token 累积为:
+
+$$
+\sum_{i=1}^{10} 200\,i = 200\times\frac{10\times 11}{2} = 200\times 55 = 11000 \text{ token}
+$$
+
+而若每步只发本步、不带历史(理想线性),只需 $10\times 200 = 2000$ token。**11000 vs 2000,5.5 倍**——这就是"超线性":单看生成是 $O(N)$,但因每步**重发全历史**,累计处理量是 $O(N^2)$。步数翻倍,账单近四倍。这正是 Prompt Caching(缓存历史前缀)和 Observation 压缩要救的命门。[[10 Plan-and-Execute|Plan-and-Execute]] 和 [[11 ReWOO|ReWOO]] 正是为压住这个成本而生——把"每步都问模型"砍成"只在关键点问"。
 
 往上走,如果要让 agent **从失败中学习**就接 [[13 Reflection 与 Reflexion|Reflection 与 Reflexion]];如果要**探索多条推理/行动路径**而非单线前进,就上 [[14 树搜索：ToT 与 LATS|树搜索：ToT 与 LATS]](LATS 本质就是给 ReAct 套上蒙特卡洛树搜索)。
 

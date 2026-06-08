@@ -12,6 +12,8 @@ MCP host(agent)的工作流是:连接 server → 读工具描述 → 调工具 �
 
 ## 关键事实(含出处)
 - **BlueRock** 分析 **7000+ MCP server**,发现约 **36.7% 疑似存在 SSRF** 暴露。来源:[BlueRock — MCP fURI / Markitdown SSRF](https://www.bluerock.io/post/mcp-furi-microsoft-markitdown-vulnerabilities)。
+
+**攻击面手算(把三个统计串起来)**。这几个数字单看是孤立的,串起来才是一条放大链:① BlueRock 的 7000 个 server × 36.7% ≈ **2570 个潜在 SSRF 入口**——每一个都可能被引向 `169.254.169.254` 取云凭证;② 这 2570 里只要混进 Trend Micro 报的那类**零认证、互联网直接暴露**的 server(实测 492 个),就是无需任何门槛、扫到即打的高危目标;③ 而一旦攻击者能把一条恶意工具描述塞进任意一个 server,MCPTox 测得在 auto-approval 下 **84.2%** 的概率直接得手。换算成期望:攻击者随机命中一个暴露 server 投毒,$0.842$ 的成功率意味着平均试 $1/0.842\approx1.19$ 次就中——攻击面广(2570)× 单点命中率高(84.2%),这才是 MCP 在 2026 成为最热攻击面的真实账。
 - **PoC 实证**:BlueRock 在**微软 MarkItDown MCP server** 上证实,因不校验 URL,把元数据 IP `169.254.169.254` 喂进去并追加 `/latest/meta-data/iam/security-credentials`,即可拿到实例角色 → access key / secret key / session token,再用 AWS CLI 接管账号。任何运行在 EC2、接受 URL 参数、且允许查询 IMDSv1 的 MCP server 都可能有同类潜在风险。
 - **OWASP MCP Top 10** 确为 OWASP 首个 MCP 专项 Top 10,条目 **MCP01–MCP10(MCP01:2025–MCP10:2025)**,2026 仍处 **beta/草案**,负责人 Vandana Verma Sehgal。来源:[OWASP MCP Top 10](https://owasp.org/www-project-mcp-top-10/)。代表条目:MCP01 令牌管理不当与凭证暴露、MCP03 工具投毒、MCP04 软件供应链与依赖篡改、MCP05 命令注入、MCP09 影子 MCP server。
 - 旁证:Trend Micro 发现 492 个零认证、互联网暴露的 MCP server;2026 年 1–2 月披露 30+ 个 MCP 生态 CVE。来源:[Trend Micro — Exposed MCP Servers](https://www.trendmicro.com/vinfo/us/security/news/vulnerabilities-and-exploits/update-on-exposed-mcp-servers-the-threat-widens-to-the-cloud)。

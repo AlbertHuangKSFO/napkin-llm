@@ -8,6 +8,8 @@ vLLM 像一台高性能发动机(数据面引擎)。AIBrix / llm-d / KServe 是�
 
 **分布式 KV 的收益。** AIBrix 把 KV-Cache 做成跨节点共享池(InfiniStore,RDMA),让前缀/KV 在副本间复用:官方数据**吞吐 +50%、推理延迟 -70%**(长上下文、prefill-heavy 场景尤甚)。这正是 [[037 Mooncake：KVCache 中心的存储池|Mooncake]]、[[036 KV 分层 offload：GPU、CPU、SSD(LMCache)|LMCache]] 那条「KV 当一等存储」路线的产品化。
 
+**-70% 怎么拆账。** 延迟降幅≈被复用掉的 prefill 占比。设一个请求总延迟 = prefill + decode,长上下文场景 prefill 是大头:比如 8K 共享前缀 + 256 新增 token,prefill 算 8K 而 decode 只算 256,prefill 约占端到端 $\frac{8000}{8000+256}\approx 97\%$ 的算力。命中分布式 KV 后这 8K 前缀直接取缓存、几乎不重算,理论上能砍掉这一大块;实测受网络取 KV、调度、decode 仍要跑等开销稀释,落到约 **-70%**——即「省下的 ≈ 复用掉的 prefill,再打个折」。反过来短 chat(前缀占比低)收益就小,这也是为什么官方强调「长上下文 / prefill-heavy 尤甚」。
+
 **高密度 LoRA。** 传统每个微调版本占一个完整副本;AIBrix 的高密度 LoRA 管理让**一个 base 模型上挂几十个 LoRA adapter**,按请求动态切换,几十个「模型」共享一份 base 权重的显存 → 多租户微调服务成本大降。
 
 **注意对比维度。** 第三方基准里 vLLM Production Stack 在 prefill-heavy 工作负载上比 AIBrix 更快(AIBrix 早期 PyTorch 版 KV offload 在高 QPS 下 TTFT 抬升);说明「分布式 KV」收益强依赖实现成熟度,选型要看版本与场景。

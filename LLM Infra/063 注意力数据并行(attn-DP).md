@@ -16,6 +16,14 @@ $$
 \text{KV 显存}_{\text{TP}}=\text{TP}\times\text{KV}_{\text{单份}}\quad(\text{复制,浪费})\ \ \text{vs}\ \ \text{KV 显存}_{\text{attn-DP}}=\text{KV}_{\text{单份}}\quad(\text{各存各的})
 $$
 
+**恒等式 EP=DP×TP 由来(推导)**。根因是**同一批物理卡守恒**:注意力层和 MoE 层跑在**同一组 GPU** 上,只是切法不同,总卡数不变。设这组共 $G$ 张卡。注意力按 $\text{DP}_{\text{attn}}$ 组、每组内 $\text{TP}_{\text{attn}}$ 卡铺满,故 $G=\text{DP}_{\text{attn}}\times\text{TP}_{\text{attn}}$;同一 $G$ 张卡到 MoE 层全部摊去放专家,即 EP 度 $=G$。两者都等于 $G$,所以
+
+$$
+\text{EP}=G=\text{DP}_{\text{attn}}\times\text{TP}_{\text{attn}}
+$$
+
+举例 $G{=}8$:注意力 $\text{DP}{=}8,\text{TP}{=}1$(MLA 不切 KV)→ MoE EP=8×1=8;若注意力 $\text{DP}{=}4,\text{TP}{=}2$ → 仍 EP=4×2=8。换句话说不是「凑巧相等」,而是**卡数恒等**两边各自数一遍同一堆卡。token 在两种切法间用 all-to-all 重排即可。
+
 ![[ipar-attnDP组合EP.png]]
 
 ```python

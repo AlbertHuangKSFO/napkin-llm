@@ -120,7 +120,9 @@ harness (Claude Code / Agent SDK)
     ├── release-runbook/      # 发布流程:调 deploy MCP 的固定步骤
     └── invoice-filling/      # 业务:填表,带 scripts/ + reference.md
 ```
-**规模化、成本与延迟。** Skills 的核心卖点本身就是省 token:N 个 skill 常驻成本 ≈ N 张小卡片(description),与「把全部指令塞系统提示」相比,首 token 成本随技能数近似常数而非线性膨胀。生产上配合 [[20 上下文工程|上下文工程]] 的 prompt caching——`name/description` 这段常驻前缀天然适合做缓存命中。延迟代价主要在第二/三层的「按需读取」:首次触发某 skill 时多一次文件读取/脚本执行往返;高频 skill 会被 harness 缓存正文。
+**规模化、成本与延迟。** Skills 的核心卖点本身就是省 token:N 个 skill 常驻成本 ≈ N 张小卡片(description),与「把全部指令塞系统提示」相比,首 token 成本随技能数近似常数而非线性膨胀。
+
+**省 token 手算。** 设装了 $N=50$ 个 skill,每张 description 卡片约 $40$ token、每篇 SKILL.md 正文约 $800$ token、每个引用文件约 $2000$ token。**全塞系统提示**(老办法,正文 + 引用都常驻):每个 skill $40+800+2000=2840$,常驻 $50\times2840\approx1.42\times10^5$ token——这一坨**每一步推理都重发**,直接吃满上下文。**三层渐进式披露**:常驻只有卡片层 $50\times40=2000$ token;当前任务通常只命中 $1$ 个 skill,才加载它的正文 $800$,真执行到那步才读 $1$ 个引用 $2000$,峰值 $2000+800+2000=4800$ token。两者比 $1.42\times10^5 : 4800\approx30{:}1$,常驻成本压到约 $1.4\%$,且**随 $N$ 增长近似常数**(只多几十 token 卡片)而非线性膨胀——这就是「便宜的先加载、昂贵的晚加载」的量化收益。生产上配合 [[20 上下文工程|上下文工程]] 的 prompt caching——`name/description` 这段常驻前缀天然适合做缓存命中。延迟代价主要在第二/三层的「按需读取」:首次触发某 skill 时多一次文件读取/脚本执行往返;高频 skill 会被 harness 缓存正文。
 
 **可观测与运维。** 生产要埋点:每个 skill 的**触发率、触发后是否真用上、误触发率**。误触发(description 太宽,不该用时被召回)和漏触发(description 太窄,该用时没召回)是两大运维信号,直接反馈去改 description。把 skill 的执行(尤其第三层脚本)纳入 [[38 Agent 评估与可观测性|Agent 评估与可观测性]] 的轨迹日志。
 

@@ -16,6 +16,8 @@ $$\text{有效带宽} \approx \frac{\text{真正需要的字节}}{\text{实际�
 
 shared memory bank 号:`bank = (地址 / 4) mod 32`。一个 warp 内若 $k$ 个线程命中同一 bank(且非同址广播),则该访问串行化为 $k$ 拍,吞吐降为 $1/k$。**例外**:全 warp 读同一地址触发广播,仅 1 拍。
 
+**`tile[32][32]` 列访问的 32-way conflict 逐地址手算**。声明 `__shared__ float tile[32][32]`,一个 warp 的 32 个线程(`t=0..31`)同时取**同一列** `tile[t][0]`。元素地址 $=(t\times 32 + 0)\times 4$ 字节,bank $=\big((t\times 32)\times 4 / 4\big)\bmod 32 = (32t)\bmod 32 = 0$。于是 $t=0$ 在 bank 0、$t=1$ 地址 128B 仍是 bank 0、$t=2$ 地址 256B 还是 bank 0……**全部 32 个线程砸在 bank 0** → 32-way conflict,串行 32 拍。改成 `tile[32][33]`(每行加 1 列 padding):列地址变 $(t\times 33)\times 4$,bank $=(33t)\bmod 32 = (32t+t)\bmod 32 = t$,于是 $t=0,1,2,\dots$ 分别落 bank $0,1,2,\dots$,**32 个 bank 各占一个、无冲突,1 拍搞定**。多花的代价仅 32 个 float($128\text{ B}$)的 padding。
+
 ## 图
 ![[cuda-合并访问与bank-conflict.png]]
 

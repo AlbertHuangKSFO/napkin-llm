@@ -50,6 +50,10 @@ $$
 
 **$\lambda_D,\lambda_U$ 怎么治类别不平衡**(KTO 的实用核心)。设好样本数 $n_D$、坏样本数 $n_U$,KTO 用 $\lambda_D,\lambda_U$ 平衡两类的**有效梯度质量**,实务上保持 $\frac{\lambda_D n_D}{\lambda_U n_U}\in[1,\tfrac43]$ 附近。若你的反馈里坏样本远多于好样本(常见,点踩比点赞多),就调 $\lambda$ 把两边拉平;若**更在意压制坏行为**(如毒性、越狱),故意令 $\lambda_U n_U>\lambda_D n_D$,让「避免坏」的权重更大。$z_{\text{ref}}$ 是一个用 batch 内样本估计的 KL 基准(把奖励锚在参考附近),保证效用有意义的零点。这套不对称损失厌恶 + 单点标签,正是 KTO 比 DPO 更贴合「线上稀疏二元反馈」场景的原因。
 
+**3:1 不平衡代一遍 $\lambda$**。线上反馈常是「点踩远多于点赞」,设坏样本是好样本的 3 倍:$n_U=3n_D$。要让两类**有效梯度质量**拉平,需 $\frac{\lambda_D n_D}{\lambda_U n_U}\approx1$,代入 $n_U=3n_D$:
+$$\frac{\lambda_D n_D}{\lambda_U\cdot 3n_D}=1\ \Rightarrow\ \frac{\lambda_D}{\lambda_U}=3.$$
+即给**少数类(好样本)三倍权重**,补偿它数量上的 1/3,两边对损失的贡献才相当。落到 KTO 原论文的安全区间 $\frac{\lambda_D n_D}{\lambda_U n_U}\in[1,\tfrac43]$,这里取到下界 1;若想**更狠地压制坏行为**(毒性、越狱),可把 $\lambda_D/\lambda_U$ 调小(如 2),让 $\lambda_U n_U>\lambda_D n_D$,故意让「避免坏」的梯度更重。
+
 **ORPO**(Hong et al. 2024,arXiv 2403.07691,*Monolithic Preference Optimization without Reference Model*)。把 SFT 与偏好对齐合成**一个损失,无 $\pi_{\text{ref}}$**。定义赔率 $\text{odds}_\theta(y)=\frac{\pi_\theta(y)}{1-\pi_\theta(y)}$:
 
 $$

@@ -63,6 +63,8 @@ $$
 
 这三招把 OBQ 的「数小时」压缩到 GPTQ 的「**单卡几分钟到几小时**」量化一个百亿模型。
 
+**OBQ→GPTQ 的 FLOPs 估算(为什么差好几个数量级)**。量化一层权重 $W\in\mathbb R^{d_{\text{row}}\times d_{\text{col}}}$($d_{\text{col}}$ 是输入维、要逐列量化的方向)。**OBQ** 的 Hessian $H=XX^\top$ 是**逐行(逐输出神经元)各算各的**——因为每行量化后会改自己这行的剩余权重,$H^{-1}$ 得跟着行更新;再叠贪心选列(每步重排、反复更新逆),整层约 $O(d_{\text{row}}\cdot d_{\text{col}}^3)$。**GPTQ** 的关键省法:固定列序后,$H=XX^\top$ **与输出行无关、全部 $d_{\text{row}}$ 行共享同一个 $H^{-1}$**,一次 Cholesky 求逆 $O(d_{\text{col}}^3)$ 后,逐列补偿对所有行批量做,整层约 $O(d_{\text{col}}^3+d_{\text{row}}\cdot d_{\text{col}}^2)$。取方阵 $d_{\text{row}}=d_{\text{col}}=4096$:OBQ $\sim d_{\text{row}}\!\cdot\!d_{\text{col}}^3=4096\times4096^3$,GPTQ $\sim d_{\text{col}}^3=4096^3$,**比值 $\approx d_{\text{row}}=4096\times$**——再加上省掉的贪心重排,正好把「逐层数分钟、全模型数小时」量级整体降几千倍,这就是 OBQ 数小时 vs GPTQ 分钟的来源。本质:**OBQ 每行重算一遍逆,GPTQ 全层共享一个逆。**
+
 **4)定位与代价**。GPTQ **只量化权重**(int4/int3,常配 group size 128 的 [[092 量化基础：对称非对称、per-tensor、per-channel、per-group|per-group]]),**激活仍 fp16**。所以它的收益是**省显存 + 访存加速**(权重搬运减半甚至 1/4),特别适合**单卡装下大模型**;它不像 [[094 LLM.int8 与离群值|LLM.int8]] 那样量化激活,也就没有运行时离群分解的复杂度。代价:量化过程要算 Hessian、按校准数据逐层优化,比 RTN 慢;且**依赖校准数据分布**(校准集偏了精度会受影响)。
 
 ## 代码:RTN vs GPTQ 式逐列补偿(❌ vs ✅)

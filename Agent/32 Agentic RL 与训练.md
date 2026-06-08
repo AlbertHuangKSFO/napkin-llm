@@ -31,6 +31,8 @@
 用 RL 算法根据奖励更新模型权重 θ,核心思想都是「**让得高分的轨迹更可能、得低分的更不可能**」:
 - **PPO**(Proximal Policy Optimization):经典 actor-critic,需要额外训一个 **critic(价值网络)** 估计每步的期望回报,四个模型(policy + reference + critic + reward model)一起转,重。
 - **GRPO**(Group Relative Policy Optimization,DeepSeek 提出):**砍掉 critic**。对同一个 prompt 采样**一组**(典型 16 条)回答,用**组内相对优势**(每条减去这组的均值再归一化)当 advantage,省掉价值网络。再叠加 **RLVR**(连奖励模型也省掉),四模型塌成两个(policy + reference),训练大幅简化——这是 DeepSeek-R1 路线的关键。
+
+**组内相对优势手算。** 设一组采 $G=8$ 条轨迹,RLVR 给出 reward(过测试=1,否则 0):$r=[1,1,0,1,0,0,1,0]$($4$ 条成功)。先算组内统计:$\mu=\frac{4}{8}=0.5$,$\sigma=\sqrt{\frac{1}{8}\sum(r_i-\mu)^2}=\sqrt{0.25}=0.5$。再按 $\hat{A}_i=\frac{r_i-\mu}{\sigma+\epsilon}$ 归一化:成功轨迹 $\hat{A}=\frac{1-0.5}{0.5}=+1$,失败轨迹 $\hat{A}=\frac{0-0.5}{0.5}=-1$。于是这组 advantage 是 $[+1,+1,-1,+1,-1,-1,+1,-1]$——**比组内平均好的(成功)拿正优势、概率被推高,差的(失败)拿负优势、被压低**。整组**不需要任何价值网络**估期望回报,优势完全来自「跟同组兄弟比」,这就是 GRPO 砍掉 critic 的核心招。注意:若一组**全对或全错**($\sigma=0$),所有 $\hat{A}\approx0$、梯度为零白算——这正是 DAPO「动态采样丢掉全对/全错组」要解决的问题。
 - 通常还加 **KL 约束**:惩罚新策略偏离参考模型(ref)太远,防止训崩、防奖励钻空子(reward hacking)。
 - **拒绝采样(rejection sampling / best-of-N)**:更轻量的做法——采样多条,只把**通过验证的**留下来做监督微调(SFT),不一定走完整 RL,常用作冷启动或与 RL 混合。
 

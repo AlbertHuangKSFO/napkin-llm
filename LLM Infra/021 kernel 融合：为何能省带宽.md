@@ -18,6 +18,8 @@ $$I = \frac{\text{FLOP}}{\text{访存字节}} \ll \text{机器平衡点}$$
 
 $$\text{流量}_{\text{融合}} = \underbrace{N_\text{in} + N_\text{out}}_{\text{只首尾各一次}} \;\ll\; \text{流量}_{\text{未融合}} = N_\text{in}+N_\text{out}+2(k{-}1)N$$
 
+**融合不是越多越好——spilling 反例**。融合要靠寄存器/SRAM 把中间值兜住,而每个 SM 的寄存器是死的(如 64K 个 32-bit 寄存器/SM)。设把 10 个算子硬融成一个 kernel,链上同时活着的中间量多,单线程需 128 个寄存器才放得下;一个 block 256 线程就要 $256\times128=32768$ 个,逼近上限后编译器只能把放不下的寄存器**溢出(spilling)到 local memory**——而 local memory 物理上就在 HBM 里。本想省的 HBM 往返,被 spill 的读写又**补了回去**:省了 $2(k{-}1)N$ 的中间张量流量,却多出 spill 流量,还因寄存器吃紧压低 [[019 CUDA 执行模型：grid、block、warp|occupancy]](能并发的 warp 变少)、藏不住延迟,净收益可能为负甚至更慢。所以融合有**最优粒度**:融到寄存器快溢出就该停,FlashAttention 也是靠分块(tiling)把工作集卡在 SRAM 容量内,而非无脑全融。
+
 ## 图
 ![[kern-融合前后HBM往返对比.png]]
 

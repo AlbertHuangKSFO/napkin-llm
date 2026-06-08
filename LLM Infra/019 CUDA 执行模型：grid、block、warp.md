@@ -19,6 +19,16 @@ $$\text{occupancy} = \frac{\text{活跃 warp 数}}{\text{SM 支持的最大活�
 
 它受三道配额的最小值卡住:每线程**寄存器数**、每 block **SRAM** 用量、SM 的 block/warp 上限。占用率高 → 可调度的 ready warp 多 → 越能用计算掩盖访存延迟;但**并非越高越快**(寄存器够用时低占用也可能更快,即 Volkov 的"低占用高性能")。
 
+**三配额取 min 手算。** 设一台 SM:寄存器堆 $65536$ 个、SMEM $48\,\text{KB}$、硬上限 $32$ 个常驻 block(或 $64$ warp)。kernel 每 block 256 线程(=8 warp),每线程用 64 寄存器、每 block 用 12 KB SMEM。逐道算各配额允许的 block 数:
+
+$$
+\text{寄存器配额}=\left\lfloor\frac{65536}{256\times64}\right\rfloor=4,\quad
+\text{SMEM 配额}=\left\lfloor\frac{48}{12}\right\rfloor=4,\quad
+\text{硬上限}=\min(32,\ \lfloor 64/8\rfloor)=8
+$$
+
+取最小 $\min(4,4,8)=4$ 个 block 常驻 → 活跃 warp $=4\times8=32$ → $\text{occupancy}=32/64=\mathbf{50\%}$。**寄存器和 SMEM 双双卡在 4**,所以把每线程寄存器从 64 降到 32 才能松绑寄存器配额($\lfloor 65536/(256\times32)\rfloor=8$),让占用率有机会翻倍——这正是编译器 `-maxrregcount` 调优的着力点。
+
 ## 图
 ![[cuda-执行层级grid-block-warp.png]]
 

@@ -21,6 +21,8 @@
 - **前缀注入 / 强制开头**:要求模型用「当然,这是……」之类肯定句开头,先让它「答应」,后续难以收回。属**目标竞争**。
 - **编码 / 混淆绕过**:把违规请求用 Base64、罕见语言、拆词、同形字编码,绕过基于明文的安全识别。属**泛化错配**。
 - **Many-shot jailbreak(多样本越狱)**:在超长上下文里塞入**数百个**「AI 顺从地回答有害问题」的问答示范,靠 in-context learning 把模型带偏。出自 **Anthropic 2024《Many-shot Jailbreaking》**(Anil et al.,NeurIPS 2024):随示范数量增加,越狱成功率按**幂律**上升;长上下文窗口越大越脆弱;对 Claude、GPT、Llama、Mistral 等普遍有效。
+
+**幂律的可怕在「翻倍」而非「加一」**。设 ASR 随示范数 $n$ 近似 $\text{ASR}(n)\approx a\,n^{b}$(论文里对数坐标上近似一条直线)。取一组示意锚点 $a{=}0.02,\ b{=}0.6$,感受跃迁:示范从 $1\to10\to100\to256$,$\text{ASR}\approx 0.02\cdot1^{0.6}{=}2\%\to0.02\cdot10^{0.6}{\approx}8\%\to0.02\cdot100^{0.6}{\approx}32\%\to0.02\cdot256^{0.6}{\approx}53\%$。要命的是**每多塞一档(乘 10)成功率就大跳一截**,而长窗口让你能塞的示范数随上限线性增长——$1\text{M}$ token 窗口塞下几百上千个示范是轻松的,于是「窗口越大越脆」直接写进了这条幂律。
 - **Crescendo(多轮渐进)**:不直说目标,从一个无害的泛问题开始,**多轮温和提问层层逼近**,每轮借模型自己上一轮的回复继续升级,直到滑到违规内容。出自 **Microsoft 2024《Great, Now Write an Article About That: The Crescendo Multi-Turn LLM Jailbreak Attack》**(Russinovich et al.,arXiv 2404.01833,USENIX Security 25)。
 - **GCG 通用对抗后缀**:不靠人工措辞,而用**梯度搜索**自动找出一段看似乱码的后缀,贴在请求后面即可触发违规;且**通用**(对多种请求有效)又**可跨模型迁移**(在开源模型上搜出的后缀能打 ChatGPT/Claude/Bard)。出自 **Zou et al. 2023《Universal and Transferable Adversarial Attacks on Aligned Language Models》**(arXiv 2307.15043),用 GCG(Greedy Coordinate Gradient)逐 token 优化。
 

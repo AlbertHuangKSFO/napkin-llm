@@ -39,6 +39,8 @@ NeMo 灵活但需 Colang+Python 功底;Bedrock 开箱即用、运维最省,适�
 - **坑 3**:护栏自身可被绕。spotlighting 编码可被对抗样本干扰,分类器有盲区——所以要**多层叠加**而非单点依赖。
 - **坑 4**:延迟与成本。每加一层 scanner 都加延迟;Prompt Guard 2 才出 22M 小版本就是为压低这开销。
 
+**延迟账手算**。双侧护栏的开销是逐层串联累加的。设输入侧三层:Prompt Guard(注入)~10ms + Llama Guard(内容)~80ms + PII 脱敏 ~10ms = **100ms**;输出侧同等量级再来一遍 ~100ms;两侧合计 **~200ms** 纯护栏开销,叠在模型本身首 token 延迟之上。若改用串行的大分类器(Llama Guard 4 是 12B,单次可达 80~150ms)且输入输出各跑一遍,轻松冲到 **300ms+**。这就是为什么工业界要(a)上小模型(Prompt Guard 2 的 22M 把 10ms 那档再压一截)、(b)并行跑 rails(把串联的 $100$ms 压成 $\max$ 那一层 ~80ms)、(c)缓存重复判定——一句话:护栏的安全是拿尾延迟换的,不优化就直接体现在 P99 上。
+
 ## 关键事实(含出处)
 - LlamaFirewall:Meta 2025 开源,论文 arXiv:2505.03574,含 Prompt Guard 2 / AlignmentCheck / CodeShield 三大 scanner,在 AgentDojo 基准上降 ASR 90%+。Llama Guard 4(12B 多模态,基于 Llama 4 Scout,对齐 MLCommons)是 Llama Protections 的内容审核组件,由 LlamaFirewall 统一编排。
 - Prompt Guard 2:86M / 22M 双版本,检越狱达 97.5% recall @ 1% 误报。CodeShield:精度 96%、召回 79%。

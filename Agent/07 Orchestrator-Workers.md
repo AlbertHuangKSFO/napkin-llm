@@ -85,6 +85,14 @@ Orchestrator-Workers **不等于** [[22 多智能体系统|多智能体系统]]�
 - 代价是**约 15 倍于普通对话的 token**;
 - 性能归因里,**token 用量本身解释了 80% 的方差**,工具调用数和模型选择是另两个因子。
 
+**15× token 怎么来的(粗算)**。设单 agent 普通对话一轮约耗 $M$ token。Orchestrator-Workers 把成本摊在三处:① lead 拆分 + 综合两端,各读写全上下文,约 $2\sim3\,M$;② 派 4 个 subagent,每个**各带独立上下文**、各跑多轮工具交互,单个就约 $2\sim3\,M$,4 个即 $\sim 10\,M$;③ 末尾单独一遍引用校对约 $1\,M$。合计:
+
+$$
+\underbrace{3M}_{\text{lead 拆+合}} + \underbrace{4\times 2.5M}_{\text{4 subagent}} + \underbrace{M}_{\text{引用校对}} \approx 14M
+$$
+
+正好落在 Anthropic 报告的 **~15×** 量级。直觉:贵不在 lead,而在「**N 个 subagent 各自重跑一遍完整上下文 + 工具循环**」——这也解释了为何 token 用量解释了 80% 的性能方差:本质是拿 token 买并行推理的广度。
+
 这印证了核心逻辑:**把活分给各有独立上下文的 subagent,等于为并行推理扩容**——单 agent 的上下文塞不下的「广度优先」研究任务,靠 orchestrator-workers 拆开就能做。
 
 **主流框架与服务(具体名 + 定位):**

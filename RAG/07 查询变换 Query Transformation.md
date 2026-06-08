@@ -30,6 +30,11 @@ Query Transformation 的统一思路:**别拿原话硬查**,先用 LLM 把它变
 ### 3. RAG-Fusion(多 query + RRF 融合)
 Multi-Query 的升级:不止取并集,而是对每个子 query 的排名列表做 **RRF(Reciprocal Rank Fusion,见 [[08 混合检索 Hybrid Search|混合检索 Hybrid Search]])** 融合重排——在多个子查询里都排得靠前的文档,综合得分最高。出处:Adrian Raudaschl 在 Towards Data Science 提出《Forget RAG, the Future is RAG-Fusion》(2023-10,博客 + GitHub `Raudaschl/rag-fusion`);后有 Rackauckas《RAG-Fusion: a New Take on Retrieval-Augmented Generation》(arXiv:2402.03367, 2024)做系统评估。注意它**不是同行评审顶会论文起源**,是工程社区方法 + 后续 arXiv 报告,引用时别误标成会议论文。
 
+**RRF 手算(2 query)**。 取 $k=60$,两条改写各召回一个排名列表,RRF 给每篇文档累加 $\frac{1}{k+\text{rank}}$(rank 从 1 起)。设 doc A 在 q1 排第 1、q2 排第 3,doc B 在 q1 排第 2、q2 排第 1:
+$$\text{score}(A)=\tfrac{1}{60+1}+\tfrac{1}{60+3}=0.01639+0.01587=0.03227$$
+$$\text{score}(B)=\tfrac{1}{60+2}+\tfrac{1}{60+1}=0.01613+0.01639=0.03252$$
+B 略高于 A,最终排 B 在前。直觉:B 虽没拿到任何一个第 1 名,但**两条 query 里都靠前**(2、1),综合稳过「只在一条里夺冠、另一条掉到第 3」的 A——这正是 RRF「跨列表一致靠前者胜出」的精髓,且只吃名次不吃原始分。
+
 ### 4. Step-Back Prompting(退一步问)
 对**钻进细节**的具体问题,先让 LLM"退一步"问一个更**抽象的上位问题**,用上位问题去检索拿到高层原理/背景,再连同原始问题一起喂生成。例:原问"理想气体在压强翻倍温度翻倍时体积如何变",退一步问"这道题涉及哪条物理定律"→检索到理想气体定律→再代入算。出处:Zheng, Mishra, Chen, Cheng, Chi, Le, Zhou《Take a Step Back: Evoking Reasoning via Abstraction in Large Language Models》(arXiv:2310.06117, 2023),在 PaLM-2L 上 TimeQA +27%、MuSiQue +7%、MMLU 物理/化学 +7%/+11%。
 

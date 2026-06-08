@@ -13,6 +13,8 @@ NVIDIA 公布的量级(2025):
 - KV-aware Router 的收益例子:多轮对话里,新一轮请求若被路由到**已持有前几轮 KV** 的 decode 卡,可直接续算,免去把历史 prompt 再 prefill 一遍。
 - SLO Planner 的动作:监测到 ITL 逼近阈值且 decode 队列堆积 → 自动从 prefill 池借/扩几台到 decode 池,把配比从 2P2D 调到 1P3D(见 [[054 PD 配比与独立扩缩|PD 配比]])。
 
+**profiling 曲线选并行度(手算)**。设 TTFT 阈值 $\tau_{\text{ttft}}=200\,\text{ms}$。部署前 profiling 在某 prefill 负载下测得两点:$\text{TP}{=}2$ → TTFT $\approx 260\,\text{ms}$(超标),$\text{TP}{=}4$ → TTFT $\approx 150\,\text{ms}$(达标)。Planner 取**满足 SLO 的最小卡数配置**:TP=2 被 260 > 200 直接淘汰,TP=4 以 150 < 200 入选,于是选 $\text{TP}{=}4$。注意 TP=2→4 卡数翻倍但 TTFT 只从 260 降到 150(约 1.73×,非 2×)——这正是上节 all-reduce 通信稀释了缩放效率(见 [[057 张量并行推理：延迟换显存|TP 推理]]),Planner 是拿这条实测曲线而非理想 1/N 来卡 SLO 的。
+
 ## 原理
 
 SLO Planner 在 GPU 预算 $G$ 下,选 prefill/decode 实例数 $(n_p,n_d)$ 与并行/批配置,使 TTFT、ITL 双双达标:

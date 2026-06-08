@@ -11,6 +11,13 @@ $C[4096\times4096]=A[4096\times4096]\times B[4096\times4096]$,典型三级 tile:
 - 一块 128×128 的 C 需沿 K 维循环 4096/K_tile 次累加;每个元素被复用 ~128 次 → 算术强度高,才喂得饱 Tensor Core。
 - 朴素未分块写法每个 C 元素都从 HBM 重读整行整列,流量爆炸、利用率个位数。
 
+**三级 tile 各落哪层内存、占多大,逐级算一遍。** 取 K_tile=32、FP16(2 字节):
+- **block tile 128×128 → SMEM**:一轮要驻留 A 子块 $128\times32$ + B 子块 $32\times128$ = $2\times(128\times32)\times2\,\text{B}=16\,\text{KB}$(双缓冲再翻倍到 32 KB),正好压在一台 SM 的 ~228 KB SMEM 里,这是「搬一格砖到手边」的那只手。
+- **warp tile 64×64 → 寄存器**:一个 block 256 线程切 8 个 warp,每 warp 啃 $64\times64$ 的 C 累加器,均摊每线程 $64\times64/32=128$ 个 FP32 累加值,直接占寄存器堆——离 ALU 最近、零延迟复用。
+- **MMA tile 16×16 → Tensor Core**:warp 内 32 线程协作发一条 `mma.sync`,把 $16\times16\times16$ 的小块喂进 Tensor Core 阵列一拍算完。
+
+层层缩小不是为了好看:**SMEM 装得下一片砖、寄存器攥得住一小撮、Tensor Core 一口吞 16×16**——尺寸跟着「从慢到快、从大到小」的内存层级走,谁也别越界把上一层撑爆。
+
 ## 原理:roofline 与利用率上限
 算术强度 $I=\dfrac{\text{FLOP}}{\text{访存字节}}$。GEMM 的 FLOP $=2MNK$,理想下 $I$ 随 tile 增大而升:
 

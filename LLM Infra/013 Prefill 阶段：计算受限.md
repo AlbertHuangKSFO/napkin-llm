@@ -18,6 +18,8 @@ Llama 7B(70 亿参数),prompt $S=2048$ token,H100(BF16 算力约 990 TFLOP/s):
 
 对比同模型 decode 一步只算 $2\times 7\times10^9\times 1 \approx 1.4\times10^{10}$ FLOP(14 GFLOP),不到 prefill 的两千分之一,却因访存受限并不快两千倍——这正是两阶段的非对称性。
 
+**chunked prefill 的 ITL 账(8k 一次 vs 4×2k 交错)**。设单层 prefill 耗时近似随块内 token 数线性,decode 一步 ITL 基线记 $t_d$。一个 8k prompt 不切块、整块塞进某次迭代:这一迭代要先吞完 8k 的大 GEMM(记耗时 $4u$,$u$ 是 2k 块的耗时),同批 decode 请求**只能干等**,这一步 ITL 尖刺到 $\approx 4u + t_d$——长 prompt 一来,在线用户的逐字延迟突然卡一下。切成 $4\times 2k$、与 decode 交错调度后,每次迭代只搭一个 2k 块,ITL 抬到 $\approx u + t_d$ 但**均摊到 4 步**,没有那一下大尖刺。代价是 8k 的总 prefill 时间(TTFT)几乎不变(还是 $\approx 4u$,只是被拆开),换来的是 decode 侧 ITL 平滑——这就是 vLLM 默认开 chunked prefill 的原因:**牺牲一点点 prefill 局部性,换在线 ITL 不抖**。
+
 ## 原理
 
 每层主算子是 $Y = X W$,$X\in\mathbb{R}^{S\times d}$,$W\in\mathbb{R}^{d\times d}$。算术强度(每搬 1 字节做多少 FLOP):

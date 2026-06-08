@@ -10,6 +10,8 @@
 - 落 **Redis / 远端**:网络受限更慢,但全集群任意节点可命中——配合 KV-aware 路由,命中率才是收益关键。
 核心权衡:**搬运延迟 vs 省下的 prefill 重算**。只要复用率够高、搬运用流水线掩盖,offload 就划算。
 
+**预取 L+1 掩盖手算(逐层甘特)**。KV 按层组织,decode 算第 $\ell$ 层注意力时,后台并行把第 $\ell{+}1$ 层的 KV 从 CPU 预取回 HBM。设每层计算 $t_{\text{comp}}=0.8\text{ ms}$、每层 KV 载回 $t_{\text{load}}=0.5\text{ ms}$($t_{\text{load}}<t_{\text{comp}}$)。无预取:每层串行 $0.8+0.5=1.3$ ms,80 层 $=104$ ms。有预取(载第 $\ell{+}1$ 层与算第 $\ell$ 层重叠):每层墙钟 $=\max(0.8,0.5)=0.8$ ms,80 层 $\approx 0.5+80\times0.8=64.5$ ms(首层多一个冷启动 $t_{\text{load}}$)。搬运被**完全藏进**计算,净省 $\approx 38\%$。反过来若 $t_{\text{load}}>t_{\text{comp}}$(慢盘/小模型),墙钟由 $t_{\text{load}}$ 主导、藏不住,offload 才会拖慢——这正是「够带宽 / 流水线掩盖」的临界条件。
+
 ## 原理:为什么要把 KV 搬出 GPU
 用户侧累积的 KV 总量增长极快,**远超 GPU 显存容量**;同一个 system prompt / RAG 文档被海量请求共用,重复 prefill 是纯浪费。LMCache 的做法:
 
