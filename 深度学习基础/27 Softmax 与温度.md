@@ -68,9 +68,9 @@ $$\frac{\partial p_i}{\partial z_j}=p_i(\delta_{ij}-p_j)=\begin{cases}p_i(1-p_i)
 - **温度 $T$**:重塑整个分布的尖锐度($T<1$ 更确定,$T>1$ 更随机)。
 - **top-k**:只在概率最高的 $k$ 个 token 里采样,截断长尾(防止偶尔抽到离谱词)。
 - **top-p(nucleus)**:取累积概率达 $p$ 的最小 token 集合里采样,集合大小随上下文自适应。
-工程上常先 top-k/top-p 截断、再按温度归一化采样。温度只调"软硬",top-k/p 调"候选范围",三者正交配合。
+工程上常先 top-k/top-p 截断、再按温度归一化采样。温度只调"软硬",top-k/p 调"候选范围",三者正交配合(LLM 解码里这三个旋钮的工程实现见 [[LLM/101 采样解码：温度、top-k、top-p、min-p、重复惩罚|采样解码]])。
 
-**softmax 在注意力里也出现**。Transformer 的注意力权重 $\text{softmax}(QK^\top/\sqrt{d_k})$ 就是对打分做 softmax,$\sqrt{d_k}$ 起的正是"温度"作用——维度越高点积方差越大、需要降温防止 softmax 过尖、梯度消失。所以"缩放点积注意力"的缩放因子本质是一个固定温度。
+**softmax 在注意力里也出现**。Transformer 的注意力权重 $\text{softmax}(QK^\top/\sqrt{d_k})$ 就是对打分做 softmax,$\sqrt{d_k}$ 起的正是"温度"作用——维度越高点积方差越大、需要降温防止 softmax 过尖、梯度消失。所以 [[LLM/004 缩放点积注意力(为何除以根号 dk)|缩放点积注意力]] 的缩放因子本质是一个固定温度。
 
 ![[prob-softmax管线.png]]
 

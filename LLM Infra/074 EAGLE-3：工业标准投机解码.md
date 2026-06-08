@@ -88,3 +88,4 @@ llm = LLM(
 - 三大改动:**tri-layer 特征融合**、**training-time test**(训练时多步自回归喂回自身预测)、**直接预测 token**。
 - 指标:平均接受长度 $\tau$ 常达 **4–7**,论文报告 **3–6.5×** 加速,优于 EAGLE-2 / Medusa / lookahead。
 - 工程现状(2025):vLLM `method="eagle3"`、SGLang `--speculative-algorithm EAGLE3` 均为推荐路径;草稿头须与目标模型配套训练。
+- **最新进展(2025-2026)**:**EAGLE-3.1**(2026-05)针对长上下文修复"attention drift",长上下文下接受长度相对 EAGLE-3 最高 **2×**;已作为 EAGLE-3 的配置化扩展进入 vLLM(FC normalization、post-norm hidden-state 反馈,去掉对 target hidden state 的硬编码假设)。(来源:MarkTechPost "Meet EAGLE 3.1" 2026-05 / vLLM,2026)

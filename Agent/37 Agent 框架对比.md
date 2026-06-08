@@ -152,6 +152,7 @@ async for msg in query(prompt="研究 agent 框架并写成 report.md", options=
 - 框架的本质是把 [[03 Agent 核心循环|Agent 核心循环]]、[[07 Orchestrator-Workers|Orchestrator-Workers]]、[[05 Routing|Routing]] 等模式**封装成可复用的工程件**;理解了这些底层模式,框架只是它们的不同打包方式。
 - Claude Agent SDK 是 [[23 Agent Harness 概览|Agent Harness 概览]] 所说 **HaaS** 的最直接体现:harness 本身成了产品。
 - 选型不是一次性的:原型期可用 CrewAI 验证想法,生产期常重写到 LangGraph 或裸 SDK 以换可控与可观测——参见 [[38 Agent 评估与可观测性|Agent 评估与可观测性]] 把这件事做成闭环。
+- **最新进展(2025-2026)**:微软已把 **AutoGen + Semantic Kernel 合并为 Microsoft Agent Framework**,2026-04 发布 v1.0 GA;**AutoGen 转入维护模式**(独立项目不再主推),新项目微软栈应直接用 Agent Framework。引用 AutoGen 时需注明此归并(Microsoft Agent Framework GA,2026)。
 
 ## 工业界实践
 

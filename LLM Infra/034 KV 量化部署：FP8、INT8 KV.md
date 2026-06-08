@@ -55,6 +55,16 @@ def attn(q, k_fp8, v_fp8, sk, sv):
 
 `❌` 三个部署坑:**(1)** vLLM KV 量化目前只有 **FP8**,要 INT8 KV 用 TensorRT-LLM;**(2)** 长上下文 + 粗粒度 scale 不校准会掉精度,**必须评测**;**(3)** FP8 KV 在 vLLM 主要是**省显存**(从而更大 batch),吞吐未必直接涨。
 
+## 选型卡:KV 量化格式与引擎怎么选
+
+| 场景 | 选什么 | 为什么 |
+|---|---|---|
+| vLLM 上想省 KV 显存、塞更大 batch | **FP8 E4M3**(`kv_cache_dtype="fp8"`) | vLLM 默认且只支持 FP8;精度优先、配 FP32 scale,主省显存 |
+| 要 INT8 KV 或要 KV 量化直接提吞吐 | **TensorRT-LLM**(FP8/INT8 KV) | vLLM 不支持 INT8 KV;TRT-LLM 的 FP8/INT8 KV 才明显提吞吐 |
+| 长上下文、怕掉精度 | **细粒度 scale + 校准**(per-head/per-channel) | per-tensor 易被离群通道拉爆;校准 + FP32 两级累加缓解回归 |
+| 短上下文 / 一般任务 | **per-tensor FP8**(最省开销) | 精度影响小,粗粒度 scale 够用、开销最低 |
+| 已用 GQA/分页/前缀缓存 | **正交叠加 KV 量化** | 量化降字节、GQA 降头数、分页去碎片、前缀复用,互不冲突 |
+
 ## 面试高频
 
 - **KV 量化省什么、原理?** 把 K/V 存成 FP8/INT8($b$ 从 2→1),KV 显存**减半**;只压存储,注意力在反量化后高精度算,**数学不变**。

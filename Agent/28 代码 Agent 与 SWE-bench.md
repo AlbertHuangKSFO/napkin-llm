@@ -102,6 +102,7 @@ loop:
 - 代码域是 [[32 Agentic RL 与训练|Agentic RL 与训练]] 的理想训练场,因为奖励(测试绿/红)客观、可批量、可复现。
 - 与 [[27 计算机使用与浏览器 Agent|计算机使用与浏览器 Agent]] 互补:代码 Agent 在文本世界(文件+终端+测试)闭环,浏览器 Agent 在视觉世界(像素/DOM)闭环,但都是 read-act-observe 的 agentic loop。
 - 评测可观测性、轨迹分析见 [[38 Agent 评估与可观测性|Agent 评估与可观测性]];深度多源研究类任务见 [[29 Deep Research Agent|Deep Research Agent]]。
+- **最新进展(2025-2026)**:SWE-bench Verified 榜首已突破 90%——2026-06 顶部成绩约 **93.9%**(Claude 系新模型),Claude Opus 4.8 约 **88.6%**;Verified 已接近饱和,业界开始转向更难的 **SWE-bench Pro**(企业级、多文件、私有库,顶分仅 ~46%)做区分(BenchLM / Scale SWE-bench Pro Leaderboard,2026)。
 
 ## 主流开源实现 / Python 库
 

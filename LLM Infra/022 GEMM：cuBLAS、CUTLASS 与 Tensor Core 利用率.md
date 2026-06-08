@@ -27,6 +27,8 @@ $$\text{峰值利用率} \le \min\!\left(1,\; \frac{I \times \text{带宽}}{\tex
 - 维度非 tile 整数倍 → **tail effect**,边角 block 算力浪费。
 - 即便 compute-bound,寄存器/SRAM 压力、流水线气泡也让利用率难到 100%。
 
+**GEMM vs GEMV 一句话**:prefill/大 batch 是矩阵×矩阵(GEMM,$I$ 高、吃满 Tensor Core);decode 的 batch=1 退化成矩阵×向量(GEMV,$I≈1$、Tensor Core 几乎空转)——同一份权重,瓶颈一个在算力、一个在带宽。
+
 ## 图
 ![[kern-GEMM-tiling层级.png]]
 

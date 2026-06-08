@@ -109,6 +109,7 @@ while not done:
 - WebArena 是**自托管、可复现**的离线网页环境(812 任务,涵盖电商/论坛/CMS/地图等),专为可复现评测设计;WebVoyager 则跑在**真实在线网站**上。两者常一起用,见 [[38 Agent 评估与可观测性|Agent 评估与可观测性]]。
 - 视觉路的瓶颈往往不是"看不懂",而是**坐标精度**和**token 成本**;DOM 路的瓶颈是**覆盖范围**(非浏览器、Canvas 失明)。
 - 与 [[28 代码 Agent 与 SWE-bench|代码 Agent 与 SWE-bench]] 的区别:代码 Agent 操作的是文件系统+终端+测试(文本世界),浏览器 Agent 操作的是像素/DOM(视觉世界),但二者都是 agentic loop,且都重度依赖"执行→观察反馈→再行动"。
+- **最新进展(2025-2026)**:OSWorld(真实桌面操作系统任务)2026-06 顶部成绩 ~**78%**(OSWorld-Verified,Claude Opus 4.7),较 2024 年发布时的 <15% 大幅跃升;但仍远未"无人值守可靠",桌面操作仍是 agent 最难的赛道之一(OSWorld Leaderboard,2026)。
 
 ## 主流开源实现 / Python 库
 

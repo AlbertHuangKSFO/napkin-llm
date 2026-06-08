@@ -10,6 +10,8 @@ $$\bar g=\frac{1}{4}(g_0+g_1+g_2+g_3).$$
 
 一句话:**DP = 复制模型 + 切 batch + 每步梯度 all-reduce 同步**。它是 PyTorch DDP、以及 [[070 ZeRO 与 FSDP|ZeRO/FSDP]] 的基础。
 
+**纯 DP(DDP) vs 分片 DP(ZeRO/FSDP) 一句话**:两者都切 batch、都属数据并行,但 DDP **每卡存一份完整**参数/梯度/优化器态(只解决「算得慢」),ZeRO/FSDP 把这三样**切片分到各卡**(还解决「放不下」)——所以「数据并行」≠「不省显存」,关键看有没有分片。
+
 ![[dist-数据并行流程.png]]
 
 ## 例子

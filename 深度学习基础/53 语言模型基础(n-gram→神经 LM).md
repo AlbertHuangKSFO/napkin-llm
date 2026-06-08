@@ -6,7 +6,7 @@
 
 把一整句话的概率拆开,用链式法则一字一字往后写:
 $$P(w_1,\dots,w_T)=\prod_{t=1}^{T}P(w_t\mid w_1,\dots,w_{t-1})$$
-每一项都是"看着前文猜下一个词"。这种**逐词、只依赖左侧前文**的生成方式就叫**自回归(autoregressive)**——今天的 GPT 仍然是这个范式,只是把 $P(\cdot\mid\text{前文})$ 换成了 Transformer。
+每一项都是"看着前文猜下一个词"。这种**逐词、只依赖左侧前文**的生成方式就叫**自回归(autoregressive)**——今天的 [[LLM/036 GPT 系列：自回归与规模化|GPT]] 仍然是这个范式,只是把 $P(\cdot\mid\text{前文})$ 换成了 Transformer。
 
 三代技术,解决的都是同一个问题"如何估计 $P(w_t\mid\text{前文})$":
 - **n-gram**:用马尔可夫假设把前文截短到固定 $n-1$ 个词,直接数频率。简单,但**词表一大就数不过来**(维度灾难),且对没见过的组合束手无策。
@@ -51,7 +51,7 @@ $$P(w_t\mid\text{前文})=\text{softmax}(Wx+Uh+b)$$
 - **插值(interpolation)**:把各阶 n-gram 概率加权平均(权重可学),比硬回退平滑。
 - **Kneser-Ney**:统计 LM 时代最强平滑,核心洞见是用"一个词出现在**多少种不同上下文**里"(continuation count)而非单纯频率来估计低阶概率——能正确处理"Francisco 频率高但几乎只跟在 San 后面"这类情况。
 
-**子词切分(连接统计与神经时代)**。整词词表有「未登录词(OOV)」和「词表爆炸」问题。现代 LM 用 **BPE / WordPiece / Unigram** 把词切成子词单元(如 "playing"→"play"+"ing"),让词表可控、罕见词由子词拼出、几乎没有 OOV——这是从神经 LM 通向 GPT 的工程基石(详见 LLM 域分词笔记)。
+**子词切分(连接统计与神经时代)**。整词词表有「未登录词(OOV)」和「词表爆炸」问题。现代 LM 用 **BPE / WordPiece / Unigram** 把词切成子词单元(如 "playing"→"play"+"ing"),让词表可控、罕见词由子词拼出、几乎没有 OOV——这是从神经 LM 通向 GPT 的工程基石(详见 [[LLM/050 分词总览与子词动机|分词总览与子词动机]])。
 
 **评价指标**:语言模型好坏看 [[32 困惑度 Perplexity|困惑度]]:
 $$\text{PPL}=\exp\Big(-\frac1T\sum_t\log P(w_t\mid\text{前文})\Big)$$

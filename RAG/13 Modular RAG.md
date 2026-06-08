@@ -42,6 +42,19 @@ Modular RAG 最有价值的部分,是把 **Orchestration 能编排出的流程�
 
 可以这样串记:**Naive=linear,Adaptive/路由=conditional,多查询/多源=branching,自评纠错/多跳=loop(→ Agentic RAG)**。
 
+**RAG 范式 / flow 选型卡**(按查询形态查):
+
+| 查询形态 | 选哪种 flow / 范式 | 为什么 |
+|---|---|---|
+| 简单事实问答、查询模式单一 | **Linear**(Naive/Advanced) | 一条直线最省心,过度模块化只增延迟和复杂度;先跑通基线 |
+| 简单/复杂混流、要按难度分路 | **Conditional**([[05 Routing|Routing]]/Adaptive-RAG) | 复杂度分类器把简单 query 分流走快路径,只对难题开多轮,省成本 |
+| 一个问题含多个可拆子问 / 多源 | **Branching**(子查询并行 + RRF 融合) | 无依赖分支并行铺开一次汇总,比串行快;注意并行执行别串行 |
+| 召回质量参差、需自评纠错 / 多跳 | **Loop**(CRAG/Self-RAG/IRCoT) | 带回边反复改写再查直到收敛,是 [[36 Agentic RAG|Agentic RAG]] 雏形;必设 `max_iter` |
+| 全局/汇总型问题(整库主题) | **GraphRAG** | 向量召回只取局部 top-k,答不了全语料汇总,见 [[14 GraphRAG 知识图谱检索|14]] |
+| 流程要 agent 运行时自主决定 | **Agentic RAG** | 控制权从「预编排图」交给 LLM,更灵活但更难调、成本飘,见 [[36 Agentic RAG|36]] |
+
+> 工程主流(2025):**默认 Modular(人编排、可审计、延迟可控),关键不确定处才放权给 agent**。
+
 **branching vs loop 别混(一个具体例子)**。同一个 query「比较 A 和 B 公司的营收与员工数」:**branching** 把它拆成 2 个子查询(「A 的营收员工」「B 的营收员工」)**同时并行**各检索一次,4 路结果**一次性汇聚**——分支之间无依赖、无回头,DAG 没有回边。**loop** 则是同一个 query **改写 3 次串行迭代**:第 1 轮查得不够 → 自评「证据不足」→ 改写 query → 第 2 轮再查 → 仍不够 → 再改 → 第 3 轮……带**回边**反复跑同一条路,直到收敛或撞 `max_iter`。一句话:**branching 是"并行铺开、一次汇总"(无回边),loop 是"串行试错、反馈重来"(有回边)**。
 
 ## 可跑最小代码

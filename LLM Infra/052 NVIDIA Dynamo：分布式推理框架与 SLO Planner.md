@@ -74,3 +74,4 @@ decode_pool:   { engine: vllm,    role: decode,  min: 2, max: 16 } # 引擎可�
 - **NVIDIA Dynamo**,**GTC 2025** 发布,开源(ai-dynamo/dynamo);定位数据中心级分布式推理框架,**引擎无关**。
 - 四大件:**SLO Planner / KV-aware Router / NIXL / KV Block Manager**;NIXL = NVIDIA Inference Xfer Library(见 [[053 KV 传输：NIXL、点对点与带宽|KV 传输]])。
 - 数字:Blackwell 上 DeepSeek-R1 **最高 30×**;GB200 NVL72 + [[062 Wide-EP：DeepSeek、Kimi 在 H100、H200 上的部署|wide-EP]],MoE 吞吐 **最高 7×**(vs B200)。它把 DistServe/Mooncake 的研究范式工程化成产品。
+- **最新进展(2025-2026)**:**Dynamo 1.0** 已"production-ready"(GTC 2025 发布后迭代);**Dynamo 0.4** 引入 4× 性能、**SLO-based 自动扩缩**与实时可观测;**SLO Planner GA**(2026-01)落地多节点 K8s,并新增 **DGDR(Dynamo Graph Deployment Request)**,从 SLO 一步生成优化部署。(来源:NVIDIA Technical Blog "Dynamo 0.4" / "Dynamo 1 Production-Ready" / InfoQ 2026-01,2025–2026)

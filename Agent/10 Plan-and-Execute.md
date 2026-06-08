@@ -46,6 +46,8 @@ Plan-and-Execute 不是单篇会议论文,而是一条**工程模式谱系**,主
 - **LangChain `Plan-and-Execute` Agent**(2023):受 BabyAGI 和论文 _Plan-and-Solve Prompting_ 启发的官方实现,明确拆出 **planner**(出步骤)与 **executor**(逐步执行,内部常是一个 ReAct agent)。
 - 学术侧的近亲是 **Wang et al., _Plan-and-Solve Prompting_(ACL 2023)**——提出"先让模型规划再求解"的提示策略,思想同源但停留在单次 prompt 层面,没有真正的执行/重规划循环。
 
+**⚠️ 常见误区**:别把 **Plan-and-Solve**(纯提示策略,一次 prompt 里先写计划再答,无工具执行)和 **Plan-and-Execute**(带 Executor 调工具 + Replan 回路的编排架构)当成一回事——前者只是怎么 prompt,后者是怎么搭 agent。
+
 可以把 [[11 ReWOO|ReWOO]] 和 [[12 LLMCompiler|LLMCompiler]] 看作这条谱系的**进阶**:ReWOO 把执行阶段的观测彻底从大模型剥离,LLMCompiler 把计划编译成 DAG 来并行执行。
 
 ## 可跑的最小实现
@@ -100,6 +102,18 @@ def plan_and_execute(goal, planner_llm, exec_llm, max_rounds=10):
 | 适合 | 高不确定、必须边走边看 | **步骤可预排**的长流程 |
 
 再往省的方向走:[[11 ReWOO|ReWOO]] 把执行阶段的 observation 完全不回灌给大模型(planner 一次出含占位变量的蓝图,worker 静默取证,solver 末尾一次合成);[[12 LLMCompiler|LLMCompiler]] 则把计划做成**任务 DAG**,无依赖的步骤**并行**执行以进一步压延迟。三者是同一条"减少大模型介入次数"主线上的不同点。
+
+**执行编排模式选型卡**(按任务形态查):
+
+| 任务形态 | 选什么 | 为什么 |
+|---|---|---|
+| 高不确定、下一步严重依赖上一步真实结果 | **[[09 ReAct|ReAct]]** | 每步现想最灵活、天然纠错;代价是 token 随步数膨胀、长程易迷失 |
+| 步骤大体可预排的长流程(多阶段处理、报告生成) | **Plan-and-Execute** | 规划智力集中一次、执行廉价化,省 token 更稳;靠 replan 应对偏差 |
+| 步骤可预排 + 想把执行 token 压到极致 | **[[11 ReWOO|ReWOO]]** | observation 完全不回灌大模型(占位变量蓝图),token 最省;但中途无法纠偏 |
+| 步骤间有明显并行结构、要压延迟 | **[[12 LLMCompiler|LLMCompiler]]** | 计划编译成任务 DAG,无依赖步骤并行执行,墙钟最短 |
+| 解可枚举、要回溯/择优(博弈、证明、规划) | **[[14 树搜索：ToT 与 LATS|ToT/LATS]]** | 把循环展开成搜索树多路探索 + 回溯,质量最高但最贵 |
+
+> 主线一句话:**ReAct(每步问)→ Plan-and-Execute(规划一次)→ ReWOO(观测不回灌)/ LLMCompiler(DAG 并行)**,越往后大模型介入越少、越省越快,代价是越不能边走边纠。
 
 **省 token 手算(对同一个 8 步任务)。** 设任务 8 步,每步产生约 $250$ token 的 Thought/Observation,系统提示 + 工具表固定前缀 $1500$ token。**[[09 ReAct|ReAct]] 路线**:每步都把固定前缀 + 前序全历史重发给**大模型**,第 $i$ 步输入约 $1500 + 250i$,八步输入累计
 

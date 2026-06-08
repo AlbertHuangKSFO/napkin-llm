@@ -134,6 +134,16 @@ def quant_per_channel(W, bits=8):              # W: [out, in],逐 out 通道
     return q.int(), s                          # 比 per-tensor 抗离群值
 ```
 
+## 选型卡:量化粒度与对称性怎么挑
+
+| 场景 | 选什么 | 为什么 |
+|---|---|---|
+| 权重(分布零对称、平稳) | 对称 + per-channel | $z=0$ 省参、乘法简单;逐列 scale 抗离群 |
+| int4 权重(要更准) | per-group(group=128) | 隔离离群更细,scale 仅占 ~0.125 bit/参(GPTQ/AWQ 默认) |
+| 激活(有离群、偏斜) | 非对称 + per-token 动态 | 贴合 $[\min,\max]$、动态 scale 抗逐 token 离群 |
+| 追求最省/硬件最简 | per-tensor | 元数据最少,但对离群最脆,易掉点 |
+| 激活离群严重、要 W8A8 | 先 [[096 AWQ 与 SmoothQuant|SmoothQuant]] 迁移再量化 | 把激活难度搬给权重,两边都能 int8 |
+
 ## 面试高频
 
 - **scale 和 zero-point 各是什么?** scale 是每个整数格代表的浮点宽度($s=$ 浮点范围/整数范围);zero-point 是「浮点 0 对应哪个整数」,保证 0 精确可表示,**必须是整数**。

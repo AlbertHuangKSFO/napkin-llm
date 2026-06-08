@@ -101,5 +101,7 @@ for m in ["LLaMA-2-70B", "Mistral-7B", "Mixtral-8x7B", "DeepSeek-V3", "Qwen3-MoE
 - Mistral 7B:Jiang et al.,2023,arXiv:2310.06825。GQA + **SWA(W=4096)**;滚动缓存实现长上下文。Mixtral 8×7B:arXiv:2401.04088,**top-2 of 8** 专家,≈47B 总 / 13B 激活。
 - DeepSeek-V2:DeepSeek-AI,2024,arXiv:2405.04434,首发 **MLA**(KV-Cache 较 MHA 省 ~93.3%)+ **DeepSeekMoE**。DeepSeek-V3:2024,arXiv:2412.19437,**671B 总 / 37B 激活**;每层 1 共享 + 256 路由专家、top-8、专家中间维 2048、每 token ≤4 节点、无辅助损失负载均衡;14.8T token 预训练。
 - Qwen:Qwen / Qwen2(arXiv:2407.10671)/ Qwen2.5 / Qwen3 系列(阿里);全尺寸稠密 + MoE,GQA + RoPE 长上下文,多语种大词表。Qwen3 MoE 提到 8 专家、移除共享专家。
+- **最新进展(2025-2026)**:DeepSeek 在 V3 之后又出 **V3.1-Terminus**,并于 2025-09 发布 **V3.2-Exp**,在 MLA+MoE 栈上插入 **DSA(DeepSeek Sparse Attention)**——一个轻量 "lightning indexer" 给上下文 token 打分 + 细粒度 token 选择,只对选中子集算注意力,长上下文训练/推理成本大降而基准基本持平(DeepSeek-V3.2,arXiv:2512.02556;2025-09)。
+- **最新进展(2025-2026)**:Qwen 于 2025-09 发布 **Qwen3-Next 80B-A3B**(Instruct/Thinking 双版),比上代 235B-A22B 参数小约 3×,但专家数翻到约 4×并**重新加回共享专家**,激活仅约 3B(Qwen 团队,2025-09)。
 - 共同底座:三家均为 decoder-only + Pre-RMSNorm + RoPE + SwiGLU,详见 [[040 现代 decoder-only 配方汇总|配方汇总]]。
 - 与邻接概念:注意力差异链回 [[019 GQA 分组查询注意力|GQA]] / [[020 MLA 多头潜在注意力(DeepSeek)|MLA]] / [[021 局部与滑窗注意力(Longformer、Mistral SWA)|SWA]];MoE 链回 [[042 MoE 动机：稀疏激活与容量解耦|MoE 动机]] / [[046 Mixtral 稀疏 MoE|Mixtral]] / [[047 DeepSeek MoE：细粒度与共享专家|DeepSeekMoE]];底座是 [[038 LLaMA 架构解剖|LLaMA]]。

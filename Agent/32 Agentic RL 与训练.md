@@ -6,7 +6,7 @@
 
 ## 本质:从「对齐人类偏好」到「在任务里赢」
 
-经典 LLM 训练的 RL 阶段(RLHF)解决的是**对齐**:让模型的输出更符合人类偏好(有用、无害、诚实)。**Agentic RL 把目标换了**:不只对齐口味,而是训练模型在**真实任务环境**里——写代码、解数学、跑多步检索、操作浏览器、修 GitHub issue——**多步决策并最终成功**。
+经典 LLM 训练的 RL 阶段([[LLM/085 RLHF 全流程与 KL 约束、奖励黑客|RLHF]])解决的是**对齐**:让模型的输出更符合人类偏好(有用、无害、诚实)。**Agentic RL 把目标换了**:不只对齐口味,而是训练模型在**真实任务环境**里——写代码、解数学、跑多步检索、操作浏览器、修 GitHub issue——**多步决策并最终成功**。
 
 关键差异在于「一次交互」的含义变了:
 - 传统 RLHF 里,一条「轨迹」≈ 模型对一个 prompt 的**一次回答**;
@@ -23,14 +23,14 @@
 
 **② Reward(打分):给轨迹算奖励**
 这是 agentic RL 的胜负手,有几条来路(详见下方演进图):
-- **可验证奖励(RLVR)**:用**确定性工具**判对错——代码跑测试通过 = 1,数学答案校验对 = 1,否则 0。**客观、不可钻空子、不用训奖励模型也不用人标**,是 2025 起推理模型大爆发的核心。
-- **奖励模型(RLHF/RLAIF)**:训一个模型来给分(人类偏好 → RLHF;AI 偏好/宪法 → RLAIF)。开放式任务(写作、对话)没法验证,只能靠它。
+- **[[LLM/088 GRPO 与可验证奖励|可验证奖励(RLVR)]]**:用**确定性工具**判对错——代码跑测试通过 = 1,数学答案校验对 = 1,否则 0。**客观、不可钻空子、不用训奖励模型也不用人标**,是 2025 起推理模型大爆发的核心。
+- **奖励模型(RLHF/RLAIF)**:训一个模型来给分(人类偏好 → RLHF;AI 偏好/宪法 → [[LLM/090 RLAIF、宪法 AI 与过程奖励 PRM|RLAIF]])。开放式任务(写作、对话)没法验证,只能靠它。
 - **过程奖励 vs 结果奖励**:**结果奖励(ORM)** 只看终点对不对(信号稀疏但便宜客观);**过程奖励(PRM)** 给每一步打分(信号稠密、缓解长程信用分配,但要训 PRM、成本高且易被钻)。
 
 **③ Policy Update(更新):把高分轨迹的概率推上去**
 用 RL 算法根据奖励更新模型权重 θ,核心思想都是「**让得高分的轨迹更可能、得低分的更不可能**」:
-- **PPO**(Proximal Policy Optimization):经典 actor-critic,需要额外训一个 **critic(价值网络)** 估计每步的期望回报,四个模型(policy + reference + critic + reward model)一起转,重。
-- **GRPO**(Group Relative Policy Optimization,DeepSeek 提出):**砍掉 critic**。对同一个 prompt 采样**一组**(典型 16 条)回答,用**组内相对优势**(每条减去这组的均值再归一化)当 advantage,省掉价值网络。再叠加 **RLVR**(连奖励模型也省掉),四模型塌成两个(policy + reference),训练大幅简化——这是 DeepSeek-R1 路线的关键。
+- **[[LLM/084 策略梯度与 PPO 基础|PPO]]**(Proximal Policy Optimization):经典 actor-critic,需要额外训一个 **critic(价值网络)** 估计每步的期望回报,四个模型(policy + reference + critic + reward model)一起转,重。
+- **[[LLM/088 GRPO 与可验证奖励|GRPO]]**(Group Relative Policy Optimization,DeepSeek 提出):**砍掉 critic**。对同一个 prompt 采样**一组**(典型 16 条)回答,用**组内相对优势**(每条减去这组的均值再归一化)当 advantage,省掉价值网络。再叠加 **RLVR**(连奖励模型也省掉),四模型塌成两个(policy + reference),训练大幅简化——这是 DeepSeek-R1 路线的关键。
 
 **组内相对优势手算。** 设一组采 $G=8$ 条轨迹,RLVR 给出 reward(过测试=1,否则 0):$r=[1,1,0,1,0,0,1,0]$($4$ 条成功)。先算组内统计:$\mu=\frac{4}{8}=0.5$,$\sigma=\sqrt{\frac{1}{8}\sum(r_i-\mu)^2}=\sqrt{0.25}=0.5$。再按 $\hat{A}_i=\frac{r_i-\mu}{\sigma+\epsilon}$ 归一化:成功轨迹 $\hat{A}=\frac{1-0.5}{0.5}=+1$,失败轨迹 $\hat{A}=\frac{0-0.5}{0.5}=-1$。于是这组 advantage 是 $[+1,+1,-1,+1,-1,-1,+1,-1]$——**比组内平均好的(成功)拿正优势、概率被推高,差的(失败)拿负优势、被压低**。整组**不需要任何价值网络**估期望回报,优势完全来自「跟同组兄弟比」,这就是 GRPO 砍掉 critic 的核心招。注意:若一组**全对或全错**($\sigma=0$),所有 $\hat{A}\approx0$、梯度为零白算——这正是 DAPO「动态采样丢掉全对/全错组」要解决的问题。
 - 通常还加 **KL 约束**:惩罚新策略偏离参考模型(ref)太远,防止训崩、防奖励钻空子(reward hacking)。
@@ -203,7 +203,7 @@ config = {
 ## 知识拓展
 
 - **后训练 2026 全景**:GRPO 已是事实标配,DAPO 成工业主力,RLVR 是奖励默认;前沿在**长程信用分配、过程奖励、多轮工具 RL、把 RL 接进真实软件/终端/GUI 环境**。标志性工作:DeepSeek-R1(RLVR+GRPO)、DAPO(字节)、SWE-RL(Meta,真实软件演化数据+规则奖励训代码 agent)、ProRL Agent(NVIDIA,rollout-as-a-service)、VerlTool(工具用 RL)。
-- **"RL 训推理"的本质 = test-time compute**:RLVR 训出的长思维链,本质是教模型在推理时**多花算力多想几步**——与 Deep Research(见 [[29 Deep Research Agent|Deep Research Agent]])多搜多读、与推理模型多想,是同一哲学(用更多 token 换质量)的不同载体。
+- **"RL 训推理"的本质 = test-time compute**:RLVR 训出的长思维链,本质是教模型在推理时**多花算力多想几步**——与 Deep Research(见 [[29 Deep Research Agent|Deep Research Agent]])多搜多读、与 [[LLM/089 推理模型与 RL：o1、R1 的长 CoT 与自我反思|推理模型]] 多想,是同一哲学(用更多 token 换质量)的不同载体。
 - **轻量替代,别动辄全量 RL**:① **拒绝采样 / best-of-N + SFT**——采样多条只留通过验证的做 SFT,常作冷启动;② **GEPA 等反思式 prompt 优化**——论文(arXiv 2507.19457)显示样本效率高 100×(10 样例 vs 10000+ rollout),很多任务 prompt 层就够,不必上 RL(见 [[31 Agent 提示词优化(DSPy)|DSPy]])。判断是否上 RL 的关键:基线是否真见顶 + 奖励是否可批量自动验证 + 是否有算力。
 - **环境是新瓶颈**:2026 agentic RL 的竞争力越来越取决于**高质量、可并行、奖励可验证的环境**(SkyRL 的 skyrl-gym、各类工具/代码/检索/SQL 沙箱)——好算法人人有,好环境才稀缺。
 - **边界 / 反模式**:① 任务无法自动判好坏硬上 RL(只能靠奖励模型,又贵又易钻);② 没搭好评估/奖励就训(没可靠奖励 RL 必崩);③ 小团队没 GPU 集群啃 RL(优先 DSPy/上下文工程/蒸馏);④ 只盯单类可验证任务猛训(灾难性遗忘,通用能力退化);⑤ 奖励函数不做鲁棒化(被 reward hacking 钻穿)。

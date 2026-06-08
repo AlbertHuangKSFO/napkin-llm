@@ -69,4 +69,5 @@ trtllm-serve ./engine --port 8000
 - 优化:算子融合、FP8/INT4 量化、为 SKU 选 kernel、plugin 自定义 kernel、in-flight batching、paged KV。
 - 相对 vLLM:高并发吞吐约高 **20–40%**、尾延迟更低;2025 报告 H100 FP8 可达 1e4+ tok/s、TTFT 亚 100ms(量级示意)。
 - 2025 多版本迭代;encoder-decoder 也支持 in-flight batching。
+- **最新进展(2025-2026)**:**TensorRT-LLM 1.0** 于 2025-09-24 发布,把**PyTorch-native 架构定为默认且生产就绪**(从早期 C++ 编译式重构而来),LLM API 稳定并给出向后兼容保证——即「编译式」标签正在淡化,主线转向 PyTorch 运行时 + 模块化 Python,降低了"改模型即重编译"的门槛。(来源:NVIDIA Developer Forums "TensorRT LLM 1.0 is here" / GitHub NVIDIA/TensorRT-LLM,2025)
 - 部署:`trtllm-build` → `trtllm-serve`,或经 Triton `tensorrtllm_backend`(调度策略 MAX_UTILIZATION / GUARANTEED_NO_EVICT)。

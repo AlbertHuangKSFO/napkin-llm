@@ -67,6 +67,17 @@ spec:
 
 ✅ 正解:用 **KEDA + 引擎指标(队列/KV/SM 利用率)** 做扩缩信号;主力模型留 `min=1` 热副本或预热,真正 scale-to-zero 只用于低频长尾;配权重流式加载 + 本地缓存压缩冷启动;缩容设 cooldown 防抖动。
 
+## 选型卡:扩缩机制与缩零策略怎么选
+
+| 场景 | 选什么 | 为什么 |
+|---|---|---|
+| LLM 在线服务,要按队列/KV 扩缩 | **KEDA + Prometheus scaler** | 原生 HPA 只认 CPU(LLM 永不扩);KEDA 喂引擎指标且能缩到 0 |
+| 主力模型、流量常在 | **`min=1` 热副本**(不真缩零) | 第一个请求吃 2–3 min 冷启动会破 SLO,留个热副本兜底 |
+| 低频长尾模型、省 GPU 优先 | **真 scale-to-zero**(KEDA/Knative) | 闲时 0 副本不烧 GPU,偶发冷启动可接受 |
+| 要请求级缩零、平滑激活 | **Knative / KServe Serverless** | activator 在 0 副本时 hold 请求、触发扩容再放行 |
+| 冷启动太慢(几十~百 GB 权重) | **权重流式加载 + 本地 SSD 缓存** | 瓶颈是搬权重而非跑代码,Run:ai Model Streamer 并发直流进显存 |
+| 普通无状态 web 容器 | **原生 HPA(CPU/内存)** | 瓶颈在 CPU 时基础闭环够用,无需 KEDA |
+
 ## 面试高频
 
 - **「LLM 自动扩缩该看什么指标,为什么不是 CPU?」** 看等待队列长度、KV-Cache 利用率、运行请求数、GPU SM 利用率。LLM 瓶颈在 GPU 显存/带宽,CPU 常年闲,用 CPU 扩缩会「队列爆了还不扩」。

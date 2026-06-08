@@ -120,6 +120,7 @@ for x in prompts:
 - 只需 **actor + ref**(对比 PPO 的 actor/critic/RM/ref 四模型),省约一半训练显存;代价是每题采 $G$ 个样本。
 - 可验证奖励(RLVR):数学对答案、代码跑单测、格式奖励;客观、批量、抗奖励黑客;是 [[089 推理模型与 RL：o1、R1 的长 CoT 与自我反思|R1-Zero]] 的奖励来源。
 - 后续变体众多(去 std 归一的 Dr.GRPO、token 级归一等),但「组内相对优势 + 去 critic」是不变内核。
+- **最新进展(2025-2026)**:GRPO 之后涌现一批改进——**DAPO**(字节,2025,arXiv:2503.14476)用 Clip-Higher + 动态采样 + token 级梯度损失,在 Qwen2.5-32B 上 AIME 2024 拿 50 分、超过 GRPO 基线;**GSPO**(Qwen 团队,2025)把重要性比从 token 级改成**序列级**以匹配序列级奖励、稳定 MoE RL 训练(DAPO、GSPO,2025)。
 - Dr.GRPO:*Understanding R1-Zero-Like Training: A Critical Perspective*(Sea AI Lab,2025,arXiv **2503.20783**,COLM 2025):指出除 std 的难度偏差与除长度的长度偏差(尤其使错误回答虚胖变长),去掉这两归一化即修复,提升 token 效率。
 - KL 用 k3 无偏估计 $\frac{\pi_{\text{ref}}}{\pi_\theta}-\log\frac{\pi_{\text{ref}}}{\pi_\theta}-1\ge0$ 逐 token 加入损失;优势对同一答案所有 token 共享(结果奖励 → 序列级)。
 - 关联:[[084 策略梯度与 PPO 基础|PPO]]、[[083 奖励模型 RM|RM]]、[[085 RLHF 全流程与 KL 约束、奖励黑客|RLHF/奖励黑客]]、[[089 推理模型与 RL：o1、R1 的长 CoT 与自我反思|R1 长 CoT]]、[[090 RLAIF、宪法 AI 与过程奖励 PRM|PRM]]、[[31 KL 散度与 JS 散度|KL]]、[[110 下游基准：MMLU、GSM8K、HumanEval、MT-Bench|GSM8K/HumanEval]]、[[32 Agentic RL 与训练|Agentic RL]]。

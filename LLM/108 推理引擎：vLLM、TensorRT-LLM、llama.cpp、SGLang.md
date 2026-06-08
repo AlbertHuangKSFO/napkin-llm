@@ -9,7 +9,7 @@
 - **vLLM**:PagedAttention 的发源地,通用、易用、生态全 → **要快上线、常换模型,就选它**(业界默认起点)。
 - **TensorRT-LLM**:NVIDIA 官方,编译期把模型图深度优化、算子融合、吃满 TensorCore → **单模型长期产线、吞吐至上、全 NVIDIA**。
 - **llama.cpp**:C/C++ 写的,GGUF 量化格式,能跑在 CPU/手机/Mac → **本地、边缘、无 GPU**。
-- **SGLang**:RadixAttention 把共享前缀的 KV 用前缀树自动复用 → **聊天/RAG/Agent 这类大量共享前缀的负载**。
+- **SGLang**:[[LLM Infra/032 前缀缓存：RadixAttention 树结构|RadixAttention]] 把共享前缀的 KV 用前缀树自动复用 → **聊天/RAG/Agent 这类大量共享前缀的负载**。
 
 选型本质是问两件事:**你的负载在「在线低延迟 / 离线高吞吐 / 共享前缀多 / 本地边缘」哪个象限?绑不绑 NVIDIA?**
 
@@ -51,7 +51,7 @@
 - **LMDeploy**(商汤)、**MLC-LLM**(跨平台编译,能跑浏览器/手机)、**Ollama**(llama.cpp 之上的易用本地封装,一行拉模型)。
 - **DeepSpeed-Inference / FasterTransformer**:早期的高性能推理库,部分能力被 vLLM/TensorRT-LLM 吸收。
 
-**衡量引擎的关键指标(别只看「吞吐」)**:① **吞吐**(tok/s,离线/批处理看这个);② **TTFT**(首 token 时延,交互体验);③ **TPOT/ITL**(每 token 时延及其抖动,流式体验);④ **goodput**(满足 SLA 前提下的有效吞吐——这才是生产真正在乎的:吞吐再高但一半请求超时也没用)。不同引擎在「吞吐 vs 延迟」上有不同甜点,选型要对着自己的 SLA 测,而非看别人的 benchmark 数字。
+**衡量引擎的关键指标(别只看「吞吐」)**(完整定义见 [[LLM Infra/018 TTFT、TPOT、ITL 与 goodput：服务指标定义|服务指标]]):① **吞吐**(tok/s,离线/批处理看这个);② **TTFT**(首 token 时延,交互体验);③ **TPOT/ITL**(每 token 时延及其抖动,流式体验);④ **goodput**(满足 SLA 前提下的有效吞吐——这才是生产真正在乎的:吞吐再高但一半请求超时也没用)。不同引擎在「吞吐 vs 延迟」上有不同甜点,选型要对着自己的 SLA 测,而非看别人的 benchmark 数字。
 
 **共同底座(都是概念,非某家专利)**:KV 分页去碎片、连续/in-flight 批处理提利用率、前缀缓存去重算、量化降显存、chunked prefill 稳 TPOT。四家差的是**实现侧重 + 定位**,不是用了完全不同的原理。绝大多数现代引擎也都内置**投机解码**(见 [[104 投机解码与 Medusa、Lookahead|投机解码]])与 **CUDA Graph / 算子融合**降启动开销。
 

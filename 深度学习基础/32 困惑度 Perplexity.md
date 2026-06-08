@@ -53,7 +53,7 @@ $$\boxed{\ \mathrm{PPL}=\exp\!\left(-\frac{1}{N}\sum_{t=1}^{N}\ln p(w_t\mid w_{<
 2. $\mathrm{PPL}\le V$ 不一定成立——若模型对真词给了极低概率,PPL 可远超 $V$。乱猜(均匀)才恰好 = $V$。
 3. **强烈依赖分词(tokenizer)**:同一模型,子词切得越细、序列越长,逐 token 的 PPL 一般越低,**不同分词的 PPL 不可直接比较**。
 
-**跨分词比较:bits-per-byte / bits-per-char**。为了让不同 tokenizer 的模型可比,改用"每字节比特数"(BPB)或"每字符比特数"(BPC):把整段的总负对数似然(以 bit 计)除以**字节数/字符数**而非 token 数。因为字节/字符是与分词无关的物理单位,BPB 才能横向比较 LLaMA、GPT 等不同分词的模型。换算:$\text{BPB}=\frac{\text{总 nat}}{\ln 2\times\text{字节数}}$。
+**跨分词比较:bits-per-byte / bits-per-char**。为了让不同 tokenizer 的模型可比,改用"每字节比特数"(BPB)或"每字符比特数"(BPC):把整段的总负对数似然(以 bit 计)除以**字节数/字符数**而非 token 数(LLM 评估里 PPL 与 BPB 的完整用法见 [[LLM/109 语言模型评估：困惑度与 bits-per-byte|语言模型评估]])。因为字节/字符是与分词无关的物理单位,BPB 才能横向比较 LLaMA、GPT 等不同分词的模型。换算:$\text{BPB}=\frac{\text{总 nat}}{\ln 2\times\text{字节数}}$。
 
 **PPL 与压缩的对偶**。每词交叉熵就是"用这个模型做算术编码,平均每词要花的 bit 数";PPL = $2^{\text{bit 交叉熵}}$。**好的语言模型 = 好的无损压缩器**——这是信息论(香农信源编码)给 PPL 的另一重解读,也是"语言建模即压缩"观点的依据。
 

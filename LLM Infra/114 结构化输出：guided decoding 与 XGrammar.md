@@ -78,6 +78,16 @@ print(out[0].outputs[0].text)   # 保证是合法 JSON
 ✅ guided_json:无效 token 直接屏蔽,输出结构上必然合法,一次成,无需重试
 ```
 
+## 选型卡:约束类型与后端怎么选
+
+| 场景 | 选什么 | 为什么 |
+|---|---|---|
+| 嵌套 / 递归 JSON、完整 CFG | **XGrammar**(下推自动机,vLLM 默认) | 带栈 PDA 能表达嵌套递归;>99% token 掩码可预缓存,近零开销 |
+| 扁平 JSON / 正则、生态成熟 | **Outlines**(FSM) | 正则/扁平 JSON 编 FSM 查表即可;递归表达力弱于 PDA |
+| 已有第三方 schema 工具链 | **lm-format-enforcer** | vLLM 可选后端,接现成格式约束生态 |
+| 工具/函数调用强制合法参数 | `tool_choice=required` + guided_json | 工具调用本质就是「输出匹配参数 schema」,复用同一套约束解码 |
+| 约束极严却要保内容质量 | **放宽 schema** 或仅约束关键字段 | 文法太严会把模型逼进低概率分支,内容质量下降 |
+
 ## 面试高频
 - **guided decoding 怎么保证输出合法?** 每步用文法自动机算合法 token 掩码,非法 token logit 置 -∞ 再 softmax,采样只可能落在合法集合;不是事后校验,是**生成时就不可能越界**。
 - **XGrammar 和 Outlines 区别?** Outlines 把正则/JSON 编成**有限状态机(FSM)**,逐状态查表;XGrammar 用**下推自动机(带栈)**,能表达完整 CFG 的**嵌套递归**,并把 token 分上下文无关(>99%,预缓存)/相关两类做加速。

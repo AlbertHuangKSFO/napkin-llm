@@ -91,7 +91,7 @@ assert torch.allclose(standard_attn(*[torch.randn(512, 64)]*1, *[torch.randn(512
 - **它解决了 [[014 注意力复杂度 O(n²) 与瓶颈|哪一维瓶颈]]?** 主要是**显存**($O(n^2)\to O(n)$)与**带宽**;算力仍 $O(n^2)$ 量级。要降算力级别得靠 [[024 Linformer 与低秩近似|Linformer]]/[[023 线性注意力(Linear Transformer、Performer)|线性]]/[[022 稀疏注意力(BigBird、块稀疏)|稀疏]] 这些近似法。
 - **它和 [[019 GQA 分组查询注意力|GQA]]、[[102 KV-Cache|KV-Cache]] 是一回事吗?** 不是。FlashAttention 优化**单次注意力前向/反向**的 IO;GQA/KV-Cache 优化**自回归解码**时 KV 的存储与读取。常叠加使用。
 - **FlashAttention-2 改了啥?** 减少非矩阵乘运算、更好地切分 work 到 warp、把序列维并行——又快约 2×。FlashAttention-3 进一步用上 Hopper 的异步与 FP8。
-- **FlashAttention-3 具体快多少?** H100 上 FP16 达约 **740 TFLOPs/s**(约 75% 利用率,比 FA-2 快 1.5–2×);FP8 接近 **1.2 PFLOPs/s**。靠三招:① 用 Tensor Core/TMA 的**异步**重叠计算与搬运(warp specialization);② 交错块级矩阵乘与 softmax;③ 块量化 + incoherent processing 支撑 FP8 低精度(FP8 误差比标准实现低约 2.6×)。
+- **FlashAttention-3 具体快多少?**(Hopper 架构细节见 [[LLM Infra/025 FlashAttention-3：Hopper TMA、WGMMA 与 FP8|FlashAttention-3]])H100 上 FP16 达约 **740 TFLOPs/s**(约 75% 利用率,比 FA-2 快 1.5–2×);FP8 接近 **1.2 PFLOPs/s**。靠三招:① 用 Tensor Core/TMA 的**异步**重叠计算与搬运(warp specialization);② 交错块级矩阵乘与 softmax;③ 块量化 + incoherent processing 支撑 FP8 低精度(FP8 误差比标准实现低约 2.6×)。
 - **online softmax 里那个 $\alpha$ 是什么、漏了会怎样?** $\alpha=e^{m_{old}-m_{new}}$,用来把旧的 $\ell,O$ 折算到新 max 基准;漏乘 → 各块基准不一致、结果全错。这是手写 FlashAttention 最常见 bug。
 - **块大小怎么定?** 受 SRAM 容量 $M$ 限:块要小到 $Q$ 块、$K/V$ 块、中间 $S_{ij}$ 都能同时塞进 SRAM。块越大 IO 越省但要放得下;实际 kernel 按 head_dim 和 GPU 自动选(常 64/128)。
 - **为什么 FlashAttention 让长上下文成为可能?** 它把注意力显存从 $O(n^2)$ 降到 $O(n)$,$n=128\text{K}$ 时 $n\times n$ 矩阵本就放不下,FA 根本不物化它 → 长序列训练/推理才跑得动。这是它成为工业默认实现的核心价值。

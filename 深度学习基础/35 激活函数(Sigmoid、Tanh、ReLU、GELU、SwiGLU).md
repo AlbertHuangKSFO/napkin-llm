@@ -70,7 +70,7 @@ $$\mathrm{GELU}(z)\approx 0.5\,z\Bigl(1+\tanh\bigl[\sqrt{\tfrac{2}{\pi}}(z+0.044
 
 $$\mathrm{SwiGLU}(x)=\mathrm{Swish}(xW)\odot(xV)$$
 
-$\odot$ 是逐元素乘。一路经 Swish 当 0~1 的"阀门",控制另一路线性投影通过多少。Shazeer(2020)发现 GEGLU/SwiGLU 在 Transformer FFN 上困惑度更低,**LLaMA、PaLM 等现代 LLM 采用**。代价:门控多一组投影矩阵(从 2 个变 3 个权重矩阵),通常把 FFN 隐藏维按 $\tfrac23$ 缩回去补偿参数量(LLaMA 即用 $\tfrac{8}{3}d$ 而非 $4d$)。
+$\odot$ 是逐元素乘。一路经 Swish 当 0~1 的"阀门",控制另一路线性投影通过多少。Shazeer(2020)发现 GEGLU/SwiGLU 在 Transformer 的 [[LLM/008 前馈网络 FFN(为何 4 倍、为何两层)|FFN]] 上困惑度更低,**LLaMA、PaLM 等现代 LLM 采用**。代价:门控多一组投影矩阵(从 2 个变 3 个权重矩阵),通常把 FFN 隐藏维按 $\tfrac23$ 缩回去补偿参数量(LLaMA 即用 $\tfrac{8}{3}d$ 而非 $4d$)。
 
 ![[nn-SwiGLU门控.png]]
 

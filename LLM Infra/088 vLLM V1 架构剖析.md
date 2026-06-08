@@ -70,3 +70,4 @@ out = llm.generate(["解释 PagedAttention"], SamplingParams(max_tokens=128))
 - 调度决策表示为 `{request_id: num_tokens}`,**chunked prefill 始终默认开**。
 - 前缀缓存:常数时间驱逐、极少 Python 对象 → 命中率 0% 也近零开销。
 - 仓库 `vllm-project/vllm`;OpenAI 兼容 server 基于 FastAPI,SSE 格式 `data: {...}` + `data: [DONE]`。
+- **最新进展(2025-2026)**:V1 后续把 **PD 解耦(disaggregated prefill/decode)** 做成独立调度域,避免长 prefill 阻塞在途 decode;**zero-bubble 异步调度**已支持投机解码零气泡重叠;新增**通用 CPU KV-cache offload**(可插拔策略 + block 级抢占)、ViT 视觉编码器全 CUDA graph 捕获。(来源:vLLM Releases / SitePoint vLLM 2026 Guide,2025–2026)

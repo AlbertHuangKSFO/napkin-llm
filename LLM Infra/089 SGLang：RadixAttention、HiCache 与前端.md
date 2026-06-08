@@ -1,4 +1,4 @@
-[[089 SGLang：RadixAttention、HiCache 与前端]]:[[087 引擎全景：六大 runtime 选型|六引擎]]里的「共享前缀之王」——LMSYS 主导的 SGLang 用 **RadixAttention(前缀树自动复用 KV)+ HiCache(GPU/host/分布式三层 KV)+ 前端 DSL(结构化 LLM 程序)** 在 chat/RAG/Agent 这类大量共享上下文的负载上把吞吐拉满。是 [[032 前缀缓存：RadixAttention 树结构|RadixAttention]] 概念落到生产引擎的代表。
+[[089 SGLang：RadixAttention、HiCache 与前端]]:[[087 引擎全景：六大 runtime 选型|六引擎]]里的「共享前缀之王」——LMSYS 主导的 SGLang 用 **RadixAttention(前缀树自动复用 KV)+ HiCache(GPU/host/分布式三层 KV)+ 前端 DSL(结构化 LLM 程序)** 在 chat/[[RAG/01 什么是 RAG|RAG]]/[[Agent/01 什么是 AI Agent|Agent]] 这类大量共享上下文的负载上把吞吐拉满。是 [[032 前缀缓存：RadixAttention 树结构|RadixAttention]] 概念落到生产引擎的代表。
 
 ## ① 类比:把「公共开头」存进一棵家谱树
 
@@ -73,3 +73,4 @@ def qa(s, doc, questions):
 - **HiCache** 2025-09 LMSYS 博客公布:L1 GPU / L2 host / L3 分布式,接 Mooncake;最高 **6× 吞吐**、**80% TTFT** 下降。
 - 2025 更新:UnifiedRadixTree、DeepSeek 适配、SSD offload(Mooncake store)、Speculative Decoding V2 / **EAGLE-3**。
 - 提供 **前端 DSL**(结构化 LLM 程序)+ OpenAI 兼容 `/v1/chat/completions`(端口默认 30000)。
+- **最新进展(2025-2026)**:HiCache 除 Mooncake/3FS 外已支持 **NIXL** 与本地文件后端;2025-10 起经 **SGLang-Jax** 原生跑 **TPU**;并对新开源模型做 day-0 适配(MiniMax M2、Mistral Large 3、LLaDA 2.0 扩散 LLM 等,2025-12)。(来源:LMSYS Blog "SGLang HiCache" 2025-09 / SGLang GitHub README,2025–2026)

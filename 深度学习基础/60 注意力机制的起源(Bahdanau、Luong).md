@@ -71,7 +71,7 @@ $$e_{tj}=\begin{cases}s_t^\top h_j & \text{dot(点积)}\\ s_t^\top W\,h_j & \tex
 
 **通往 Transformer(关键事实里再点)**:把 $s_{t-1}$ 抽象成 **query** $Q$,把 $h_j$ 既当 **key** $K$ 又当 **value** $V$,注意力就是 $\text{softmax}(QK^\top)V$。Transformer 做了两步质变:① 把打分换成**缩放点积** $\frac{QK^\top}{\sqrt{d}}$;② 让序列**内部**每个位置互相 attend(**自注意力**),彻底去掉 RNN 的循环,从而**可并行**、长程一跳直达。注意力从"RNN 的附件"变成"整个架构的主干"。
 
-**Q/K/V 抽象(为后面 Transformer 打底)**:在 Bahdanau 里 query=解码状态 $s_{t-1}$、key=value=编码隐状态 $h_j`;Transformer 把三者**各自用一个投影矩阵**从同一输入生成($Q=XW_Q,K=XW_K,V=XW_V$),并区分 key(用来打分匹配)和 value(用来加权聚合)。"用 query 去匹配 key、按匹配度聚合 value"这个三件套,从 Bahdanau 的跨编解码注意力,一路用到 Transformer 的自注意力、交叉注意力,是理解一切现代注意力的统一模板。
+**[[LLM/003 Query、Key、Value 的设计|Q/K/V]] 抽象(为后面 Transformer 打底)**:在 Bahdanau 里 query=解码状态 $s_{t-1}$、key=value=编码隐状态 $h_j`;Transformer 把三者**各自用一个投影矩阵**从同一输入生成($Q=XW_Q,K=XW_K,V=XW_V$),并区分 key(用来打分匹配)和 value(用来加权聚合)。"用 query 去匹配 key、按匹配度聚合 value"这个三件套,从 Bahdanau 的跨编解码注意力,一路用到 Transformer 的自注意力、交叉注意力,是理解一切现代注意力的统一模板。
 
 ![[rnn-seq2seq瓶颈.png]]
 
@@ -145,4 +145,4 @@ print("缩放后 softmax:", softmax(scaled).round(3))   # 平滑、梯度健康
 - **缩放点积与 $1/\sqrt d$**:Vaswani et al.(2017)在 Luong 点积基础上加缩放,解决高维点积过大导致 softmax 饱和的问题。
 - **注意力可解释性争议**:Jain & Wallace, *Attention is not Explanation*(NAACL 2019)与 Wiegreffe & Pinter, *Attention is not not Explanation*(EMNLP 2019)正反交锋。
 - **更早的注意力萌芽**:Graves, *Generating Sequences With RNNs*(2013)手写生成里的高斯注意力;Mnih et al., *Recurrent Models of Visual Attention*(NeurIPS 2014)。
-- **下一步就是把注意力做成整个架构**:Transformer(Vaswani et al., "Attention Is All You Need", 2017)用缩放点积自注意力彻底替代循环,实现并行与长程建模——这是从本篇起源走向现代大模型的关键一跃(详见 LLM 域 Transformer 笔记)。
+- **下一步就是把注意力做成整个架构**:Transformer(Vaswani et al., "Attention Is All You Need", 2017)用缩放点积自注意力彻底替代循环,实现并行与长程建模——这是从本篇起源走向现代大模型的关键一跃(详见 [[LLM/002 自注意力 Self-Attention|自注意力]] 与 [[LLM/004 缩放点积注意力(为何除以根号 dk)|缩放点积注意力]])。

@@ -89,7 +89,7 @@ $$\text{RMS}(x)=\sqrt{\frac{1}{d}\sum_{i=1}^d x_i^2},\qquad y_i=\frac{x_i}{\text
 
 注意分母里**没有 $\mu$、也没有方差**(方差需要先算均值),省掉了"求均值 + 减均值"这一遍遍历,反向传播也更省。论文报告比 LN 提速 7%–64%、效果相当 —— 这正是 LLaMA、T5、Gemma 等现代大模型普遍改用 RMSNorm 的原因。它只有缩放参数 $g$,无偏移 $\beta$。
 
-**Pre-LN vs Post-LN(Transformer 必考)**。归一化放在残差块的哪里,直接影响深层 Transformer 能否稳定训练:
+**Pre-LN vs Post-LN(Transformer 必考)**。归一化放在残差块的哪里,直接影响深层 Transformer 能否稳定训练(Transformer 里 [[LLM/010 层归一化：Pre-LN 与 Post-LN|Pre-LN 与 Post-LN]] 的完整对比):
 - **Post-LN**(原版 Transformer):$x\to \text{LN}(x+\text{Sublayer}(x))$,归一化在残差**相加之后**。深层时梯度容易在底层变大,需要 warmup 才训得稳。
 - **Pre-LN**(GPT-2 之后主流):$x\to x+\text{Sublayer}(\text{LN}(x))$,归一化在子层**输入处**,残差主干是干净的恒等通路,梯度更稳、可去掉或减轻 warmup,能堆更深。代价是表达力略有损失,常在最后再补一个 LN。
 - 现代大模型(LLaMA 等)= **Pre-LN + RMSNorm** 的组合。

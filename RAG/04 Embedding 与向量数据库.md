@@ -116,6 +116,16 @@ for rank, i in enumerate(I[0]):
 - **IVF**:省内存、建索引快,靠 `nlist`(聚类桶数)和 `nprobe`(查询搜几个桶)调召回。`nprobe` 调小会漏召回(真最近邻落在没搜的桶)。适合内存受限、能接受微调召回的场景。
 - **IVF-PQ**:十亿级、内存极度受限时的选择。PQ 把向量量化压几十倍,有损,精度降,通常配重排或重排序兜底。
 
+**ANN 索引选型卡**(按规模/内存查):
+
+| 场景 | 选什么 | 为什么 |
+|---|---|---|
+| 千万级以内、内存够 | **HNSW** | 召回高、查询 O(log N) 快、`efSearch` 在线调召回;默认主力,闭眼选 |
+| 内存受限、能接受微调召回 | **IVF** | k-means 分桶只搜 nprobe 个,省内存、建索引快;nprobe 调小会漏召回 |
+| 十亿级 + 内存极度受限 | **IVF-PQ** | PQ 量化压几十倍,有损精度,必须配重排/全精度 rescore 兜底 |
+| 内存吃紧但不想换索引结构 | HNSW + **int8/二值量化** | 标量量化内存降 4 倍几乎免费,二值降 32 倍配 rescore 保召回 |
+| 召回不全先排查 | 调大 `efSearch`(HNSW)/ `nprobe`(IVF) | ANN 是近似,边界文档漏召多半是这两个参数调太小,别先怪 embedding |
+
 **量化(生产降本主力)**:
 - **Scalar / int8 量化**:float32→int8,内存降 4 倍,精度损失小,几乎免费的优化。Qdrant/Milvus 一行配置开。
 - **二值量化(binary)**:1 bit/维,内存降 32 倍,配 oversampling + 重排可保住召回,OpenAI v3 / Cohere v3 等模型对二值化友好。
@@ -190,6 +200,7 @@ hits = client.query_points(
 - 2026 模型:OpenAI v3 / Cohere v3 / **bge-m3(dense+sparse+多向量三合一, arXiv:2402.03216)** / E5 / Voyage / Nomic。
 - 选型基准:**MTEB(Muennighoff et al. 2022, arXiv:2210.07316)**,但没有通吃模型,需在自己数据上评([[18 RAG 评估|RAG 评估]])。
 - 换 embedding 模型必须**全量重建索引**;dense 有盲区,生产要叠 [[08 混合检索 Hybrid Search|混合检索 Hybrid Search]] + 重排。
+- **最新进展(2025-2026)**:MTEB v2 榜首已换代——**Google Gemini Embedding** 居英文检索榜首(分 ~68.3,3072 维、多模态),**Qwen3-Embedding-8B** 居多语言榜首(分 ~70.6,8B 开源、32K 上下文);开源多语言/长文检索首选已从 bge-m3 转向 Qwen3-Embedding(MTEB Leaderboard,2026)。
 
 ## 来源
 

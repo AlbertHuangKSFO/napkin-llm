@@ -80,3 +80,4 @@ spec:
 - **prefix-cache aware routing** 是 llm-d / KServe LLMInferenceService 的入口能力,经 Envoy AI Gateway + GIE 实现。
 - 命中前缀 ≈ 省掉整段 prefill;2000 token 前缀在 8B 单卡约省 ~0.2 s TTFT。
 - 网关层把「智能路由」与「引擎实现」解耦:换引擎(vLLM↔SGLang)、扩副本都不动网关,只改 pool 成员,呼应 [[094 OpenAI 兼容 API 与引擎抽象|OpenAI 兼容契约]]。
+- **最新进展(2025-2026)**:GIE 的 **`InferencePool` 已毕业到稳定 v1(GA)**,API 组 `inference.networking.k8s.io/v1`(2025-06 官博推出后转正);Istio、Envoy AI Gateway、NGINX Gateway Fabric、GKE Inference Gateway 均已支持,智能路由成为 K8s 上的稳定原语。(来源:Kubernetes Gateway API Inference Extension 文档 / k8s 博客 2025-06,2025–2026)

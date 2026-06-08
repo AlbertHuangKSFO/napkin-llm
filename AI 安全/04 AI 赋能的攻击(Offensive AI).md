@@ -74,6 +74,7 @@ Slopsquatting 把 offensive AI 和 [[10 供应链安全(静态)|供应链安全]
 - **FraudGPT**:犯罪论坛兜售,化名「CanadianKingpin12」推广,定位 WormGPT 后继。来源:LevelBlue/SpiderLabs、Palo Alto Unit 42。
 - **Slopsquatting**:Seth Larson 于 2025-04 命名(AI slop + typosquatting),Andrew Nesbitt 推广;学术论文《We Have a Package for You!》(2025-05)测得 ~19.7% 推荐包不存在、开源 21.7% vs 闭源 5.2%、20 万+ 独特幻觉名;USENIX Security 2025 跨 16 模型 57.6 万样本,幻觉名复现率 43%(十次全中)。先兆:2023 年 Bar Lanyado 的 `huggingface-cli` 占位包,3 个月 3 万+ 下载。来源:Wikipedia「Slopsquatting」、Snyk、Socket.dev、CSA。
 - **Dual-use**:offensive AI 的统摄概念,见 Palo Alto Unit 42《The Dual-Use Dilemma of AI: Malicious LLMs》。
+- **最新进展(2025-2026)**:自主漏洞挖掘已出里程碑——**XBOW**(AI 自主渗透 agent)于 **2025-06 首次登顶 HackerOne 美区排行榜**,几个月内提交 1000+ 漏洞报告(含 RCE/SQLi/XSS,命中 Amazon/PayPal/Disney 等),并融资 7500 万美元;关键工程点是**用确定性校验器(而非 LLM)验真漏洞**,降低误报。标志 offensive AI 从"写钓鱼/恶意代码"走向"端到端自主找洞"(HackerOne / Dark Reading,2025)。
 
 ## 工业界实践
 

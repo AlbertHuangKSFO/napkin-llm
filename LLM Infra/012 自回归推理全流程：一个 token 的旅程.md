@@ -16,7 +16,7 @@
 1. **查表**:"今"→id 1234 →embedding 表第 1234 行,得 `[4096]` 向量。prompt 4 个 token 一起 →`[4, 4096]` 矩阵。
 2. **过 32 层**:每层做 attention(写入 KV-Cache)+ FFN,形状始终 `[4, 4096]`。
 3. **LM Head**:取最后一个位置的 `[4096]` ×`[4096, 128000]`→`[128000]` logits。
-4. **采样**:softmax 后 top-p 采样,得 "样"→喂回。
+4. **采样**:softmax 后 [[LLM/101 采样解码：温度、top-k、top-p、min-p、重复惩罚|top-p 采样]],得 "样"→喂回。
 5. **decode 循环**:第 2 步只输入 "样" 这 1 个 token,形状 `[1, 4096]`,过 32 层(读全部 KV-Cache),出 1 个 logits,采 "?"……直到 EOS。
 
 Prefill 一次处理 4 个 token;decode 之后每步处理 1 个。若续写 200 token,就是 1 次 prefill + 199 次 decode。

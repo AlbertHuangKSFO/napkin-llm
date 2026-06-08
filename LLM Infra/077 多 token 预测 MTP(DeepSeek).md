@@ -32,7 +32,7 @@ $$
 
 ![[spec-MTP串行vs Medusa发散.png]]
 
-训练损失是各深度交叉熵的加权和:
+训练损失是各深度 [[深度学习基础/30 交叉熵与负对数似然|交叉熵]] 的加权和:
 
 $$
 \mathcal{L}_\text{MTP} \;=\; \lambda \cdot \frac{1}{D}\sum_{d=1}^{D} \mathrm{CE}\big(x_{t+1+d},\, p^{(d)}\big)

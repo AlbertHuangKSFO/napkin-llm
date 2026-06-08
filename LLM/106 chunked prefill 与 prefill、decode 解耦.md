@@ -12,7 +12,7 @@
 两个解法,对应两种部署哲学:
 
 - **chunked prefill(同机融合)**:别让长 prefill 独占一步。把它**切成小块**,每步只跑一块,**和正在 decode 的请求拼进同一个 batch**。prefill 块吃满算力,decode「搭车(piggyback)」用闲置的带宽——两者性质互补,几乎免费叠加。
-- **PD 分离(prefill/decode disaggregation)**:干脆把 prefill 和 decode **拆到两组不同的 GPU 上**,各配最划算的硬件、各自扩缩、互不干扰;代价是 prefill 算完要把 KV-Cache **传**给 decode 机。
+- **PD 分离(prefill/decode disaggregation)**(系统设计深入见 [[LLM Infra/048 为何分离 prefill 与 decode|PD 分离]]):干脆把 prefill 和 decode **拆到两组不同的 GPU 上**,各配最划算的硬件、各自扩缩、互不干扰;代价是 prefill 算完要把 KV-Cache **传**给 decode 机。
 
 ## ② 例子:4096 token 的 prompt,切 vs 不切
 

@@ -94,7 +94,7 @@ class MLA(torch.nn.Module):
 - **MLA 和 MQA/GQA 的本质区别?** MQA/GQA 缓存的是**完整 K/V**(只是头数少);MLA 缓存的是**低秩潜向量 c**,各头有独立上投影解压 → 显存像 MQA、表达力像 MHA。
 - **为什么 RoPE 要"解耦"?** [[031 RoPE 旋转位置编码(推导与实现)|RoPE]] 让 K 带位置相关旋转,与位置无关的潜向量 $c$ 无法吸收它;若硬压进 $c$,就不能把上投影矩阵吸收进 $W_Q/W_O$、缓存也回到 K/V 级别。故把位置信息单拎一支(共享、维度小)。
 - **"吸收(absorb)"是什么、为何重要?** 把上投影 $W^{UK}/W^{UV}$ 合并进 $W_Q/W_O$,推理时直接在潜空间计算,**不必解压出完整 K/V**——这才让 MLA 既省显存又不增加 decode 算力。
-- **MLA 能用 [[025 FlashAttention(IO 感知精确注意力)|FlashAttention]] 吗?** 需适配(解耦 RoPE 的拼接维度、吸收后的等价形式),DeepSeek 提供了专门 kernel。
+- **MLA 能用 [[025 FlashAttention(IO 感知精确注意力)|FlashAttention]] 吗?** 需适配(解耦 RoPE 的拼接维度、吸收后的等价形式),DeepSeek 提供了专门 kernel([[LLM Infra/026 FlashMLA：DeepSeek 的 MLA 推理内核|FlashMLA]])。
 - **MLA vs GQA 取舍?** MLA 省得更狠且质量更好,但实现复杂(下/上投影、解耦、吸收);GQA 实现简单、生态成熟。新模型若追求极致长上下文/吞吐选 MLA。
 - **MLA 为什么质量能不降反升?** 低秩压缩相当于在 K/V 上加了一个**结构先验/正则**(强制 K、V 落在共享低秩子空间),既去冗余又略增稳健;加上各头独立上投影保留多头表达,综合下来基准常优于同规模 MHA 基线。
 - **Q 也压缩吗?** 是。DeepSeek-V2 对 Q 也做低秩(下投影到 $d_c'$ 再上投影),但 Q 不进 KV-Cache、压它只为省**训练激活显存**,与省 KV-Cache 是两件事——别混。

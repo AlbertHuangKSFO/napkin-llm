@@ -67,3 +67,4 @@ neuron_model = torch_neuronx.trace(model, example_inputs)
 - **AWS Trainium2**:8× NeuronCore-V3,96GB HBM3、2.9 TB/s;Trn2 实例 16 卡(1.5TB HBM、46 TB/s),Trn2 UltraServer 64 卡(83.2 PFLOPS FP8)。Trainium3(2025 末)144GB HBM3e、4.9 TB/s、NeuronLink-v4 2 TB/s。
 - **AMD MI300X**:192GB HBM3、5.325 TB/s、304 CU、8× XCD(CDNA3)、Infinity Fabric 128 GB/s/卡、ROCm 6。
 - **范式总结**:脉动阵列(TPU)= 能效/规整 matmul;chiplet 大显存(MI300X)= 单卡装得多;通用 GPU(NVIDIA)= 生态王者。三者都在抢「带宽限的搬权重」生意。
+- **最新进展(2025-2026)**:**TPU v7 Ironwood**(2025,主打推理):192GB HBM3e、7.4 TB/s、~4.6 PFLOPS 稠密 FP8(略超 B200),ICI 9.6 Tbps、superpod 可达 9216 卡。**AMD MI355X**(CDNA4,2025 下半年):288GB HBM3E、8 TB/s、原生 **MXFP4/MXFP6**,配 **ROCm 7**(upstream PyTorch、Triton 后端、一等 FP4/FP6)。即 TPU/AMD 均已对齐 Blackwell 的 FP8/FP4 与大显存路线。(来源:Google Cloud Ironwood 文档 / AMD Instinct MI355X 页 / Tom's Hardware,2025–2026)

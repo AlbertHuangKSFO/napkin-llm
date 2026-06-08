@@ -115,3 +115,4 @@ print("AQLM 重构误差:", np.abs(w - rec).mean(), "  存储:", M, "个 8-bit �
 - AQLM 出自 Egiazarian, Panferov, Kuznedelev, Frantar, Babenko, Alistarh《Extreme Compression of Large Language Models via Additive Quantization》(2024,arXiv:2401.06118),2024 年 2 月开源并入 HuggingFace。
 - AQLM 是首个在 **<3 bit 区间 Pareto 最优**、并在 **2-bit 极端压缩**上显著超越已有方案的方法;源自多码本量化(MCQ)家族。
 - 与 [[097 NF4 与 QLoRA 4-bit|NF4(4-bit)]]、[[096 AWQ 与 SmoothQuant|AWQ]] 对比:NF4/AWQ 多在 3–4 bit,AQLM 把可用区间下探到 2 bit;FP8 则同时服务训练与推理。
+- **最新进展(2025-2026)**:4-bit 浮点成为新焦点——OCP 的 **MXFP4**(块共享 8-bit scale)与 NVIDIA **NVFP4**(Blackwell 原生、16 元素小块 + FP8 块缩放,表达力更强)于 2025-09 落地各量化框架;NVIDIA 用 NVFP4 **预训练**一个 12B Mamba-Transformer,loss 几乎贴齐 FP8 基线、下游基本无损,首次证明 4-bit 浮点可直接用于大模型训练而非仅推理(NVIDIA, Pretraining LLMs with NVFP4, arXiv:2509.25149;2025-11)。

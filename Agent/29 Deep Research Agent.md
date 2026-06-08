@@ -95,6 +95,7 @@ return report
 - **引用可追溯**是产品级 Deep Research 的硬指标,也是评估重点(引用是否真支撑结论),评估方法见 [[38 Agent 评估与可观测性|Agent 评估与可观测性]]。
 - 天然适合 [[22 多智能体系统|多智能体系统]]:orchestrator 负责规划与综合,多个研究子 agent 各查一个子问题(context 隔离,互不污染)。
 - gpt-researcher 受 STORM 论文启发;两者取向不同——前者偏开发者向、深度研究报告,后者偏维基式知识策展。
+- **最新进展(2025-2026)**:Google 2026-04 把 Gemini Deep Research 从消费 App 抽出、重做成 **Deep Research / Deep Research Max** 两档 Gemini API 工具(公开预览),首次支持**一次调用里把联网检索 + 企业私有数据流合并**,直接产出带引用、内嵌图表的报告——Deep Research 从"聊天里的模式"走向"可编排的 API 原语"(The Decoder / Google,2026)。
 
 ## 主流开源实现 / Python 库
 

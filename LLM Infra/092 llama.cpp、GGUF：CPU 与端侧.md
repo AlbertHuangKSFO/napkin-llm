@@ -6,7 +6,7 @@
 
 ## ② 小数字例子:GGUF 量化把模型塞进消费级硬件
 
-- **Q4_K_M**:非整数有效位宽约 **4.5 bpw**;7B 模型量化后约 **4.1 GB**(比 FP16 小约 70%),WikiText-2 困惑度相对 FP16 仅升 ~0.1–0.3,对话/指令任务几乎无感。
+- **Q4_K_M**:非整数有效位宽约 **4.5 bpw**;7B 模型量化后约 **4.1 GB**(比 FP16 小约 70%),WikiText-2 [[LLM/109 语言模型评估：困惑度与 bits-per-byte|困惑度]]相对 FP16 仅升 ~0.1–0.3,对话/指令任务几乎无感。
 - **无 GPU 也能跑**:CPU 路径用 AVX2/AVX-512(x86)、ARM NEON(Apple/Arm)SIMD;还能**部分层 offload 到 GPU**。
 - **Apple 一等公民**:M 系列经 NEON + Accelerate + Metal 优化,MacBook 无独显也能跑 4bit 70B(慢但能跑)。
 - 这把「Llama-3.3-70B、Qwen 大模型 FP16 装不进消费硬件」的鸿沟用 4/5bit 量化补上。

@@ -43,7 +43,7 @@
 **吞吐 vs 延迟。** 连续批本质还是「攒 batch 提吞吐」(见 [[078 推理算力、吞吐与延迟、Roofline|吞吐延迟]]):batch 越满、访存摊得越薄、吞吐越高;但每条请求的 TPOT 会因同批请求多而略升。生产上用「最大批 + 显存上限」平衡。
 
 **两个生产级旋钮与陷阱。**
-- **抢占与重计算(preemption)**:显存吃紧时,调度器可能要把某些正在跑的请求「踢出去」腾 KV。两种回收策略:① **swap**(把 KV 换到 CPU 内存,需要时换回);② **recompute**(直接丢弃 KV,等有空再从头 prefill)。vLLM 默认 recompute——因为 prefill 是算力受限、很快,而 swap 占 PCIe 带宽。被抢占的请求体验上是一段「卡顿」。
+- **抢占与重计算(preemption)**(swap 与 recompute 的取舍详见 [[LLM Infra/045 抢占：重计算 vs swap|抢占]]):显存吃紧时,调度器可能要把某些正在跑的请求「踢出去」腾 KV。两种回收策略:① **swap**(把 KV 换到 CPU 内存,需要时换回);② **recompute**(直接丢弃 KV,等有空再从头 prefill)。vLLM 默认 recompute——因为 prefill 是算力受限、很快,而 swap 占 PCIe 带宽。被抢占的请求体验上是一段「卡顿」。
 
 ![[sched-抢占swap与recompute.png]]
 - **公平性与饥饿**:若一味让短请求插队,长请求可能长期排不进(饥饿)。调度器需平衡吞吐与公平,常用 FCFS + 准入控制,或给长等待请求提优先级。

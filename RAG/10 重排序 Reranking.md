@@ -119,6 +119,17 @@ def mmr(query_vec, cand_vecs, candidates, k=5, lam=0.7):
 - **LLM-as-reranker / RankGPT**:让 LLM 输出候选**排列**(见正文 arXiv:2304.09542),最准最贵最慢,适合候选极少、质量要求极高(如法律/医疗终审)。
 - **ColBERT / 后期交互(late interaction)**:介于 bi/cross 之间——doc 的 token 级向量可**预存建索引**,在线只算 query token 与 doc token 的 MaxSim,兼顾精度与可扩展;生产里 ColBERTv2 / PLAID、以及向量库内置的多向量检索(Qdrant multivector、Vespa)是"想要 cross-encoder 精度又怕它扫不动"的折中。
 
+**reranker 选型卡**(按场景挑具体模型):
+
+| 场景 | 选什么 | 为什么 |
+|---|---|---|
+| 不想自托管、要开箱即用 | **Cohere Rerank 3.5**(API) | 100+ 语言、BEIR/金融电商 SOTA,已上 Bedrock/Azure,企业零运维 |
+| 中文 / 多语言 + 可自托管 | **Qwen3-Reranker**(0.6/4/8B) | 2025 中文新首选,CMTEB-R 77.45,可微调,数据可控 |
+| 延迟敏感 / 轻量基线 | **bge-reranker-base** 或 **mxbai** | 小、快、易微调,延迟敏感场景常用 base |
+| 候选极少 + 质量要求极高 | **LLM-as-reranker / RankGPT** | listwise 输出排列最准,但最贵最慢,法律/医疗终审才值 |
+| 想要 cross-encoder 精度又怕扫不动 | **ColBERT / 后期交互** | doc token 向量可预存建索引,在线只算 MaxSim,精度与可扩展折中 |
+| 专业域(法律/医疗/代码)不准 | 域内 (query,pos,neg) 三元组**微调** bge/Qwen3 | 通用 reranker 语义偏移大,微调比换模型更划算 |
+
 **典型架构与配置**
 ```
 混合检索(BM25 + 向量,RRF 融合)→ top-100~200 候选

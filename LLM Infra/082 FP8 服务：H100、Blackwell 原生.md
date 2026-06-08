@@ -60,3 +60,4 @@ trtllm-build --checkpoint_dir ./llama --dtype bfloat16 --use_fp8 ...
 - 硬件门槛:FP8 Tensor Core 自 **Hopper(H100, 2022)、Ada(L40S)** 起原生;A100/Ampere **无**。
 - Blackwell(B200)在 FP8 之上再加**原生 FP4(NVFP4)**,但 FP8 仍是稳妥默认;FP4 更激进、需 QAT/蒸馏回收(见 [[085 校准、精度回退与离群值|校准与回退]])。
 - KV 也可独立用 FP8 E4M3 存(见 [[083 KV 量化与服务吞吐|KV 量化与服务吞吐]]),与权重/激活 FP8 正交。
+- **最新进展(2025-2026)**:Blackwell 上 **NVFP4**(微缩放 FP4 标准)已进入生产——TensorRT-LLM(≥0.17)与 vLLM 均可直接服务预量化 NVFP4 权重(配 NVIDIA ModelOpt / llm-compressor PTQ),报告**精度近 FP8、吞吐约 2.3×、显存约 1.8× 优于 FP8**;FP8 仍是稳妥默认,但 Blackwell 上 NVFP4 正成为更激进的高吞吐选项。(来源:NVIDIA "Introducing NVFP4" Technical Blog / Red Hat Developers,2025–2026)

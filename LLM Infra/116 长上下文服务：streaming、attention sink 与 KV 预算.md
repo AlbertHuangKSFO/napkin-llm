@@ -10,7 +10,7 @@
 - 关键观察:朴素滑窗若把最前 4 个 sink 也淘汰,**困惑度爆炸**——丢掉了 softmax 的泄洪口。
 
 ## 原理:注意力汇与 KV 预算
-训练好的 decoder-only 模型(Llama、Mistral、Falcon、Pythia 皆然)深层里,后面每个 query 都把**大量注意力质量倒给最前 1~4 个 token**,哪怕它们语义为空。原因:softmax 必须把权重归一到和为 1,当 query 对当前所有 token 都「不太想看」时,多余质量需要一个**默认倾倒处**,前几位天然充当:
+训练好的 decoder-only 模型(Llama、Mistral、Falcon、Pythia 皆然)深层里,后面每个 query 都把**大量注意力质量倒给最前 1~4 个 token**,哪怕它们语义为空。原因:[[深度学习基础/27 Softmax 与温度|softmax]] 必须把权重归一到和为 1,当 query 对当前所有 token 都「不太想看」时,多余质量需要一个**默认倾倒处**,前几位天然充当:
 
 $$
 \sum_{j=1}^{t}\mathrm{softmax}(s_{tj})=1,\qquad s_{tj}=\frac{q_t k_j^\top}{\sqrt{d}}
@@ -63,6 +63,16 @@ sp = SamplingParams(max_tokens=1_000_000)  # 超长流式生成
 ❌ 无限会话仍保全量 KV → KV ∝ T 线性涨 → OOM、prefill 变慢、并发塌方;或朴素滑窗连 sink 一起淘汰 → 困惑度爆炸
 ✅ 留前 4 个 attention sink + 近窗 → KV 定长、显存稳、时延可预测、免微调,代价是远端精确召回丢失(按需配 offload 补)
 ```
+
+## 选型卡:长上下文 KV 预算策略怎么选
+
+| 场景 | 选什么 | 为什么 |
+|---|---|---|
+| 无限会话 / 流式 chat,不需精确回溯远端 | **StreamingLLM**(sink + 近窗) | KV 定长($K{+}W$)、显存稳、免微调;代价是中间历史精确召回丢失 |
+| 需真正用上超长窗(长文 QA、大海捞针) | **YaRN / 位置插值**扩窗 + 全量 KV | 精确扩有效窗;但 KV 仍 ∝ $T$,显存随长度涨 |
+| 历史不能丢、又放不下显存 | **[[036 KV 分层 offload：GPU、CPU、SSD(LMCache)|分层 offload]]**(无损) | 把冷 KV 搬到 CPU/SSD,要用再载回,不掉点 |
+| 一般生成、想省 KV 又少掉点 | **H2O**(按累计注意力留重击者) | 比纯滑窗更聪明地丢冷 token,见 [[035 KV 驱逐与压缩：H2O 与注意力汇|KV 驱逐]] |
+| 近窗要精确、远端可粗 | **分段**:近窗精确 + 远端驱逐/offload | 兼顾时延可预测与远端不彻底丢失 |
 
 ## 面试高频
 - **长会话为什么会 OOM?** KV-Cache ∝ 序列长 $T$ 线性增长;不裁剪迟早撑爆显存,且 attention/prefill 也随长度变慢、可服务并发骤降。

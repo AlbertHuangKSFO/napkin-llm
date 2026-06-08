@@ -133,6 +133,7 @@ print(optimized(question="意大利的首都是?").answer)
 - 出处:**Stanford NLP,前身 DSP**,论文 arXiv 2310.03714,2026 已到 **DSPy 3**。
 - 适用前提:**任务有可量化 metric + 少量样例**;换模型只需重 compile。
 - 与 RL 的分工:**DSPy 不改权重(prompt 层),[[32 Agentic RL 与训练|Agentic RL 与训练]] 改权重(模型层)**。
+- **最新进展(2025-2026)**:反思式优化器 **GEPA(Genetic-Pareto)** 成新 SOTA——论文报告在多任务上**超 MIPROv2 约 13%、超 GRPO 约 20%,且少用约 35× rollout**(仅靠指令精炼即可大幅提分),已被 ICLR 2026 收为 oral,既集成进 `dspy.GEPA` 也独立成 `pip install gepa`(Agrawal et al.,arXiv 2507.19457,2025)。
 
 ## 主流开源实现 / Python 库
 

@@ -90,6 +90,7 @@ def answer(query, corpus):
 - **Gemini 1.5 Pro**(arXiv:2403.05530):needle-in-haystack 1M token >99.7% 召回,但**多事实真实检索召回约 60%**,1M 请求延迟约 RAG 的 30~60×、成本约 1250×。
 - RAG 的唯一硬伤是**召回**,且有一整套补丁(混合检索/重排/多跳/进阶索引)可把它逼近 agentic 水平,而成本仍最低。
 - 三者非互斥:[[36 Agentic RAG|Agentic RAG]] = RAG 召回 + agent 多轮迭代,长上下文作单步容量旋钮;选型实质是"以谁为主、补到多少"。
+- **最新进展(2025-2026)**:1M token 已是前沿模型标配(Claude Sonnet 4.6、Qwen 3.x、Gemini 等),Llama 4 Scout 甚至号称 10M——但**标称 ≠ 有效**:除少数模型外,多针(multi-needle)生产负载的**有效上下文仍只在 200–400K** band,单针 NIAH 分数比真实多针能力虚高 15–40 分。共识固化为"**RAG + 中长上下文是几乎所有严肃应用的生产范式**",纯长上下文退为小众;>1M / 日更语料仍是 RAG-only(行业实测,2026)。
 
 ## 工业界实践
 

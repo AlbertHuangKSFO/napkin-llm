@@ -129,3 +129,4 @@ for x in prompt_only_data:                    # 只有 prompt
 - 3H(Helpful/Honest/Harmless)对齐目标与对齐税出自 Anthropic(Askell et al., 2021, arXiv:2112.00861)与 InstructGPT(PPO-ptx 混预训练梯度缓解掉点)。
 - 现代变体:DPO(Rafailov et al., 2023, arXiv:2305.18290)去 RM+PPO;拒绝采样/Best-of-N 用于 Llama-2(Touvron et al., 2023, arXiv:2307.09288);GRPO(Shao et al., 2024, arXiv:2402.03300)去 critic;RLAIF/宪法 AI(Bai et al., 2022, arXiv:2212.08073)用 AI 标注。
 - 关联:[[081 指令微调 SFT 与数据构造|SFT]]、[[083 奖励模型 RM|RM]]、[[084 策略梯度与 PPO 基础|PPO]]、[[085 RLHF 全流程与 KL 约束、奖励黑客|RLHF 全流程]]、[[086 DPO 直接偏好优化(推导)|DPO]]、[[088 GRPO 与可验证奖励|GRPO]]。
+- **最新进展(2025-2026)**:后训练已从「一套 RLHF 走天下」转为**按任务选栈的模块化流程**——SFT 管指令遵循,偏好优化(DPO/SimPO/KTO)管风格/语气对齐,**RLVR(可验证奖励 RL,GRPO/DAPO)** 管数学/代码/工具调用等可客观判定的推理任务;2025 年几乎每个前沿模型(R1、Nemotron、GPT-5 系)都用不同的后训练组合,而非统一三段(post-training 综述,2025-2026)。
