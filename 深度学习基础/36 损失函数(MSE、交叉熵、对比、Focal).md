@@ -50,6 +50,8 @@ $$\mathcal L=-\ln\frac{\exp(\text{sim}(a,a^+)/\tau)}{\exp(\text{sim}(a,a^+)/\tau
 
 **Triplet Loss(对比的另一形态)**。$\mathcal L=\max(0,\ d(a,a^+)-d(a,a^-)+m)$:让锚点到正样本的距离比到负样本至少小一个间隔 $m$,否则受罚。人脸识别(FaceNet)的经典损失;与 InfoNCE 的区别是它一次只用一个负样本、用 margin 而非 softmax。
 
+![[nn-对比损失几何.png]]
+
 **Hinge Loss(SVM,补全分类损失谱)**。$\mathcal L=\max(0,\ 1-y\cdot\hat z)$($y\in\{-1,+1\}$):分对且间隔 $\ge1$ 则 0 损失,否则线性受罚。最大化间隔、产生稀疏支持向量;与交叉熵的区别是它不输出概率、对"分对且远离边界"的样本梯度为 0。
 
 **Focal Loss**。记 $p_t$ 为模型对**真类**给的概率(预测越准 $p_t$ 越大)。在交叉熵 $-\ln p_t$ 前乘一个**调制因子** $(1-p_t)^\gamma$,再配类别权重 $\alpha_t$:

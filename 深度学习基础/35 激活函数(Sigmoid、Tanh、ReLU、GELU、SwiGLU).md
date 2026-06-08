@@ -72,6 +72,8 @@ $$\mathrm{SwiGLU}(x)=\mathrm{Swish}(xW)\odot(xV)$$
 
 $\odot$ 是逐元素乘。一路经 Swish 当 0~1 的"阀门",控制另一路线性投影通过多少。Shazeer(2020)发现 GEGLU/SwiGLU 在 Transformer FFN 上困惑度更低,**LLaMA、PaLM 等现代 LLM 采用**。代价:门控多一组投影矩阵(从 2 个变 3 个权重矩阵),通常把 FFN 隐藏维按 $\tfrac23$ 缩回去补偿参数量(LLaMA 即用 $\tfrac{8}{3}d$ 而非 $4d$)。
 
+![[nn-SwiGLU门控.png]]
+
 **GLU 家族**:门控线性单元的通式是 $\text{act}(xW)\odot(xV)$,换不同 act 得不同成员——Sigmoid→GLU、GELU→GEGLU、Swish→SwiGLU、ReLU→ReGLU。共同点:一路当"软阀门"控制另一路通过多少,比单一逐元素激活多了"按内容选择信息通路"的能力。
 
 **输出层激活按任务定(单列一条,易错)**:

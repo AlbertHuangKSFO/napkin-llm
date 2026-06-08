@@ -15,6 +15,8 @@
 ![[orch-098EPP打分.png]]
 2. **cache-aware 路由**:KV Cache Manager 跟踪"哪些 KV block 在哪个节点",把请求路由到已持有相关前缀的 Pod,避免跨副本重算([[038 KV-aware 路由与跨引擎复用|KV-aware 路由]] 的工程化)。
 3. **PD 解耦**:Prefill 池与 Decode 池独立部署、独立扩缩。Decode 用高 TP/大显存;Prefill 用多副本/低 TP;两池间用 NIXL 点对点搬 KV。降 TTFT、稳 [[018 TTFT、TPOT、ITL 与 goodput：服务指标定义|TPOT]]。
+
+![[disagg-llmd-nixl搬运.png]]
 4. **跨节点扩展**:跨节点 TP、Wide-EP(大 MoE)、分层 KV offload(GPU/CPU/远端,[[036 KV 分层 offload：GPU、CPU、SSD(LMCache)|LMCache 思路]]),让模型大到超单节点也能服务。
 
 ![[orch-098PD请求旅程.png]]

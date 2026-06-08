@@ -46,6 +46,8 @@ $$O(n\cdot W)\quad(\text{当 }W\ll n\text{ 时近似线性})$$
 
 **滚动缓存里的"注意力陷阱"(StreamingLLM 的 attention sink)。** 把 KV-Cache 截到最近 $W$ 个看似无损,但实测**一丢掉最早几个 token(尤其第 0 个),困惑度会突然爆炸**——因为模型训练时学会把大量注意力"倾倒"到序列开头的几个 token 上(称 attention sink,一个 softmax 必须把概率分到某处的副产物)。修法([[107 长上下文推理：YaRN、位置插值与 StreamingLLM|StreamingLLM]]):缓存**始终保留开头 4 个 token + 最近的滑动窗口**,即"sink + window",就能稳定地无限长流式生成。这是滑窗/滚动缓存最易踩的坑。
 
+![[attn-attention-sink.png]]
+
 这是降低 [[014 注意力复杂度 O(n²) 与瓶颈|O(n²) 瓶颈]]里**算力**那一维(与只省缓存的 [[019 GQA 分组查询注意力|GQA]] 互补,二者可叠加)。
 
 ![[attn-滑窗带状.png]]

@@ -40,6 +40,8 @@ $$\text{Elo}_i=400\cdot\log_{10}\!\frac{\text{strength}_i}{\text{strength}_{\tex
 
 由 $\sigma$ 可反推:Elo 差 $400$ → 约 $10:1$ 胜率;差 $0$ → 五五开。
 
+![[eval-bradley-terry-elo.png]]
+
 **位置偏置的去偏(形式化)。** 设裁判对顺序敏感,定义「A 在前判 A 胜」为 $w_{AB}$、「B 在前判 A 胜」为 $w_{BA}$。稳健判定:只有 $w_{AB}\wedge w_{BA}$ 都成立才记 A 胜,只有都不成立才记 B 胜,否则记平局——这样消掉一阶位置效应。
 
 **AlpacaEval 的胜率 + 长度去偏(另一主流 judge 基准)。** 不同于 MT-Bench 的 1–10 绝对打分,AlpacaEval 让裁判把候选模型的回答和一个**固定参考模型**(如 GPT-4-turbo)的回答两两比,算**胜率(win rate)**。问题同样是冗长偏置——长回答更易赢。于是出 **length-controlled(LC)版本**:用回归把「长度」对胜率的影响剥离,得到「同等长度下的真实胜率」。LC-AlpacaEval 与 Arena 人类偏好的相关性显著更高,成了离线 judge 的常用指标。这和 Arena 的 style control 是同一思想:**把风格混淆因子从能力信号里回归掉**。

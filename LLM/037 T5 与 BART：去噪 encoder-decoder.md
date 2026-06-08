@@ -24,6 +24,8 @@ BART 对同一句话可能这样加噪:`Thank ___ me your party .`(遮挡 + 删�
 
 **BART 的五种噪声(具体)**。BART 论文系统试了多种破坏方式,最终配方混用:① **token masking**(像 BERT 遮单个词);② **token deletion**(直接删词,模型还要自己判断「哪里少了」);③ **text infilling**(挖掉一段连续 span,用**单个** `[MASK]` 代替——逼模型预测「这里原本有几个词」,这一项最关键);④ **sentence permutation**(句子顺序打乱);⑤ **document rotation**(把文档旋转到从某个随机 token 开头)。其中 text infilling + sentence permutation 组合效果最好。
 
+![[hist-bart五噪声.png]]
+
 **T5 的 text-to-text 前缀长什么样(更多例子)**。同一个 T5 模型靠不同前缀通吃所有任务,输出永远是文本:
 
 | 任务 | 输入(带前缀) | 目标输出 |
@@ -50,6 +52,8 @@ $$\mathcal{L} = -\sum_{t=1}^{m}\log P_\theta\big(y_t \mid y_{<t},\,\tilde{x}\big
 **T5 的位置编码**:用**相对位置偏置**(每个注意力头加一个可学习的、按相对距离分桶的标量),而非正弦或 [[031 RoPE 旋转位置编码(推导与实现)|RoPE]]——这是 T5 与后来 decoder-only 模型的一个显著差异。具体做法:把相对距离 $|i-j|$ 按对数分桶(近处分得细、远处粗,共 32 个桶),每个桶 × 每个头对应一个可学习标量,直接加到注意力 logits 上。好处是不占输入维度、相对位置天然、可一定程度外推。
 
 **为什么 encoder-decoder 的 cross-attention 不可省**。decoder 生成每个 token 时,通过 [[012 交叉注意力 Cross-Attention|cross-attention]] 去「查」encoder 编码好的整段输入:Query 来自 decoder 当前位置,Key/Value 来自 encoder 输出。这让 decoder 在生成时**始终能看到完整、双向编码过的源文本**——这是 seq2seq(翻译/摘要)的天然契合点。相比之下 decoder-only 把「输入」和「输出」拼成一条序列、共用一套因果注意力,没有独立的双向 encoder。
+
+![[tf-bart-crossattn.png]]
 
 **架构消融:T5 论文比过三种结构**。Raffel 等系统对比了 encoder-decoder、language model(decoder-only)、prefix-LM 三种,结论是在他们的迁移学习设定下 **encoder-decoder + span corruption 最优**——但这个结论是在「中等规模 + 有监督迁移」下得到的;到了**超大规模纯自监督**,decoder-only 反而胜出(见下方面试高频)。这是「为什么论文说 enc-dec 好、实际主流却是 decoder-only」这个常见困惑的根源。
 

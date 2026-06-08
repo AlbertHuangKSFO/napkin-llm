@@ -57,6 +57,8 @@ $$\theta_t=\theta_{t-1}-\eta\,\frac{\hat m_t}{\sqrt{\hat v_t}+\epsilon}$$
 $$\theta_t=\theta_{t-1}-\eta\Big(\frac{\hat m_t}{\sqrt{\hat v_t}+\epsilon}+\lambda\,\theta_{t-1}\Big)$$
 即正则项 $\lambda\theta$ **不经过** $\sqrt{\hat v_t}$ 缩放,所有参数被均匀地往 0 拉。这让 [[42 正则化(L2、Dropout、早停、标签平滑)|权重衰减]] 行为可控、泛化更好,是当今 Transformer/LLM 的默认优化器。
 
+![[nn-AdamW解耦.png]]
+
 ![[nn-adam自适应.png]]
 
 **⑥ Lion(EvoLved Sign Momentum,Chen et al. 2023)**。用符号搜索发现的新优化器:只维护**一个动量**、更新方向取**符号**(类似 sign-SGD + 动量),不存二阶矩 → 显存约为 Adam 的一半。

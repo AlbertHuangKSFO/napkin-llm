@@ -58,6 +58,8 @@ $$y=\sum_{e\in\mathcal{T}} g_e\,\mathrm{FFN}_e(x)$$
 
 $$\underbrace{x_{\text{(按卡)}}}_{\text{dispatch}}\xrightarrow{\text{all-to-all}} x_{\text{(按专家)}}\xrightarrow{\mathrm{FFN}_e}\ y_{\text{(按专家)}}\xrightarrow[\text{combine}]{\text{all-to-all}}\ y_{\text{(按卡)}}$$
 
+![[moe-EP双向all2all.png]]
+
 **3. capacity factor 与丢弃。** 给每个专家设容量 $C=\lceil \text{cf}\cdot \frac{kN}{E}\rceil$($\text{cf}$ 常取 1.0~1.25)。超过 $C$ 的 token 被丢弃(只走残差,不过专家)。这把不规则的动态路由变成**固定形状的张量**,让 all-to-all 能用规整通信、不爆显存——代价是丢 token(轻微掉点)。GShard、Switch Transformer 都靠它。
 
 **4. EP 与别的并行正交。** EP 切专家、TP 切单个专家内部的矩阵、DP 复制整套、PP 切层。大模型常**叠加**:`EP×TP×DP`。EP 的 all-to-all 发生在 MoE 层;非 MoE 部分(attention、稠密 FFN)走普通 TP/DP。完整谱系见 [[068 并行总览：DP、TP、PP、EP、SP|并行总览]]。

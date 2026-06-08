@@ -23,6 +23,8 @@ $$
 
 ![[ipar-专家并行all-to-all.png]]
 
+![[ipar-ep三段时序.png]]
+
 ```python
 # SGLang:开专家并行服务 DeepSeek-V3(EP=8,与 TP/DP 组合)
 # python -m sglang.launch_server \

@@ -59,6 +59,8 @@ print(out[0].outputs[0].text)
 - **为什么 prefill 变重?** 一张图展开成数百~上千 visual token,prefill 计算 ∝ 序列长,图像 token 远多于文本 → 算力受限加剧、TTFT 升高。
 - **怎么缓存优化?** 三层:图像 embedding / encoder 输出缓存(同图多轮免重编码)、前缀 KV 缓存(同图同前缀多问命中)、多模态 KV 驱逐/压缩(visual token 冗余高,可裁)。
 - **EPD 解耦是什么?** 把 Encode(encoder)、Prefill、Decode 拆成独立 worker;encoder 与 LM 资源画像不同,分开部署与扩缩,避免 encoder 堵住主干。
+
+![[infer-EPD三段.png]]
 - **多模态 KV 和文本 KV 一样吗?** 在 attention 里同质,visual token 的 KV 一样进 PagedAttention 块;区别在量大、冗余高,更需驱逐/压缩。
 - **batch 里图文混排有什么坑?** 图像请求 prefill 重、文本请求 decode 轻,混批干扰大,需调度感知(chunked prefill、PD 分离缓解)。
 

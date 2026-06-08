@@ -44,6 +44,8 @@
 
 **两个生产级旋钮与陷阱。**
 - **抢占与重计算(preemption)**:显存吃紧时,调度器可能要把某些正在跑的请求「踢出去」腾 KV。两种回收策略:① **swap**(把 KV 换到 CPU 内存,需要时换回);② **recompute**(直接丢弃 KV,等有空再从头 prefill)。vLLM 默认 recompute——因为 prefill 是算力受限、很快,而 swap 占 PCIe 带宽。被抢占的请求体验上是一段「卡顿」。
+
+![[sched-抢占swap与recompute.png]]
 - **公平性与饥饿**:若一味让短请求插队,长请求可能长期排不进(饥饿)。调度器需平衡吞吐与公平,常用 FCFS + 准入控制,或给长等待请求提优先级。
 - **prefill 与 decode 同批的干扰**:新请求的 prefill 是大 GEMM,塞进 decode 批会拖慢这一步的所有 decode(TPOT 抖动)——这正是 [[106 chunked prefill 与 prefill、decode 解耦|chunked prefill]] 要解决的,把长 prefill 切块,避免独占一步。
 

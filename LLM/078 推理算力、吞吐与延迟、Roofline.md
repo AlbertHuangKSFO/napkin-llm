@@ -74,6 +74,8 @@ $$\text{TPOT}\approx\frac{N\,b_{\text{param}}+\text{KV 字节}}{\beta}.$$
 $$\text{可用显存}=\text{总显存}-\text{权重},\quad b_{\max}=\frac{\text{可用显存}}{2Lsd_{kv}\cdot b_{\text{param}}}.$$
 例:H100 80GB、7B 权重 14GB → 剩 66GB;单条 s=4096 的 KV ≈4.3GB(MHA) → $b_{\max}\approx15$。**这就是为什么 GQA/MQA(KV 砍 4-32×)、PagedAttention(减碎片)、KV 量化对吞吐这么关键**——它们直接放大 $b_{\max}$,而吞吐 ∝ batch。换 GQA 后 $b_{\max}$ 涨到 ~60,吞吐随之 4×。
 
+![[roof-batchKV卡死.png]]
+
 ## ⑦ 投机解码:用算力换访存,绕开 decode 的带宽墙
 
 decode 访存受限 → 算力大量闲置。**投机解码(speculative decoding,Leviathan 2023)**用一个小"草稿模型"一次猜 $k$ 个 token,再用大模型**一次前向并行验证**这 $k$ 个:

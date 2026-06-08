@@ -35,6 +35,8 @@
 
 **Scheduled Sampling 退火手算**。设 $\epsilon$ 从 1.0 线性退火到 0(训练 10 个 epoch)。第 0 epoch $\epsilon=1.0$(全喂真词,等于纯 Teacher Forcing);第 5 epoch $\epsilon=0.5$(一半步喂真词、一半喂模型自己的预测);第 9 epoch $\epsilon\approx0.1$(主要喂预测,逼近推理分布)。**让模型从"温室"逐步过渡到"野外"**,慢慢适应"看自己的错误前缀",缩小训练/推理鸿沟。
 
+![[rnn-teacher_forcing.png]]
+
 ![[rnn-seq2seq瓶颈.png]]
 
 ## 原理

@@ -19,6 +19,8 @@ $$
 
 ![[net-069无损流控机制.png]]
 
+![[net-pfc-vs-ecn.png]]
+
 ```bash
 # 确认 RDMA 设备与链路类型
 ibstat                      # IB:State Active、Rate 400(NDR)

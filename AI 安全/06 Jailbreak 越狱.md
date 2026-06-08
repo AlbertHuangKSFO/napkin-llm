@@ -24,6 +24,8 @@
 - **Crescendo(多轮渐进)**:不直说目标,从一个无害的泛问题开始,**多轮温和提问层层逼近**,每轮借模型自己上一轮的回复继续升级,直到滑到违规内容。出自 **Microsoft 2024《Great, Now Write an Article About That: The Crescendo Multi-Turn LLM Jailbreak Attack》**(Russinovich et al.,arXiv 2404.01833,USENIX Security 25)。
 - **GCG 通用对抗后缀**:不靠人工措辞,而用**梯度搜索**自动找出一段看似乱码的后缀,贴在请求后面即可触发违规;且**通用**(对多种请求有效)又**可跨模型迁移**(在开源模型上搜出的后缀能打 ChatGPT/Claude/Bard)。出自 **Zou et al. 2023《Universal and Transferable Adversarial Attacks on Aligned Language Models》**(arXiv 2307.15043),用 GCG(Greedy Coordinate Gradient)逐 token 优化。
 
+![[sec-GCG后缀迁移.png]]
+
 按维度切:**手工**(DAN/Crescendo/编码,可读)vs **自动化**(GCG,乱码但可迁移);**单轮**(DAN/GCG/编码/前缀)vs **多轮**(Crescendo)。
 
 ## 对比表

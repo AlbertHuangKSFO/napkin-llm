@@ -12,10 +12,10 @@
 
 $$
 t_{\text{ring}}\approx 2(N-1)\alpha+\frac{2(N-1)}{N}M\beta,\qquad
-t_{\text{tree}}\approx 2\log_2 N\cdot(\alpha+\tfrac{M}{?}\beta)
+t_{\text{tree}}\approx 2\log_2 N\cdot(\alpha+ M\beta)
 $$
 
-(消息越大 $\beta$ 项主导→偏 ring;越小 $\alpha$ 项主导→偏 tree。NCCL 以 `NCCL_TREE_THRESHOLD` 为界切换。)
+(注意 tree 每步沿树边搬的是**整段 $M$**,不像 ring 每步只搬 $M/N$;所以 tree 带宽项 $2\log_2 N\cdot M$ 反而 $\ge$ ring 的 $2M$——步数少但每步搬得多,大消息上 tree 吃亏。消息越大 $\beta$ 项主导→偏 ring;越小 $\alpha$ 项主导→偏 tree。NCCL 以 `NCCL_TREE_THRESHOLD` 为界切换。)
 
 ![[net-ring-tree-SHARP对比.png]]
 

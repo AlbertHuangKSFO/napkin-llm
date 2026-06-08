@@ -80,4 +80,4 @@ def decode_bound(n_params, bw_TBs, flops_TFs, bytes_per=2):
 
 - 单请求 decode 速度 ≈ 显存带宽 ÷ 每 token 搬运字节,**与峰值算力基本无关**——这是 decode 最反直觉的事实。
 - batch=1 时 decode 的 GPU 算力利用率常 **&lt; 5%**(70B 上约 0.3%),提 batch 是恢复利用率的主要手段(2024–2025 共识)。
-- 实测中 decode 算术强度约 **60–80 FLOP/byte 量级**(取决于 batch 与上下文),仍低于 H100 约 295 的机器平衡点,故主流仍属访存受限区。
+- 正文 $\text{AI}\approx 1$ 是 **batch=1 的理论下限**;生产中开了连续批,$\text{AI}\approx 2B/b$ 随 batch 抬升,实测 decode 算术强度落在 **60–80 FLOP/byte 量级**(取决于 batch 与上下文)。两个数不矛盾——一个是单条下限、一个是带 batch 的真实负载,且都仍低于 H100 约 295 的机器平衡点,故主流仍属访存受限区。

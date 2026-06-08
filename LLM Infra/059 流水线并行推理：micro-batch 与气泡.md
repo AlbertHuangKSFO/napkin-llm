@@ -21,6 +21,8 @@ t_{\text{latency}}^{\text{PP}} \approx p\cdot t_{\text{stage}} + (p-1)\,t_{\text
 \text{throughput} \uparrow \text{ as } m \uparrow
 $$
 
+![[pd-pp单请求延迟瀑布.png]]
+
 ![[ipar-流水线气泡.png]]
 
 ```python

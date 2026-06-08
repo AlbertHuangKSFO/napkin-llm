@@ -28,6 +28,10 @@ $$
 
 **树状注意力**:把各头 top-k 候选展开成一棵前缀树,构造一个特制注意力掩码,让每个候选 token 只能看到它在树中的祖先。这样目标模型**一次前向**就对所有路径并行打分。验证用 [[073 投机解码系统：draft-verify 全流程|draft-verify]] 接受规则(或论文的 typical acceptance 变体),取被接受的最长路径 — 仍保持(典型接受下近似)目标分布。Medusa 论文给出"typical acceptance":接受满足 $p(x)>\epsilon$ 的 token,以温度>0 时换取更高吞吐(此变体非严格无损,贪心时无损)。
 
+这点最易误记为"总是无损"。下图对照两种判据:EAGLE 走严格 $\min(1,p/q)$ + 残差重采,输出分布严格等于目标 $p$(无损);Medusa 的 typical acceptance 只按阈值 $\epsilon$ 收 token、不补残差,温度>0 时会截断/偏移分布,**非严格无损**,仅贪心(argmax)时退化为无损:
+
+![[spec-Medusa近似vs EAGLE严格.png]]
+
 ## 图
 
 ![[spec-medusa多头.png]]

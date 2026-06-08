@@ -95,6 +95,8 @@ def beam_search(step_fn, start, max_len, eos, k=4, alpha=0.7):
 - **Beam 的复杂度?** $O(L\cdot k\cdot V)$ 量级;每步实现上只需各候选扩展 top-$k$ 再全局取前 $k$。
 - **为什么「最可能的句子」未必最好?** 人类语言带惊喜度(概率有起伏),Beam 追联合概率最大反而落进高频安全词的低信息区,输出平淡重复;Holtzman 实测人写文本概率曲线起伏、Beam 输出曲线平贴高位——这是开放式生成转向采样的根本动机。
 - **Beam 用 KV-Cache 有什么特别?** 每条 beam 是不同前缀,需各自维护 K/V;beam 分裂/淘汰时要相应复制/释放缓存,显存随 $k$ 倍增。这也是大 $k$ 在长序列上变贵的原因之一。
+
+![[infer-beamKV.png]]
 - **diverse beam / contrastive search 是什么?** diverse beam 给候选加多样性惩罚防雷同;contrastive search 在置信度与不相似度间权衡,兼顾连贯与不重复,是介于 Beam 和采样之间的确定性方法。
 - **温度 0 的采样和贪心一样吗?** 一样。采样设 $T\to0$ 时分布塌成 one-hot,等价 argmax = 贪心;所以贪心可看作采样的极限特例(见 [[101 采样解码：温度、top-k、top-p、min-p、重复惩罚|采样]])。
 

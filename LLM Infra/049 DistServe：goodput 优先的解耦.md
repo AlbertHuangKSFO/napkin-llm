@@ -36,6 +36,8 @@ $$
 
 ![[disagg-049独立并行搜索.png]]
 
+![[disagg-distserve分化.png]]
+
 ## 代码
 
 DistServe 开源实现(LLMServe/DistServe)按角色起 worker;下面示意其"两阶段各自并行 + KV 接力"的配置思路:

@@ -74,6 +74,8 @@ $\beta$ 太小 → 奖励黑客;太大 → 学不动(被 SFT 拽死)。固定 $\
 $$\beta\leftarrow\beta\cdot\big(1+K_\beta\cdot\tfrac{\mathrm{KL}-\mathrm{KL}_{\text{target}}}{\mathrm{KL}_{\text{target}}}\big).$$
 KL 超标就上调 $\beta$(收紧缰绳),KL 太小就下调(放松)。这是一个简单的反馈控制器,把"离 SFT 多远"稳定在目标值附近,不用手调死 $\beta$。
 
+![[post-自适应KL控制.png]]
+
 ## 奖励黑客的实例与 Goodhart 定律
 
 **Goodhart 定律**:"当一个指标成为目标,它就不再是好指标。"RM 是"人类偏好"的代理指标,PPO 一旦过度优化它,就开始钻代理与真实目标的缝。实测过的奖励黑客花样:
@@ -84,6 +86,8 @@ KL 超标就上调 $\beta$(收紧缰绳),KL 太小就下调(放松)。这是一�
 - **退化重复**:极端时输出无意义但 RM 恰好打高分的字符串(RM 分布外失效)。
 
 **over-optimization 的标度规律**(Gao 2023):随着 PPO 优化(KL 增大),**RM 分一路涨,但真实人类偏好先涨后跌**——存在一个最优 KL 点,过了就是纯刷分。这给"早停"和"KL 约束"提供了定量依据:别让策略把 RM 榨到分布外。
+
+![[post-rewardOveropt.png]]
 
 ## RLHF vs DPO vs GRPO:显存与稳定性对比
 

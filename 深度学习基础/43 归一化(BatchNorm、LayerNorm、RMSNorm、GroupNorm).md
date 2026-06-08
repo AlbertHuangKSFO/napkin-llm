@@ -94,6 +94,8 @@ $$\text{RMS}(x)=\sqrt{\frac{1}{d}\sum_{i=1}^d x_i^2},\qquad y_i=\frac{x_i}{\text
 - **Pre-LN**(GPT-2 之后主流):$x\to x+\text{Sublayer}(\text{LN}(x))$,归一化在子层**输入处**,残差主干是干净的恒等通路,梯度更稳、可去掉或减轻 warmup,能堆更深。代价是表达力略有损失,常在最后再补一个 LN。
 - 现代大模型(LLaMA 等)= **Pre-LN + RMSNorm** 的组合。
 
+![[nn-PreLN与PostLN.png]]
+
 **其它归一化亲戚**:
 - **InstanceNorm**:每样本每通道单独归一(GN 的 $G=C$ 特例),风格迁移常用。
 - **WeightNorm**:不归一激活,而是把权重向量分解为方向 × 幅度,归一化方向,batch 无关。

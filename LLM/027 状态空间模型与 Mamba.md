@@ -39,6 +39,8 @@ $$h_t=\bar A\,h_{t-1}+\bar B\,x_t,\qquad y_t=C\,h_t$$
 
 **为什么递推能并行(结合律 → 前缀扫描)。** 把每步写成 $h_t=a_t h_{t-1}+b_t$(标量示意),定义二元操作 $(a_2,b_2)\bullet(a_1,b_1)=(a_2a_1,\ a_2b_1+b_2)$——这个操作**满足结合律**。满足结合律的序列归约可用**并行前缀扫描(parallel/Blelloch scan)**在 $O(\log n)$ 深度、$O(n)$ 工作量内算完,而非朴素 RNN 的 $O(n)$ 串行深度。于是 Mamba 训练时虽不能用 FFT 卷积(参数随时变),仍能靠 scan 在 GPU 上并行——这是"选择性"与"可并行训练"得以兼得的关键。
 
+![[attn-并行前缀扫描.png]]
+
 ![[attn-Mamba状态空间扫描.png]]
 
 **与 [[023 线性注意力(Linear Transformer、Performer)|线性注意力]] 的血缘**:线性注意力的因果形式 $S_t=S_{t-1}+\varphi(k_t)v_t^\top$ 本就是个线性 RNN 隐状态递推(见 023 的"Transformers are RNNs")。Mamba 同属"可并行训练 + 类 RNN 推理"的状态递推家族(还有 RWKV、RetNet),区别是用**选择性 + 离散化的 SSM** 把表达力做强。
@@ -82,6 +84,8 @@ def selective_ssm(x, A, W_dt, W_B, W_C, h):     # x:(T,d_in); A:(N,) 对角化
 - **离散化里 $\bar A=\exp(\Delta A)$ 的 $\Delta$ 大小代表什么?** $\Delta$ 大 → $\bar A$ 小(旧状态被冲掉)、多吸收当前输入(记);$\Delta$ 小 → $\bar A\to1$(状态几乎不变)、略过输入(忘)。选择性就靠 $\Delta=\text{softplus}(\text{Linear}(x))$ 按内容调它。
 - **选择性破坏卷积后,为什么还能并行训练?** 递推满足结合律($(a,b)$ 组合操作可结合),用并行前缀扫描在 $O(\log n)$ 深度并行,替代被破坏的 FFT 卷积。
 - **Mamba-2 / SSD 是什么?** Mamba-2(Dao & Gu 2024)提出 SSD(state space duality),把选择性 SSM 与(掩码)注意力在数学上**统一**起来,说明二者是同一对偶的两面,且让 SSM 能复用矩阵乘高效硬件 → 更快。考点:SSM 与注意力并非对立,存在对偶联系。
+
+![[attn-SSD对偶.png]]
 - **它和 KV-Cache 的关系?** Mamba **没有 KV-Cache**——历史压进固定状态 $h$,推理只带一个常数大小的状态向量,不像注意力随 $n$ 膨胀。这既是省显存的来源,也是精确长程检索弱的原因。
 
 ## 关键事实

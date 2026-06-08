@@ -42,11 +42,15 @@ $$k^{C}_{t,i} = W^{UK}_i\,c^{KV}_t,\qquad v_{t,i} = W^{UV}_i\,c^{KV}_t$$
 $$k_{t,i} = \big[\,\underbrace{k^{C}_{t,i}}_{\text{从 }c\text{ 解压,无位置}}\ \big\Vert\ \underbrace{k^{R}_{t}}_{\text{带 RoPE,所有头共享}}\,\big]$$
 位置那一支 $k^R_t$ 单独走、维度小($d_{RoPE}$),也缓存它。Q 同理拆两段。这就是"**解耦 RoPE**(decoupled RoPE)"。
 
+![[attn-MLA解耦RoPE.png]]
+
 **第四步:吸收(推理加速的精髓)。** 注意 $q^\top k^C = q^\top W^{UK}_i c$,可把 $W^{UK}_i$ **吸收进** $W_Q$;同理 $W^{UV}_i$ 吸收进输出投影 $W_O$。于是推理时**根本不必真的解压出完整 K/V**,直接在潜空间算 → 省算又省显存,KV-Cache 体量等于潜向量本身。
 
 **吸收的代数推导(逐步看为什么省算)。** 头 $i$ 的非 RoPE 部分打分:
 $$q_{t,i}^\top k^{C}_{s,i}=q_{t,i}^\top\big(W^{UK}_i\,c^{KV}_s\big)=\underbrace{\big((W^{UK}_i)^\top q_{t,i}\big)}_{\tilde q_{t,i}}{}^\top\,c^{KV}_s$$
 把 $W^{UK}_i$ 提前乘进 query 侧得到 $\tilde q_{t,i}=(W^{UK}_i)^\top q_{t,i}$,于是打分直接是 $\tilde q_{t,i}^\top c^{KV}_s$——**KV 侧只需缓存并读取 $c^{KV}_s\in\mathbb{R}^{d_c}$,从不物化出 $h$ 份 $d_{head}$ 维的 $k^C$**。输出侧同理:$\sum_s\alpha_s v_{s,i}=\sum_s\alpha_s W^{UV}_i c^{KV}_s=W^{UV}_i\big(\sum_s\alpha_s c^{KV}_s\big)$,$W^{UV}_i$ 可并入 $W_O$。**两个上投影都"消失"进相邻权重**,推理时只在 $d_c$ 维潜空间算 → 既不解压、读取量又只 $\propto d_c$。这是 MLA "缓存小到 MQA 级、表达力却是 MHA 级"得以两全的工程机关。
+
+![[attn-MLA吸收.png]]
 
 整体上,MLA 在 [[014 注意力复杂度 O(n²) 与瓶颈|瓶颈]]的"显存/带宽"维度做到 MQA 级别,而表达力维度保持 MHA 级别。
 

@@ -16,6 +16,8 @@ $$\text{算术强度} = \frac{\text{FLOPs}}{\text{Bytes from HBM}} \uparrow \qua
 
 TPU v6e 的 MXU 是 $256\times256$(前代 $128\times128$),一拍吞 $256^2$ 个 MAC;但矩阵维度凑不满 256 时,边缘 PE 空转,利用率掉。
 
+![[hw-007脉动阵列逐拍.png]]
+
 ## 图
 ![[hw-异构加速器架构对比.png]]
 

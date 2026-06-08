@@ -22,6 +22,8 @@ V0 像一个人既在前台收银(tokenize、拼 prompt、回传)又在灶台炒
 
 **3. chunked prefill 默认开。** [[042 chunked prefill：切块融合|chunked prefill]] 把长 prompt 切成块、与 decode token 拼进同一 batch,V1 **始终默认启用**,自动平衡 compute-bound(prefill)与 memory-bound(decode),避免长 prompt 独占一步、卡住正在解码的请求。
 
+![[infer-vllmv1-token预算.png]]
+
 **4. 近零开销前缀缓存 + 零拷贝调度。** 前缀缓存数据结构优化为**常数时间驱逐**、极少 Python 对象创建;调度按 token 数下发、避免大对象搬运。配合 PagedAttention 的块表,KV 复用与显存碎片管理都做得很轻。
 
 ![[eng-vLLM-V1架构.png]]

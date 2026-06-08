@@ -46,6 +46,8 @@ $$
 
 ## 图
 
+![[pd-干扰定量.png]]
+
 ![[sched-prefill干扰stall.png]]
 
 ## 代码

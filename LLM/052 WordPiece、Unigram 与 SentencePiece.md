@@ -56,6 +56,8 @@ $$\frac{\mathrm{count}(a,b)}{\mathrm{count}(a)\,\mathrm{count}(b)}$$
 
 **6. Unigram 的 Viterbi 与前向算法。** 「一个词的概率 = 所有切分概率之和」用**前向(forward)**动态规划算:设 $\alpha_j$ 为「前 $j$ 个字符」的所有切分概率和,$\alpha_0=1$,$\alpha_j=\sum_{i<j,\,x[i:j]\in V}\alpha_i\,p(x[i:j])$,词总概率 $=\alpha_{|x|}$。「取最优切分」则把求和换成 max,即 **Viterbi**:$\beta_j=\max_{i<j}\beta_i\,p(x[i:j])$,回溯得最优切法。两者都是 $O(|x|^2)$(或限定最大子词长度后近线性)。EM 的 E 步正是用前向-后向算每个子词在各词上的期望出现次数。
 
+![[tok-Unigram切分格子.png]]
+
 **7. WordPiece 编码:最长匹配的失败回退。** WordPiece 编码用「贪心最长匹配」:从词首尽量取词表里最长的子词,匹配不上就退一格。**关键易错**:若某个字符在词表里根本没有(连单字符都缺),整个词标 `[UNK]`——这与 BPE 不同,BPE 退到字符/字节级几乎不产 UNK,字节级更是零 OOV。这也是 WordPiece 词表必须含全部基础字符的原因。
 
 ## 代码

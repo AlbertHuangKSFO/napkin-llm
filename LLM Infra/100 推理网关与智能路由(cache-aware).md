@@ -22,6 +22,10 @@
 
 **2. Gateway API Inference Extension(GIE)。** 2025 年 K8s SIG 把它标准化:引入 `InferencePool`(一组跑在共享 GPU 上的模型服务 pod)与 `InferenceObjective`(SLO/优先级),并把选副本的逻辑外置成 **EndpointPicker(EPP)** 这个 external processing 服务。Gateway(Envoy / Istio / NGINX Gateway Fabric 等)收到请求后,把候选 endpoint 列表交给 EPP,EPP 按上面的指标 + 前缀感知挑一个返回。这样「智能路由」与「网关数据面」解耦,可插拔。
 
+GIE 这套控制面的组件拓扑与请求流(Gateway 数据面 → ext-proc 调 EPP → EPP 读各 Pod 指标做 cache-aware 选点,InferencePool/Model 定义"选谁"):
+
+![[orch-100GIE组件拓扑.png]]
+
 **3. 和 prefill/decode 解耦联动。** 在 [[048 为何分离 prefill 与 decode|PD 分离]] 架构里,网关还要区分把 prefill 请求送到 prefill 池、decode 送到 decode 池,并跨池传 KV(NIXL,见 [[053 KV 传输：NIXL、点对点与带宽|KV 传输]])。这正是 [[052 NVIDIA Dynamo：分布式推理框架与 SLO Planner|Dynamo]]、llm-d router 在做的事。
 
 ![[orch-cache-aware路由.png]]

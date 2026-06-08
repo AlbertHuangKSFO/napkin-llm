@@ -67,6 +67,8 @@ $$
 - **仅权重(W4A16 等)**:只量化权重到 int4,激活保 fp16。收益是**省显存 + 访存加速**(解码是 memory-bound,权重搬运减半即提速),实现简单、无激活离群难题。代表:GPTQ、AWQ。**LLM 部署主流**。
 - **权重+激活(W8A8)**:权重和激活都量化,能吃 int8 Tensor Core 的**算力**(compute-bound 的 prefill / 大 batch 受益)。难点是激活离群,需 LLM.int8(混合精度)或 SmoothQuant(迁移难度)。代表:LLM.int8、SmoothQuant。
 
+![[quant-W4A16vsW8A8.png]]
+
 ## 代码:PTQ 校准 vs QAT 伪量化 + STE(❌ vs ✅)
 
 ```python

@@ -48,5 +48,7 @@ NCCL_DEBUG=INFO NCCL_DEBUG_SUBSYS=INIT,GRAPH ./all_reduce_perf -b 1G -e 1G -g 8
 ## 关键事实
 - NCCL 实现 all-reduce、all-gather、reduce、broadcast、reduce-scatter 及任意 send/recv(point-to-point),优化覆盖 PCIe、NVLink、NVSwitch、IB Verbs、TCP/IP(NVIDIA NCCL 官方文档,**2025**)。
 - ring all-reduce 带宽最优(每卡收发 $\tfrac{2(N-1)}{N}M$,与 $N$ 几乎无关),但延迟随 $N$ 线性增长——所以小消息/大规模改用 tree(见下一篇)。
+
+![[net-nccl-ring-tree取舍.png]]
 - 竞品生态(**2025**):AMD RCCL、Intel oneCCL、微软 MSCCL(可编程集合)、Meta NCCLX(支撑 10 万+ GPU)。
 - NCCL 2.27(**2025**)新增对称内存(symmetric memory),小消息延迟最高降 9×;并对 NVLink/IB SHARP 扩展到 all-gather/reduce-scatter。

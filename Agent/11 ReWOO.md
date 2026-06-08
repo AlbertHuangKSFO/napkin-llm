@@ -39,6 +39,10 @@ ReWOO 的洞见一句话:**模型用来"规划"的推理,和工具返回的"观�
 
 > 变量替换是 ReWOO 的灵魂:`#E1` 在蓝图阶段是符号占位,在 Worker 阶段被真实值原地替换,使得"规划"完全不必等"观测"。这也是它和 [[12 LLMCompiler|LLMCompiler]] 的共同基因——后者把这种带依赖的变量蓝图进一步显式建成 **DAG** 来调度并行。
 
+把占位变量蓝图画成带依赖的小 DAG——无依赖的 `#E1`/`#E2` 并行取证,`#E3` 引用二者须等真值代入:
+
+![[ReWOO-占位DAG.png]]
+
 ## 原论文
 
 **Xu et al., _ReWOO: Decoupling Reasoning from Observations for Efficient Augmented Language Models_**(2023 年 5 月 arXiv)。作者来自 University of Pennsylvania 与 Allen Institute for AI / 等(Binfeng Xu 等)。论文标题里的 **WOO = WithOut Observation**,直白点题:把 observation 从推理循环里拿掉。

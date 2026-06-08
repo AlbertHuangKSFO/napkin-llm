@@ -69,6 +69,8 @@ class PagedKV:
 
 `❌` 把 PagedAttention 当成"省 KV 总量"是常见误解:它是**显存管理**层面的工程,减的是碎片;减总量要靠 [[LLM/019 GQA 分组查询注意力|GQA]] 与 [[034 KV 量化部署：FP8、INT8 KV|KV 量化]],两类正交可叠加。
 
+![[pd-CoW三态.png]]
+
 ## 面试高频
 
 - **PagedAttention 解决什么?** [[LLM/102 KV-Cache|KV-Cache]] 的**显存碎片**(内部 + 外部):老式按 max_len 预留连续块,利用率常 <40%;分页后碎片只剩末页,90%+。

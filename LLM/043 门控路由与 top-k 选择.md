@@ -57,6 +57,8 @@ $$
 
 **token-choice vs expert-choice(两种路由方向)**。上面讲的都是 **token 选专家**(token-choice):每个 token 挑它的 top-k 专家,问题是可能挤爆某些专家(需均衡损失)。还有反向的 **expert-choice**:每个专家挑它最想要的 top-C 个 token,**天然负载均衡**(每个专家恰好收 C 个,不需辅助损失),代价是某些 token 可能没被任何专家选中(被丢)。两种是对偶关系,面试偶尔深挖。
 
+![[moe-token-vs-expert-choice.png]]
+
 ![[moe-Switch路由.png]]
 
 ## ④ 代码:top-k 门控前向(❌软混合 vs ✅稀疏 top-k)

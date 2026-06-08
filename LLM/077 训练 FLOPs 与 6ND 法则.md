@@ -92,6 +92,8 @@ $$\text{GPU·小时}=\frac{6ND}{\text{单卡 FLOP/s}\times\text{MFU}\times3600},
 $$\frac{\text{推理总算力}}{\text{训练算力}}=\frac{2N\cdot D_{\text{infer}}}{6N\cdot D_{\text{train}}}=\frac{D_{\text{infer}}}{3D_{\text{train}}}.$$
 当**累计推理 token 超过 3× 训练 token** 时,推理总算力就反超训练。热门模型上线后日活亿级、每天生成万亿 token,几个月就能让推理算力远超一次训练——这是工业界宁可"过训小模型"(偏离 [[079 Scaling Law 与 Chinchilla 最优|Chinchilla]] 最优)来永久省推理成本的根本经济动因。
 
+![[flops-推理反超训练.png]]
+
 ## ④ 代码:6ND 估算器(训练时间、成本、推理对比)
 
 ```python

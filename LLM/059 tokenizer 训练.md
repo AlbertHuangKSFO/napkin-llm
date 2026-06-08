@@ -49,6 +49,8 @@ $$P(x)=\max_{\text{seg}(x)}\prod_{u\in\text{seg}(x)}p(u)$$
 
 **7. 每 token 成本与 $V_{\text{opt}}$ 的权衡(把账列出)。** 单步算力两块:① 注意力 $\propto L^2\propto f^2$(fertility 高则贵,偏好大 $|V|$ 压低 $f$);② 输出投影 + 嵌入 $\propto |V|\,d$(偏好小 $|V|$)。最优 $|V|$ 让二者边际相等。举例:$|V|$ 从 32k 翻到 64k,若 fertility 从 1.5 降到 1.3(序列短 ~13%、注意力省 ~25%),但嵌入/输出参数翻倍——对**小模型**(嵌入占比大)不划算,对**大模型**(嵌入占比小)划算。这就是为什么大模型/多语言模型倾向大词表。
 
+![[tok-词表最优交点.png]]
+
 **8. 字节回退(byte-fallback)与零 OOV。** SentencePiece-BPE 常开 `byte_fallback=True`:任何词表里没有的字符,**回退成其 UTF-8 字节**(256 个字节 token 兜底),于是**永不产 UNK**(对比纯 Unigram/WordPiece 可能 UNK)。代价是罕见字符 fertility 高(一个字符拆成多字节)。这让 LLaMA 等能处理任意 emoji、生僻字、二进制片段而不崩。
 
 **9. 训练复杂度与编码复杂度。** **训练**:朴素 BPE 每步扫全语料找最高频对,$O(N\cdot\text{merges})$;实际用优先队列 + 增量更新加速。**编码**:BPE 按合并规则贪心,$O(L\log L)$ 或线性化实现(tiktoken 用正则预切 + 字节级 BPE,极快);Unigram 编码用 Viterbi,$O(L)$(限定最大子词长)。面试常问「分词器训练有梯度吗」——没有,纯统计;「encode 是确定的吗」——BPE/WordPiece 是,Unigram 推理确定(Viterbi)、训练可采样。

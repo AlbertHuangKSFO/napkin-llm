@@ -156,6 +156,8 @@ OSS agent 生态有两个让人头疼的特征:**碎**和**快**。
 多模型省钱网关:    任意①  +  litellm(⑧) 统一接口 + 成本追踪 + routing
 ```
 
+![[Agent-生态需求矩阵.png]]
+
 **各层的 2026 生产「默认值」(选一个就够,同层互斥):**
 - **① 编排**:可控/生产派 **langgraph**(已 1.x,配 LangGraph Platform 做托管持久化);快搭协作 **crewai**;极简少黑盒 **smolagents**(CodeAct);类型安全 **pydantic-ai**;绑云用官方(**openai-agents** / **google-adk**)。
 - **② 工具/协议**:对外暴露工具写 MCP server 用 **fastmcp**(已迁 PrefectHQ,撑起全语言约 70% 的 MCP server);连一堆 SaaS 免 OAuth 用 **composio**;Agent↔Agent 互通用 **a2a-sdk**(已进 Linux Foundation,规范 1.0)。**记牢:MCP 对下(Agent↔工具),A2A 对旁(Agent↔Agent)**。

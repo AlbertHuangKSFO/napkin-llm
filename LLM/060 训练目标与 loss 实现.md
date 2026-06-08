@@ -59,6 +59,8 @@ $$\mathcal{L}=-\frac{\sum_t m_t\log p(x_{t+1}\mid x_{\le t})}{\sum_t m_t}$$
 
 **5. 序列打包(packing)。** 把多条短样本拼成一条满窗序列省 padding(见 [[058 数据配比与课程|数据]] 的算力意识)。必须用文档分隔符(`<|endoftext|>`)或重置注意力掩码,**防止跨样本注意 / 跨样本算 loss**——否则前一条样本会"泄漏"给后一条。
 
+![[tf-packing块对角掩码.png]]
+
 **6. next-token 交叉熵的逐步手算。** 词表 $V=4$,某位置 logits $z=[2.0,1.0,0.1,-1.0]$,真实下一个 token 是 id=0。先 softmax:$e^z=[7.389,2.718,1.105,0.368]$,和 $=11.58$,$p=[0.638,0.235,0.095,0.032]$。该位 loss $=-\log p_0=-\log 0.638=0.449$。若预测得差(真实是 id=3):loss $=-\log0.032=3.45$。把一条序列每个位置这样算一遍再平均,就是序列 loss;对它取 $\exp$ 就是 [[32 困惑度 Perplexity|困惑度]](此例若每位都 0.449,PPL $=e^{0.449}=1.57$)。**数值稳定**:实现绝不先 $\exp$ 再 $\log$(会溢出),而用 log-sum-exp:$-\log p_y=\text{logsumexp}(z)-z_y$,减去 $\max z$ 后再算。
 
 **7. 标签平滑(label smoothing)。** 把硬 one-hot 目标 $[0,0,1,0]$ 软化成 $[\frac{\epsilon}{V},\dots,1-\epsilon+\frac{\epsilon}{V},\dots]$($\epsilon$ 如 0.1),loss 变成对软目标的交叉熵。作用:防止模型对正确类输出过度自信(logits 无界增大)、轻微正则、改善校准。原始 Transformer(Vaswani 2017)用 $\epsilon=0.1$;但**GPT 类大模型预训练通常不用**(会抬高困惑度、且大数据下过自信问题不突出),多见于翻译/分类。面试问到「为什么 GPT 不太用标签平滑」即答此。

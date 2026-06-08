@@ -50,6 +50,8 @@
 - **纯 prefill 步(一块 512 token)**:计算时间长(大 GEMM)、访存时间相对短 → 步耗时被**计算**卡住,**访存有余**。
 - **两者拼一步**:计算时间 ≈ prefill 块的(吃满算力),访存时间 ≈ 读权重的(本来就要读)。decode 那几十个 token 的额外计算**塞进了 prefill 没占满的访存窗口**,几乎不增加步耗时。这就是「decode 免费搭 prefill 的车」的物理本质:**一个吃计算、一个吃访存,正好互补填满 Roofline 的两个轴**。
 
+![[infer-PD搭车Roofline.png]]
+
 **token budget 怎么定(实现旋钮)。** 每步给一个总 token 预算(如 512),先放尽量多的 decode(每个 1 token),剩余预算给一个 prefill 块。预算大 → 单步能塞更多 prefill、TTFT 好但 decode 可能被挤;预算小 → decode 优先、TPOT 稳但 prefill 慢。vLLM 的 `max_num_batched_tokens` 就是这个旋钮。
 
 **PD 分离(disaggregation)的核心(DistServe / Mooncake, 2024)。** 同机融合再优,prefill 和 decode 仍**共享同一份硬件和并行配置**,但它们诉求相反:prefill 想要**高算力**(配 H100、FP8、TP 切分),decode 想要**高带宽 + 大 batch**(配高带宽卡、更激进的批)。分离后:

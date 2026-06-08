@@ -63,6 +63,8 @@ $\alpha\in[0,1]$ 是**迁移强度**:$\alpha$ 大 → 把更多难度从激活�
 
 实务里 SmoothQuant(管激活)与 AWQ/GPTQ(管 int4 权重)目标不同,**可分别使用**;AWQ 和 GPTQ 都是 int4 权重方案,精度接近、二选一。
 
+![[quant-离群处理四路线.png]]
+
 ## 代码:AWQ 缩放保护 + SmoothQuant 迁移(❌ vs ✅)
 
 ```python

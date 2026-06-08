@@ -21,6 +21,8 @@ LLM 只会处理 token 序列。要让它看图,核心思路朴素得惊人:**�
 
 **分辨率怎么上去:切图块(tiling)**。一张 336×336 只够看清整体,看不清小字/细节。LLaVA-1.5 的 AnyRes / Qwen-VL 等的做法:把高分辨率大图**切成多个 336 子块**分别过 ViT,再拼一个缩略全局图。比如 672×672 切成 4 块 + 1 缩略 = 5 张图 → $5\times576=2880$ 个图 token。代价直接是上下文暴涨——这就是「视觉 token 压缩」(Q-Former、token merging、pixel shuffle 降采样)成为热门方向的原因。
 
+![[tf-anyres-tiling.png]]
+
 **两条对齐路线的 token 账(MLP vs Q-Former)**:
 
 | 投影器 | 输出图 token 数 | 上下文占用 | 代表 |
@@ -41,6 +43,8 @@ $$z_0 = [\,x_{\text{cls}};\ E\,x_p^{(1)};\dots;E\,x_p^{(N)}\,] + E_{\text{pos}},
 **② CLIP(对比学习对齐)**:两个编码器——图编码器(ViT)给图向量 $v$,文本编码器给文本向量 $t$。一个 batch 内 $n$ 对图文,目标(InfoNCE)让**配对的 $(v_i,t_i)$ 相似度高、不配对的低**:
 $$\mathcal{L}=-\frac1n\sum_i\log\frac{\exp(\langle v_i,t_i\rangle/\tau)}{\sum_j \exp(\langle v_i,t_j\rangle/\tau)}\ +\ (\text{对称项})$$
 训练后图、文落入**同一语义空间**,可零样本分类。其图编码器语义丰富,成为多模态 LLM 最常用的视觉 backbone。这与 [[04 Embedding 与向量数据库|文本 embedding]] 的对比学习思想一脉相承(也是 [[15 多模态 RAG|多模态 RAG]] 的基础)。
+
+![[tf-clip-infonce.png]]
 
 **③ 投影对齐(LLaVA 式)**:视觉特征 $H_v\in\mathbb{R}^{N\times d_v}$,经投影器 $W$ 映到 LLM 维度 $d$:
 $$H_{\text{img-tok}} = W\,H_v\in\mathbb{R}^{N\times d}$$

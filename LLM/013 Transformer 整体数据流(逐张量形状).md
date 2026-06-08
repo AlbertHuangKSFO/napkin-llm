@@ -69,6 +69,8 @@ $$\text{总参} \approx N\cdot12d^2 + \underbrace{Vd}_{\text{嵌入(tied 则只�
 
 **前向计算量与训练计算量**。前向 FLOPs $\approx 2\times\text{参数量}\times$ token 数(每个参数一次乘一次加);训练再 ×3(前向 1 + 反向 2)。所以训练总 FLOPs $\approx 6\times N_{\text{params}}\times N_{\text{tokens}}$——这就是著名的 **"6ND" 估算公式**(Kaplan/Chinchilla scaling law 的基础),面试估算训练成本必用。
 
+![[tf-参数量与6ND.png]]
+
 **3. 输出(一次)**。最终归一化后投影到词表:
 
 $$\text{logits}=\mathrm{LN}(x^{(N)})\,W_{\text{out}}\in\mathbb{R}^{B\times L\times V},\qquad P=\mathrm{softmax}(\text{logits})$$

@@ -38,6 +38,8 @@ $$
 
 直觉:DPO 在偏好近乎确定时会把间隔 $h$ 推向 $+\infty$(过拟合);IPO 把它**锚到一个有限目标值** $\frac{1}{2\tau}$,到了就停,**天然带正则**。
 
+![[post-IPOvsDPO损失.png]]
+
 **KTO**(Ethayarajh et al. 2024,arXiv 2402.01306,*Model Alignment as Prospect Theoretic Optimization*)。基于前景理论的「人类感知效用」(HALO),对**单条**回答 $y$(带二元标签 desirable/undesirable)定义效用,$z_{\text{ref}}$ 是一个 KL 基准项:
 
 $$

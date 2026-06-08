@@ -56,6 +56,8 @@ $$p_i=\frac{e^{(z_i-\max_j z_j)/T}}{\sum_k e^{(z_k-\max_j z_j)/T}}$$
 $$\frac{\partial p_i}{\partial z_j}=p_i(\delta_{ij}-p_j)=\begin{cases}p_i(1-p_i)&i=j\\-p_i p_j&i\ne j\end{cases}$$
 对角项 $p_i(1-p_i)>0$(自己 logit 升则自己概率升),非对角 $-p_ip_j<0$(别人升则自己降,概率"此消彼长")。把它接上交叉熵的 $-1/p$,中间 $p_i$ 约掉,才得到下面那个干净结果。
 
+![[nn-Softmax雅可比.png]]
+
 **softmax 的梯度(为何好训练)**。配交叉熵时,对 logit 的梯度极简洁:$\frac{\partial L}{\partial z_i}=p_i-y_i$(预测概率减真实 one-hot)。这个干净形式让反向传播稳定,是 softmax+交叉熵成为分类标配的关键(完整逐步推导在 [[30 交叉熵与负对数似然|交叉熵]])。
 
 **温度对梯度的影响**。带温度时 $\frac{\partial L}{\partial z_i}=\frac1T(p_i-y_i)$,即温度把梯度整体缩放 $1/T$。知识蒸馏用高温 $T$ 时,损失要乘回 $T^2$ 来补偿这个缩放(Hinton 2015 的实现细节),否则软标签项的梯度被压得太小。

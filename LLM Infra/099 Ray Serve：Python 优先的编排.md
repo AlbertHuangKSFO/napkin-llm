@@ -13,6 +13,8 @@ KServe/llm-d 像用"建筑图纸+施工队"(CRD/YAML + Operator)盖楼:声明每
 ## 原理:三层
 1. **Ray Serve LLM 层**:提供 OpenAI 兼容的 `LLMServer`/`build_openai_app`,底层引擎用 [[088 vLLM V1 架构剖析|vLLM]]。把单引擎横向扩展并叠加分布式策略(PD 解耦、data-parallel attention、EP)。
 2. **deployment graph**:每个 `@serve.deployment` 是图里一个节点,**各自独立设副本数与资源**(CPU/GPU),用 `.bind()` 组合;天然适合多模型组合、自定义路由、把 RAG/前后处理写进同一张图。
+
+![[orch-rayserve-拓扑.png]]
 3. **Ray Cluster 底座**:Head 调度 + Worker(GPU/CPU)跑 actor;Autoscaler 按 `target_ongoing_requests`(在办请求数)扩缩。
 
 **PD 解耦**:Ray Serve LLM 把负载拆到两个 vLLM 引擎——prefill 引擎算 prompt 的 [[015 KV-Cache 的显存账(逐层手算)|KV-Cache]] 并传给 decode 引擎;KV 传输用 [[053 KV 传输：NIXL、点对点与带宽|NIXL]](NIXLConnector)或 LMCacheConnector(多种后端)。目的同 098:防 prefill 拖慢 decode、各自达 SLO。

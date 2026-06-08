@@ -20,6 +20,10 @@ KServe 像云厨房的"中央管理系统",你不再一个个雇厨师、排班�
 
 ![[orch-097两种部署模式.png]]
 
+Serverless 的 scale-to-zero 省钱代价是首请求的冷启动尖峰(拉镜像 + 载权重到 VRAM,P99 可达数十秒~分钟级),Raw 常驻则无此尖峰但空载也烧卡:
+
+![[orch-097冷启动时间线.png]]
+
 **LLMInferenceService(新 CRD,专为生成式)**:在 Predictor 之上原生支持 [[057 张量并行推理：延迟换显存|TP]]/[[059 流水线并行推理：micro-batch 与气泡|PP]]/多 GPU 分片,单 CRD 部署 70B+,并对接 llm-d 拿到 [[048 为何分离 prefill 与 decode|PD 解耦]]、前缀缓存、[[100 推理网关与智能路由(cache-aware)|智能调度]]、variant 自动扩缩。
 
 **模型治理**:金丝雀按流量百分比灰度新版本、一键回滚、多模型/多 runtime 统一 CRD 管理。配套实操见 [[130 K8s 上 KServe 部署 + 自动扩缩 + 监控面板|KServe 实操]]。

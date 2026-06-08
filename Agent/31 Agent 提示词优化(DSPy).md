@@ -45,6 +45,8 @@ Module 可以**像神经网络层一样组合**:在一个 `dspy.Module` 子类�
 
 **编译产物 = 一份「填好的 prompt 模板 + 精选 demo」的程序**,可以保存、加载、直接部署。后续换模型,重新 compile 即可。
 
+![[DSPy-编译流程.png]]
+
 ## 来源 / 出处
 
 - **DSPy 出自 Stanford NLP**(Omar Khattab 等),前身叫 **DSP**(Demonstrate-Search-Predict),后演进为 DSPy;奠基论文 *DSPy: Compiling Declarative Language Model Calls into Self-Improving Pipelines*(arXiv 2310.03714,2023)。

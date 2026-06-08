@@ -30,6 +30,8 @@ FA3 不改这个数学,改的是**怎么在硬件上排这些算子**。三个 H
 
 重叠靠两招:**warp 专门化**(部分 warp 当生产者只发 TMA,部分当消费者做 MMA/softmax,经 SMEM + barrier 通信)和 **块内交错 / 乒乓调度**(两个 warpgroup 交替,A 做 GEMM 时 B 做 softmax)。
 
+![[flash-025warp专门化分工.png]]
+
 ![[flash-FA3异步流水线.png]]
 
 ![[flash-025利用率对比手算.png]]

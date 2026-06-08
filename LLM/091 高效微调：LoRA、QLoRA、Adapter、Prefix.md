@@ -63,6 +63,8 @@ $$
 
 **4)Prefix / Prompt tuning**。不碰任何权重,只在**输入端拼一段可训练的连续向量**(「软提示」,不是真实 token)。Prefix tuning 在**每一层**的 K、V 前都拼可训前缀(表达力强);Prompt tuning 只在**最底层**加(更省、但需大模型才好用)。本质是用「可学习的上下文」引导冻结模型,适配能力一般略弱于 LoRA。
 
+![[post-peft-四家结构对比.png]]
+
 ## 代码:用 PEFT 给模型挂 LoRA(❌ vs ✅)
 
 ```python

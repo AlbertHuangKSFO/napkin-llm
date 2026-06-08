@@ -36,6 +36,8 @@ $$\nabla_\theta\,\mathbb E_{\epsilon}[f(g_\theta(\epsilon))]=\mathbb E_{\epsilon
 
 对高斯:$g_\theta(\epsilon)=\mu+\sigma\odot\epsilon,\ \epsilon\sim\mathcal N(0,I)$。这就是 VAE 的核心:能对编码器输出 $\mu,\sigma$ 反传梯度。它比"打分函数 / REINFORCE"估计量**方差低得多**,所以连续隐变量首选它。
 
+![[nn-重参数化采样.png]]
+
 **对比:打分函数估计量(REINFORCE)**。当采样无法写成可微变换(纯离散、不可导奖励)时,用对数导数技巧:
 $$\nabla_\theta\,\mathbb E_{z\sim q_\theta}[f(z)]=\mathbb E_{z\sim q_\theta}\big[f(z)\,\nabla_\theta\log q_\theta(z)\big]$$
 它**无偏**、只需要能采样和算 $\log q$、不要求 $f$ 可导(所以 RL 里奖励是黑盒也能用),但**方差很高**,通常要配 baseline(减去 $f$ 的期望)降方差。两条路线的分工:**能重参数化就用重参数化(低方差),不能就用 REINFORCE(通用但高方差)**,Gumbel-Softmax 是介于两者之间的"可微松弛"。

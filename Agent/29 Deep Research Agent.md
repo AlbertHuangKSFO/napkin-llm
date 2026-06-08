@@ -119,6 +119,8 @@ return report
 
 **② 典型生产架构 = orchestrator + 隔离 worker + 写作器。** 主流是 [[07 Orchestrator-Workers|Orchestrator-Workers]] 形态(LangChain `open_deep_research` 的 supervisor 模式即此):一个主 agent 把研究简报拆成若干子任务,扇给**各自 context 隔离**的子 agent(每个只看自己那一摊,避免上下文互相污染),子 agent 各自搜+读+小结,主 agent 再做交叉核验与综合。隔离是关键:几十个网页的原文若全塞一个窗口,既爆 token 又互相干扰,见 [[21 上下文压缩与卸载|上下文压缩与卸载]]、[[20 上下文工程|上下文工程]]。
 
+![[DeepResearch-生产架构.png]]
+
 **③ 规模化、成本与延迟。** Deep Research 是 Agent 里**最烧钱、最慢**的形态之一:一次任务常跑几分钟、几十到上百次工具调用、几十万 token。工程上压成本/延迟的手段:
 - **预算护栏**:硬上限——最多 N 个来源、最多 M 轮迭代、最长 T 分钟;超了就停并用已有材料成文。
 - **分层模型**:规划/综合用强模型,子问题的"搜+读小结"用便宜小模型(典型 mini 档),省 80% 成本。

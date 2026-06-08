@@ -58,6 +58,8 @@ ChatML 风格(OpenAI 提出,Qwen 等用)渲染成:
 
 最后那行 `<|im_start|>assistant`(后面留空)是**生成提示**:告诉模型「现在轮到 assistant 说」,它从这里续写。**Llama-3** 用另一套:`<|begin_of_text|>` 开头,每条消息 `<|start_header_id|>{role}<|end_header_id|>\n\n{内容}<|eot_id|>`。模板长得不同,但思想一致:**用特殊 token 划角色边界**。
 
+![[tok-ChatML对照.png]]
+
 ![[tok-对话模板.png]]
 
 ## 原理

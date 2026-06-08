@@ -61,6 +61,8 @@ nvidia-smi topo -m
 - **NVLink、NVSwitch、PCIe 各是什么、差多少?** NVLink = GPU 间专用高带宽链路(900 GB/s~1.8 TB/s);NVSwitch = 把 NVLink 扩成无阻塞全互联的交换芯片;PCIe ≈ 128 GB/s 是数量级更慢的通用总线。差 7~14 倍。
 - **为什么张量并行必须在 NVLink 域内?** TP 每层每 token 都要 all-reduce 激活,通信在关键路径且无法被计算掩盖;NVLink 带宽够才不让 GPU 空等。跨 PCIe/网络做 TP 带宽掉一个量级,不可行。
 - **NVLink-C2C 解决什么?** CPU↔GPU 缓存一致统一内存,900 GB/s ≈ 7× PCIe Gen5;让 GPU 直接高速访问 CPU 侧大内存(放 KV-Cache 溢出、参数 offload),无 PCIe 拷贝开销。
+
+![[hw-008C2C统一地址.png]]
 - **8 卡节点里 NVSwitch 为什么是 4 颗?** Hopper 单 NVSwitch 端口有限,4 颗才能让 8 张卡两两都拿到满 900 GB/s 的无阻塞带宽。
 - **TP vs PP 怎么按互联放?** NVLink 域内放 TP(频繁同步),域间用 PP/DP(通信稀疏,容忍 IB/以太低带宽)。
 

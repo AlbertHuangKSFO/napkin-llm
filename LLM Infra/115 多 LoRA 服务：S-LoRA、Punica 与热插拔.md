@@ -22,6 +22,10 @@ $$
 
 ![[srv-多LoRA服务架构.png]]
 
+unified paging 的分页池细节:adapter 页与 KV 页混排在同一物理页池,显存吃紧时优先把冷 adapter 页换出到 CPU、腾给热请求的 KV 页:
+
+![[orch-115分页池换出.png]]
+
 ## 配置 / 代码
 ```python
 # vLLM:启用多 LoRA,按请求指定 adapter
