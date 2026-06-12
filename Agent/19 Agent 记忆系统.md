@@ -118,7 +118,7 @@ A($0.828$)仍排 B($0.72$)前——语义权重大,旧但更对题的 A 胜出�
 | Working | 此刻在看的 | 会话内,易失 | prompt / scratchpad | 对话历史、ReAct 轨迹 | 本就在上下文里 |
 | Episodic | 经历过的具体事 | 长期 | 向量库 / 日志 | 历史会话、Reflexion 反思 | 语义检索回灌 |
 | Semantic | 抽象出的知识/事实 | 长期 | KB / 知识图谱 / 向量库 | 用户偏好、领域事实 | 检索回灌 |
-| Procedural | 怎么做的技能 | 长期、相对固定 | 指令模板 / 代码 | system prompt、工具、[[25 Agent Skills(SKILL.md)|Agent Skills(SKILL.md)]] | 常驻指令,不靠检索 |
+| Procedural | 怎么做的技能 | 长期、相对固定 | 指令模板 / 代码 | system prompt、工具、[[25 Agent Skills(SKILL.md)\|Agent Skills(SKILL.md)]] | 常驻指令,不靠检索 |
 
 ## 何时用 / 坑
 

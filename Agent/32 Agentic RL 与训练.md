@@ -94,7 +94,7 @@ agentic 场景下,`reward_fn` 评的是**一整段多步轨迹**(agent 调了几
 
 ## 对比:Prompt 优化(DSPy) vs Agentic RL
 
-| 维度 | [[31 Agent 提示词优化(DSPy)|Agent 提示词优化(DSPy)]] | Agentic RL |
+| 维度 | [[31 Agent 提示词优化(DSPy)\|Agent 提示词优化(DSPy)]] | Agentic RL |
 |---|---|---|
 | 改什么 | **prompt / few-shot 示例** | **模型权重 θ** |
 | 改不改模型 | 不改(可逆) | 改(不可逆,得存 checkpoint) |

@@ -82,7 +82,7 @@ answer = joiner_llm(task, results)        # 够了→收尾;不够→ replan 生
 
 ## 对比:ReAct / ReWOO / LLMCompiler
 
-| 维度 | [[09 ReAct|ReAct]] | [[11 ReWOO|ReWOO]] | LLMCompiler |
+| 维度 | [[09 ReAct\|ReAct]] | [[11 ReWOO\|ReWOO]] | LLMCompiler |
 |---|---|---|---|
 | 规划时机 | 边走边想(无全局规划) | 一次性出**线性**蓝图 | 一次性出**DAG**(带依赖) |
 | 执行结构 | 串行,逐个调 | 蓝图按序执行(变量回填) | **就绪即并发** |

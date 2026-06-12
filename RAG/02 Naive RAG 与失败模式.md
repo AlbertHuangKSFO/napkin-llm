@@ -29,13 +29,13 @@ Barnett et al. 2024 从三个真实领域系统(研究、教育、生物医药)�
 
 | 编号 | 失败点 | 含义 | 主要侧 | 指向解法 |
 |---|---|---|---|---|
-| FP1 | Missing Content 内容缺失 | 答案根本不在库里 | 检索 | [[17 检索数据治理|检索数据治理]] |
-| FP2 | Missed Top Ranked 漏掉应排前的文档 | 相关文档没进 top-k | 检索 | [[08 混合检索 Hybrid Search|混合检索 Hybrid Search]]、[[10 重排序 Reranking|重排序 Reranking]] |
-| FP3 | Not in Context 不在上下文 | 文档检到了,但拼装/截断时被丢出窗口 | 衔接 | [[10 重排序 Reranking|重排序 Reranking]]、上下文压缩 |
-| FP4 | Not Extracted 未被抽取 | 答案在上下文里,LLM 却没抽出(噪声/矛盾干扰) | 生成 | [[10 重排序 Reranking|重排序 Reranking]]、[[11 生成层：引用归因与忠实度|生成层：引用归因与忠实度]] |
+| FP1 | Missing Content 内容缺失 | 答案根本不在库里 | 检索 | [[17 检索数据治理\|检索数据治理]] |
+| FP2 | Missed Top Ranked 漏掉应排前的文档 | 相关文档没进 top-k | 检索 | [[08 混合检索 Hybrid Search\|混合检索 Hybrid Search]]、[[10 重排序 Reranking\|重排序 Reranking]] |
+| FP3 | Not in Context 不在上下文 | 文档检到了,但拼装/截断时被丢出窗口 | 衔接 | [[10 重排序 Reranking\|重排序 Reranking]]、上下文压缩 |
+| FP4 | Not Extracted 未被抽取 | 答案在上下文里,LLM 却没抽出(噪声/矛盾干扰) | 生成 | [[10 重排序 Reranking\|重排序 Reranking]]、[[11 生成层：引用归因与忠实度\|生成层：引用归因与忠实度]] |
 | FP5 | Wrong Format 格式错误 | 要求表格/列表,模型无视格式指令 | 生成 | Prompt/输出约束 |
-| FP6 | Incorrect Specificity 粒度不当 | 答案太泛或太细,不贴合需求 | 生成 | [[07 查询变换 Query Transformation|查询变换 Query Transformation]] |
-| FP7 | Incomplete 答案不完整 | 给出半截真相,漏掉关键片段 | 生成 | [[13 Modular RAG|Modular RAG]] 迭代检索、[[09 多跳检索：IRCoT、Self-Ask、FLARE|多跳检索：IRCoT、Self-Ask、FLARE]] |
+| FP6 | Incorrect Specificity 粒度不当 | 答案太泛或太细,不贴合需求 | 生成 | [[07 查询变换 Query Transformation\|查询变换 Query Transformation]] |
+| FP7 | Incomplete 答案不完整 | 给出半截真相,漏掉关键片段 | 生成 | [[13 Modular RAG\|Modular RAG]] 迭代检索、[[09 多跳检索：IRCoT、Self-Ask、FLARE\|多跳检索：IRCoT、Self-Ask、FLARE]] |
 
 注意:这七点**横跨检索与生成两侧**,且不少病(如 FP3/FP4)发生在"检到了但没用好"的衔接处——单纯换更强的嵌入模型救不了,得靠 Advanced/Modular 的成套手段。
 
@@ -71,13 +71,13 @@ def naive_rag(query, corpus, embed, llm, chunk_size=200, k=3):
 
 | 失败点 | 生产里怎么治 | 用什么 |
 |---|---|---|
-| FP1 内容缺失 | 数据治理:补数据源、修权限、加 ingestion 监控 | Unstructured.io 解析覆盖率告警、[[17 检索数据治理|治理]] |
+| FP1 内容缺失 | 数据治理:补数据源、修权限、加 ingestion 监控 | Unstructured.io 解析覆盖率告警、[[17 检索数据治理\|治理]] |
 | FP2 漏掉应排前文档 | 混合检索(dense+BM25)+ 重排 | Qdrant/Weaviate 原生 hybrid、Cohere Rerank |
 | FP3 不在上下文 | 控制 k、上下文压缩、重排顶到首尾 | LongLLMLingua 压缩、`top_n` 收紧 |
 | FP4 未被抽取 | 重排去噪 + 引用约束 prompt | bge-reranker、强制 `[n]` 引用 |
 | FP5 格式错误 | 结构化输出约束 | JSON mode / function calling / Pydantic |
 | FP6 粒度不当 | 查询改写 + 多粒度索引 | HyDE、small-to-big |
-| FP7 答案不完整 | 迭代/多跳检索 | [[09 多跳检索：IRCoT、Self-Ask、FLARE|多跳]]、[[13 Modular RAG|Modular]] |
+| FP7 答案不完整 | 迭代/多跳检索 | [[09 多跳检索：IRCoT、Self-Ask、FLARE\|多跳]]、[[13 Modular RAG\|Modular]] |
 
 **真实排障流程**(团队实际这么做):
 1. 用 **Ragas** 在测试集上跑 context recall / precision / faithfulness 三个指标(见 [[18 RAG 评估|18]]、[[#来源]])。

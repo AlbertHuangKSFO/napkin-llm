@@ -142,7 +142,7 @@ def quant_per_channel(W, bits=8):              # W: [out, in],逐 out 通道
 | int4 权重(要更准) | per-group(group=128) | 隔离离群更细,scale 仅占 ~0.125 bit/参(GPTQ/AWQ 默认) |
 | 激活(有离群、偏斜) | 非对称 + per-token 动态 | 贴合 $[\min,\max]$、动态 scale 抗逐 token 离群 |
 | 追求最省/硬件最简 | per-tensor | 元数据最少,但对离群最脆,易掉点 |
-| 激活离群严重、要 W8A8 | 先 [[096 AWQ 与 SmoothQuant|SmoothQuant]] 迁移再量化 | 把激活难度搬给权重,两边都能 int8 |
+| 激活离群严重、要 W8A8 | 先 [[096 AWQ 与 SmoothQuant\|SmoothQuant]] 迁移再量化 | 把激活难度搬给权重,两边都能 int8 |
 
 ## 面试高频
 

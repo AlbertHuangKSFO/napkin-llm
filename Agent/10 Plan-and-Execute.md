@@ -92,7 +92,7 @@ def plan_and_execute(goal, planner_llm, exec_llm, max_rounds=10):
 
 ## 对比:为什么比 ReAct 省
 
-| 维度 | [[09 ReAct|ReAct]] | **Plan-and-Execute** |
+| 维度 | [[09 ReAct\|ReAct]] | **Plan-and-Execute** |
 |---|---|---|
 | 规划时机 | 隐式,**每步**现想 | 显式,**前期一次**(+偏差时 replan) |
 | 调大模型频率 | 每一步 | 规划 1 次 + 每步可用小模型/工具执行 |
@@ -107,11 +107,11 @@ def plan_and_execute(goal, planner_llm, exec_llm, max_rounds=10):
 
 | 任务形态 | 选什么 | 为什么 |
 |---|---|---|
-| 高不确定、下一步严重依赖上一步真实结果 | **[[09 ReAct|ReAct]]** | 每步现想最灵活、天然纠错;代价是 token 随步数膨胀、长程易迷失 |
+| 高不确定、下一步严重依赖上一步真实结果 | **[[09 ReAct\|ReAct]]** | 每步现想最灵活、天然纠错;代价是 token 随步数膨胀、长程易迷失 |
 | 步骤大体可预排的长流程(多阶段处理、报告生成) | **Plan-and-Execute** | 规划智力集中一次、执行廉价化,省 token 更稳;靠 replan 应对偏差 |
-| 步骤可预排 + 想把执行 token 压到极致 | **[[11 ReWOO|ReWOO]]** | observation 完全不回灌大模型(占位变量蓝图),token 最省;但中途无法纠偏 |
-| 步骤间有明显并行结构、要压延迟 | **[[12 LLMCompiler|LLMCompiler]]** | 计划编译成任务 DAG,无依赖步骤并行执行,墙钟最短 |
-| 解可枚举、要回溯/择优(博弈、证明、规划) | **[[14 树搜索：ToT 与 LATS|ToT/LATS]]** | 把循环展开成搜索树多路探索 + 回溯,质量最高但最贵 |
+| 步骤可预排 + 想把执行 token 压到极致 | **[[11 ReWOO\|ReWOO]]** | observation 完全不回灌大模型(占位变量蓝图),token 最省;但中途无法纠偏 |
+| 步骤间有明显并行结构、要压延迟 | **[[12 LLMCompiler\|LLMCompiler]]** | 计划编译成任务 DAG,无依赖步骤并行执行,墙钟最短 |
+| 解可枚举、要回溯/择优(博弈、证明、规划) | **[[14 树搜索：ToT 与 LATS\|ToT/LATS]]** | 把循环展开成搜索树多路探索 + 回溯,质量最高但最贵 |
 
 > 主线一句话:**ReAct(每步问)→ Plan-and-Execute(规划一次)→ ReWOO(观测不回灌)/ LLMCompiler(DAG 并行)**,越往后大模型介入越少、越省越快,代价是越不能边走边纠。
 

@@ -111,8 +111,8 @@ def agentic_rag(question, llm, max_hops=4):
 |---|---|---|
 | 单跳事实问答、成本/延迟敏感、源稳定 | **Naive/传统 RAG** | 一次检索→生成,最快最便宜;先叠混合检索+重排把召回顶上去 |
 | 多跳 / 含糊需重写 / 检索质量参差需纠错 | **Agentic RAG** | 检索成工具,自主多轮+自评再查;贵且慢,高准确率需求才值,必设 `max_hops` |
-| 源是精确符号(代码/API/标识符)、频繁变更 | **[[24 Agentic Search：grep vs 向量检索|Agentic Search(grep)]]** | 精确、零索引、不陈旧;编码 agent 普遍弃向量库改 grep 迭代 |
-| 小库 + 高频跨文档关联 + 能吃 prompt cache | **长上下文** | 省检索工程,但每查贵约 1250×、难更新难溯源,见 [[19 RAG vs 长上下文 vs Agentic Search|19]] |
+| 源是精确符号(代码/API/标识符)、频繁变更 | **[[24 Agentic Search：grep vs 向量检索\|Agentic Search(grep)]]** | 精确、零索引、不陈旧;编码 agent 普遍弃向量库改 grep 迭代 |
+| 小库 + 高频跨文档关联 + 能吃 prompt cache | **长上下文** | 省检索工程,但每查贵约 1250×、难更新难溯源,见 [[19 RAG vs 长上下文 vs Agentic Search\|19]] |
 | 全局/汇总型问题(整库主题、共性根因) | **GraphRAG** | 向量只取局部 top-k,答不了全语料汇总 |
 
 > 现实几乎都是**混合**:RAG 召回打底 + agent 多轮迭代 + 长上下文当单步容量旋钮,选型是「以谁为主、补到多少」。

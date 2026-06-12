@@ -71,8 +71,8 @@ def flare_step(draft_sentence, token_logprobs, retrieve, llm, thresh=-2.0):
 | Self-Ask | 显式 follow-up 子问题 | 每个子问题前 | 自问自答,可插搜索 | arXiv:2210.03350 |
 | IRCoT | CoT 的每一句 | 每生成一句 CoT | 检索与 CoT 逐句交错 | arXiv:2212.10509 |
 | FLARE | 低置信 token span | 模型没把握时 | 前瞻生成,置信度触发 | arXiv:2305.06983 |
-| Decompose([[07 查询变换 Query Transformation|查询变换 Query Transformation]]) | 一次列全子问题 | 检索前一次拆 | 并行、无串行依赖 | — |
-| [[36 Agentic RAG|Agentic RAG]] | 模型自主 | 模型自主决定 | 上面这些的 agent 化 | — |
+| Decompose([[07 查询变换 Query Transformation\|查询变换 Query Transformation]]) | 一次列全子问题 | 检索前一次拆 | 并行、无串行依赖 | — |
+| [[36 Agentic RAG\|Agentic RAG]] | 模型自主 | 模型自主决定 | 上面这些的 agent 化 | — |
 
 ## 何时用 / 坑
 

@@ -96,7 +96,7 @@ def rewoo(task, llm):
 
 ## 对比:ReWOO vs ReAct vs Plan-and-Execute
 
-| 维度 | [[09 ReAct|ReAct]] | [[10 Plan-and-Execute|Plan-and-Execute]] | **ReWOO** |
+| 维度 | [[09 ReAct\|ReAct]] | [[10 Plan-and-Execute\|Plan-and-Execute]] | **ReWOO** |
 |---|---|---|---|
 | 观测如何进入推理 | 每步**交错回灌** | 每步结果回灌给 replanner | **只在 Solver 末尾汇合一次** |
 | 大模型调用次数 | ~每步一次 | 规划 1 次 + 偏差时 replan | **固定 2 次**(Plan+Solve) |

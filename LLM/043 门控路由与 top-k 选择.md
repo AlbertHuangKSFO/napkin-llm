@@ -131,10 +131,10 @@ top-k 硬路由不是唯一选择,了解变体能答得更深:
 
 | 场景 | 选什么 | 为什么 |
 |---|---|---|
-| 通用稀疏 MoE 默认 | **token-choice top-2** + 负载均衡损失 | 质量稳、几乎事实标准([[046 Mixtral 稀疏 MoE|Mixtral]]、GShard) |
-| 算力/通信预算极紧 | top-1([[045 Switch Transformer 与 GShard|Switch]]) | 单 token 只算 1 个专家,通信最省,表达力略弱 |
+| 通用稀疏 MoE 默认 | **token-choice top-2** + 负载均衡损失 | 质量稳、几乎事实标准([[046 Mixtral 稀疏 MoE\|Mixtral]]、GShard) |
+| 算力/通信预算极紧 | top-1([[045 Switch Transformer 与 GShard\|Switch]]) | 单 token 只算 1 个专家,通信最省,表达力略弱 |
 | 想免辅助均衡损失、天然均衡 | expert-choice(专家选 token) | 每专家恰收 C 个 token,但可能丢部分 token |
-| 想免均衡损失又不丢 token | DeepSeek 可学习偏置(无辅助损失均衡) | 仍 top-k,用每专家偏置 $b_i$ 调打分([[047 DeepSeek MoE：细粒度与共享专家|DeepSeekMoE]]) |
+| 想免均衡损失又不丢 token | DeepSeek 可学习偏置(无辅助损失均衡) | 仍 top-k,用每专家偏置 $b_i$ 调打分([[047 DeepSeek MoE：细粒度与共享专家\|DeepSeekMoE]]) |
 | 视觉等场景、不要离散丢弃 | Soft MoE(可微软分派) | 无丢弃、无需均衡损失,但失去单 token 只算 k 个的稀疏性 |
 
 ## 面试高频

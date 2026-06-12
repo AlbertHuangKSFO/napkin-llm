@@ -100,7 +100,7 @@ print("NTK   高/低频:", extend_ntk(d, 2048, 8192)[0].item(), extend_ntk(d, 20
 | 完全不能微调、要即插即用 | NTK-aware / 动态 NTK | 改 base 即可,高频几乎不动、免微调;动态 NTK 短序列不损 |
 | 能花几百步微调、扩到几倍 | 位置插值 PI | 一刀切缩位置,实现最简,微调找回近邻分辨率 |
 | 扩到几十倍、要 SOTA 质量 | **YaRN**(NTK-by-parts + 温度缩放) | 按波长分三段最精细,<0.1% 数据微调即达 SOTA,兼容 FlashAttention |
-| 训练阶段就想原生长上下文、零外推烦恼 | [[033 ALiBi 与 NoPE|ALiBi]] | 训短测长天生不退化,但长程精检索弱于 RoPE+YaRN |
+| 训练阶段就想原生长上下文、零外推烦恼 | [[033 ALiBi 与 NoPE\|ALiBi]] | 训短测长天生不退化,但长程精检索弱于 RoPE+YaRN |
 
 > 仅对 RoPE 模型有效;扩窗后缓存的旋转 k 需按新频率重排/重算,别直接沿用旧 KV。
 

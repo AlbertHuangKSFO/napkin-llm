@@ -36,12 +36,12 @@
 
 | STRIDE 类别                | 传统含义    | LLM/Agent 体现                   | 对应篇                                 |                                      |        |
 | ------------------------ | ------- | ------------------------------ | ----------------------------------- | ------------------------------------ | ------ |
-| **S** Spoofing 伪造身份      | 冒充用户/服务 | 伪造 agent 身份、恶意 MCP server 冒充工具 | [[16 Agent 身份与权限滥用(非人类身份 NHI)       | 身份滥用]]                               |        |
-| **T** Tampering 篡改       | 改数据/代码  | 数据投毒、记忆投毒、权重篡改                 | [[09 数据与模型投毒                        | 投毒]]、[[17 Memory 与 Context Poisoning | 记忆投毒]] |
-| **R** Repudiation 抵赖     | 否认操作    | agent 动作无审计、责任不可追溯             | [[25 监控、可观测与事件响应                    | 监控与可观测]]                             |        |
-| **I** Info Disclosure 泄露 | 泄露机密    | system prompt 泄露、训练数据外泄、PII    | [[07 敏感信息泄露与 System Prompt 泄露       | 信息泄露]]、[[13 隐私攻击与数据保护                | 隐私攻击]] |
-| **D** DoS 拒绝服务           | 打垮服务    | 无界消耗、成本型 DoS(token 烧钱)         | [[12 Unbounded Consumption 成本型 DoS  | 无界消耗]]                               |        |
-| **E** Elevation 提权       | 越权获取权限  | 过度自主、目标劫持让 agent 超范围行动         | [[14 Excessive Agency 与 Goal Hijack | 过度自主]]                               |        |
+| **S** Spoofing 伪造身份      | 冒充用户/服务 | 伪造 agent 身份、恶意 MCP server 冒充工具 | [[16 Agent 身份与权限滥用(非人类身份 NHI)       \| 身份滥用]]                               |        |
+| **T** Tampering 篡改       | 改数据/代码  | 数据投毒、记忆投毒、权重篡改                 | [[09 数据与模型投毒                        \| 投毒]]、[[17 Memory 与 Context Poisoning \| 记忆投毒]] |
+| **R** Repudiation 抵赖     | 否认操作    | agent 动作无审计、责任不可追溯             | [[25 监控、可观测与事件响应                    \| 监控与可观测]]                             |        |
+| **I** Info Disclosure 泄露 | 泄露机密    | system prompt 泄露、训练数据外泄、PII    | [[07 敏感信息泄露与 System Prompt 泄露       \| 信息泄露]]、[[13 隐私攻击与数据保护                \| 隐私攻击]] |
+| **D** DoS 拒绝服务           | 打垮服务    | 无界消耗、成本型 DoS(token 烧钱)         | [[12 Unbounded Consumption 成本型 DoS  \| 无界消耗]]                               |        |
+| **E** Elevation 提权       | 越权获取权限  | 过度自主、目标劫持让 agent 超范围行动         | [[14 Excessive Agency 与 Goal Hijack \| 过度自主]]                               |        |
 
 ## 威胁建模方法:数据流 + 信任边界
 

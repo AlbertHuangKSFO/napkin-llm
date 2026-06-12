@@ -22,11 +22,11 @@ Modular RAG 把系统纵向切成若干**模块**,每个模块下面挂可替换
 
 | 模块 | 干什么 | 可换的算子举例 | 关联笔记 |
 |---|---|---|---|
-| **Indexing 索引** | 把语料切块、编码、建库 | 分块策略 / 层级索引 / 稀疏+稠密 | [[03 分块策略 Chunking|分块策略 Chunking]]、[[04 Embedding 与向量数据库|Embedding 与向量数据库]] |
-| **Pre-retrieval 检索前** | 加工 query | 改写 / 分解 / 扩展 / 路由 | [[07 查询变换 Query Transformation|查询变换 Query Transformation]]、[[05 Routing|Routing]] |
-| **Retrieval 检索** | 召回候选 | 向量 / 混合 / 多源融合 | [[08 混合检索 Hybrid Search|混合检索 Hybrid Search]] |
-| **Post-retrieval 检索后** | 加工召回结果 | 重排序 / 压缩 / 过滤 / 精炼 | [[10 重排序 Reranking|重排序 Reranking]] |
-| **Generation 生成** | 据证据生成答案 | 受约束生成 / 引用归因 / 忠实校验 | [[11 生成层：引用归因与忠实度|生成层：引用归因与忠实度]] |
+| **Indexing 索引** | 把语料切块、编码、建库 | 分块策略 / 层级索引 / 稀疏+稠密 | [[03 分块策略 Chunking\|分块策略 Chunking]]、[[04 Embedding 与向量数据库\|Embedding 与向量数据库]] |
+| **Pre-retrieval 检索前** | 加工 query | 改写 / 分解 / 扩展 / 路由 | [[07 查询变换 Query Transformation\|查询变换 Query Transformation]]、[[05 Routing\|Routing]] |
+| **Retrieval 检索** | 召回候选 | 向量 / 混合 / 多源融合 | [[08 混合检索 Hybrid Search\|混合检索 Hybrid Search]] |
+| **Post-retrieval 检索后** | 加工召回结果 | 重排序 / 压缩 / 过滤 / 精炼 | [[10 重排序 Reranking\|重排序 Reranking]] |
+| **Generation 生成** | 据证据生成答案 | 受约束生成 / 引用归因 / 忠实校验 | [[11 生成层：引用归因与忠实度\|生成层：引用归因与忠实度]] |
 | **Orchestration 编排** | 调度上面五层、决定走哪条 flow | 路由 / 调度 / 条件 / 循环控制 | —— |
 
 模块化的好处是**解耦与可复用**:想升级召回?只换 Retrieval 模块的算子,别处不动。想加忠实度校验?往 Generation 模块插一个算子。这正是「LEGO-like reconfigurable」的字面意思。
@@ -47,11 +47,11 @@ Modular RAG 最有价值的部分,是把 **Orchestration 能编排出的流程�
 | 查询形态 | 选哪种 flow / 范式 | 为什么 |
 |---|---|---|
 | 简单事实问答、查询模式单一 | **Linear**(Naive/Advanced) | 一条直线最省心,过度模块化只增延迟和复杂度;先跑通基线 |
-| 简单/复杂混流、要按难度分路 | **Conditional**([[05 Routing|Routing]]/Adaptive-RAG) | 复杂度分类器把简单 query 分流走快路径,只对难题开多轮,省成本 |
+| 简单/复杂混流、要按难度分路 | **Conditional**([[05 Routing\|Routing]]/Adaptive-RAG) | 复杂度分类器把简单 query 分流走快路径,只对难题开多轮,省成本 |
 | 一个问题含多个可拆子问 / 多源 | **Branching**(子查询并行 + RRF 融合) | 无依赖分支并行铺开一次汇总,比串行快;注意并行执行别串行 |
-| 召回质量参差、需自评纠错 / 多跳 | **Loop**(CRAG/Self-RAG/IRCoT) | 带回边反复改写再查直到收敛,是 [[36 Agentic RAG|Agentic RAG]] 雏形;必设 `max_iter` |
-| 全局/汇总型问题(整库主题) | **GraphRAG** | 向量召回只取局部 top-k,答不了全语料汇总,见 [[14 GraphRAG 知识图谱检索|14]] |
-| 流程要 agent 运行时自主决定 | **Agentic RAG** | 控制权从「预编排图」交给 LLM,更灵活但更难调、成本飘,见 [[36 Agentic RAG|36]] |
+| 召回质量参差、需自评纠错 / 多跳 | **Loop**(CRAG/Self-RAG/IRCoT) | 带回边反复改写再查直到收敛,是 [[36 Agentic RAG\|Agentic RAG]] 雏形;必设 `max_iter` |
+| 全局/汇总型问题(整库主题) | **GraphRAG** | 向量召回只取局部 top-k,答不了全语料汇总,见 [[14 GraphRAG 知识图谱检索\|14]] |
+| 流程要 agent 运行时自主决定 | **Agentic RAG** | 控制权从「预编排图」交给 LLM,更灵活但更难调、成本飘,见 [[36 Agentic RAG\|36]] |
 
 > 工程主流(2025):**默认 Modular(人编排、可审计、延迟可控),关键不确定处才放权给 agent**。
 

@@ -79,7 +79,7 @@ def reflection(task, gen, critic, rounds=2):
 
 ## 对比:Reflection vs Reflexion vs 其它
 
-| 维度 | Reflection | Reflexion | 普通 [[09 ReAct|ReAct]] |
+| 维度 | Reflection | Reflexion | 普通 [[09 ReAct\|ReAct]] |
 |---|---|---|---|
 | 自我评判 | 有 | 有(Evaluator) | 无 |
 | 跨尝试记忆 | 无 | **有(episodic)** | 无 |
@@ -135,8 +135,8 @@ def reflection(task, gen, critic, rounds=2):
 |---|---|---|
 | Evaluator 质量 | 让同一个 LLM 自评 | 优先用**可验证信号**(单测、编译、schema 校验、检索 ground truth);LLM-judge 仅兜底,且独立 prompt/模型避免自我偏袒 |
 | 收敛控制 | 固定轮数 | `max_trials` + **早停**(连续两轮无改进、或分数不升即停)+ 每轮**预算熔断** |
-| 反思记忆 | 无限堆 | 滑动窗口 / 摘要压缩(见 [[21 上下文压缩与卸载|上下文压缩与卸载]]);只留对当前任务相关的反思 |
-| 成本 | 反思也用最强模型 | 反思/评判可用**更小更便宜**的模型;生成用强模型(见 [[35 Agent 成本与延迟优化|Agent 成本与延迟优化]]) |
+| 反思记忆 | 无限堆 | 滑动窗口 / 摘要压缩(见 [[21 上下文压缩与卸载\|上下文压缩与卸载]]);只留对当前任务相关的反思 |
+| 成本 | 反思也用最强模型 | 反思/评判可用**更小更便宜**的模型;生成用强模型(见 [[35 Agent 成本与延迟优化\|Agent 成本与延迟优化]]) |
 | 可观测 | 黑盒 | 把每轮 trajectory / 反思文本 / 分数全部 trace 落库(LangSmith、Langfuse、Phoenix),离线复盘哪类反思真有效 |
 
 ### 踩坑(生产实录)

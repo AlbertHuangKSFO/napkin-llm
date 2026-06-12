@@ -86,7 +86,7 @@ def agent_team(task, shared_tasklist):
 | 是否可质疑彼此 | 否(只汇报结果) | 是(**互相质疑结论**) |
 | 结构 | 树状(父→子,单向) | 网状(对等,双向) |
 | 发布 | 2025 即有的 harness 能力 | **2026 年 2 月随 Opus 4.6** |
-| 像哪个模式 | [[07 Orchestrator-Workers|Orchestrator-Workers]] 工程化 | 真正的 [[22 多智能体系统|多智能体系统]] |
+| 像哪个模式 | [[07 Orchestrator-Workers\|Orchestrator-Workers]] 工程化 | 真正的 [[22 多智能体系统\|多智能体系统]] |
 | 适用 | 上下文隔离 + 并行拆分 | 多视角博弈 + 横向协作 |
 
 ## 何时用 / 坑

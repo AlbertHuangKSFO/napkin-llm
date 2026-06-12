@@ -118,7 +118,7 @@ def evaluate(eval_set):
 ## 可观测性工具对比
 | 工具 | 定位 | 特点 | 何时选 |
 |---|---|---|---|
-| **LangSmith** | LangChain 官方平台 | 与 [[37 Agent 框架对比|LangGraph]] 深度集成,trace/数据集/eval/标注一体,托管 | 用 LangChain 全家桶;要最省心的端到端 |
+| **LangSmith** | LangChain 官方平台 | 与 [[37 Agent 框架对比\|LangGraph]] 深度集成,trace/数据集/eval/标注一体,托管 | 用 LangChain 全家桶;要最省心的端到端 |
 | **Langfuse** | 开源 LLM 可观测平台 | 可自托管,框架无关,trace + eval + prompt 管理 + 成本看板 | 要开源/自托管、数据不出内网 |
 | **OpenTelemetry(GenAI 语义约定)** | 厂商中立的追踪标准 | 不是平台是**协议**,定义标准 span 属性;接任何后端 | 想避免厂商锁定;已有 OTel 基建 |
 | **Phoenix / Arize** | 开源 + 商业,偏评估/监控 | 内建 LLM 评估器、漂移监控,基于 OTel | 重离线评估与生产监控 |

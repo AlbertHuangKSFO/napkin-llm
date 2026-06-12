@@ -46,7 +46,7 @@ def evaluator_optimizer(task, max_iter=4):
 要点:① Generator 改写时**要同时拿到上一版和反馈**,否则丢失上下文;② 必须有**迭代上限**兜底,否则评估器永远不满意会死循环。
 
 ## 对比表
-| 维度 | Evaluator-Optimizer | [[04 Prompt Chaining|Prompt Chaining]] | [[13 Reflection 与 Reflexion|Reflection 与 Reflexion]] |
+| 维度 | Evaluator-Optimizer | [[04 Prompt Chaining\|Prompt Chaining]] | [[13 Reflection 与 Reflexion\|Reflection 与 Reflexion]] |
 |---|---|---|---|
 | 结构 | 生成↔评估**闭环** | 单向串行 | 自主推理中的自省循环 |
 | 评估者 | **独立**的 evaluator LLM | gate(确定性代码) | agent 自己反思 |

@@ -88,7 +88,7 @@ def step_back(query, llm, retrieve):
 | RAG-Fusion | N 改写 + RRF | 同上 + 排名融合 | N 倍检索 + 融合 | TDS 2023 / arXiv:2402.03367 |
 | Step-Back | query→上位问题 | 太具体、缺背景原理 | 1 次生成 | arXiv:2310.06117 |
 | Decompose | 1→多子问题 | 复合问题一次查不全 | 多次检索 | — |
-| Routing | 不改内容,选源 | 问题异质、源不同 | router 一次分类 | 见 [[05 Routing|Routing]] |
+| Routing | 不改内容,选源 | 问题异质、源不同 | router 一次分类 | 见 [[05 Routing\|Routing]] |
 
 ## 何时用 / 坑
 
