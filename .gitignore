@@ -18,3 +18,6 @@ assets/*.svg
 
 # 内部协作约定(给 Claude 看,不公开发布)
 CLAUDE.md
+
+# 个人 skill(随项目直发给受邀维护者,不进公开仓)
+.claude/skills/
