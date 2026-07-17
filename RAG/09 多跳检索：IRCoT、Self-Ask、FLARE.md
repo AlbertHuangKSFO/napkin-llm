@@ -34,35 +34,66 @@
 
 ## 可跑最小代码
 
-```python
-# 多跳交织的最小骨架:迭代「推理一步 → 检索 → 拼证据」直到收敛(IRCoT/Self-Ask 风味)
-def multi_hop(question, llm, retrieve, max_hops=4):
-    evidence, cot = [], ""
-    for hop in range(max_hops):
-        # 1) 推理一步:基于已有证据,生成下一句 CoT(或下一个 follow-up 子问题)
-        step = llm(
-            "你在做多跳问答。基于已有证据,写出推理的下一句;"
-            "若已能作答,以 'ANSWER:' 开头给出最终答案。\n"
-            f"问题:{question}\n已有证据:\n{chr(10).join(evidence) or '(无)'}\n已有推理:{cot}"
-        )
-        if step.startswith("ANSWER:"):
-            return step[len("ANSWER:"):].strip()      # 信息够,收敛退出
-        cot += " " + step
-        # 2) 用这句 CoT 当 query 去检索(下一跳查什么 = 刚推出的内容)
-        evidence += [d for d in retrieve(step, k=3)]    # 串行依赖:依赖上一步产物
-    # 触顶仍未收敛:基于现有证据尽力答(必备兜底)
-    return llm(f"基于以下证据尽力回答:{question}\n{chr(10).join(evidence)}")
+❌ 朴素写法只会把所有证据不断塞回 prompt：既看不出哪一跳慢/错，也无法区分 `LLM`、检索和重排的成本。
 
-# FLARE 风味:只在「下一句里有低置信 token」时才触发检索
-def flare_step(draft_sentence, token_logprobs, retrieve, llm, thresh=-2.0):
-    low_conf = [tok for tok, lp in token_logprobs if lp < thresh]  # 模型没把握的 span
-    if not low_conf:
-        return draft_sentence                          # 有把握 → 不检索,直接用
-    docs = retrieve(" ".join(low_conf), k=3)           # 低置信 span 当检索信号
-    return llm(f"参考资料重写这句,使其有据:{draft_sentence}\n资料:{docs}")
+```python
+def bad_multi_hop(question, llm, retrieve):
+    evidence = []
+    for _ in range(4):                    # 固定跑满，不检查是否已足够
+        step = llm(f"问题:{question}\n证据:{evidence}")
+        evidence.extend(retrieve(step, k=3))  # 重复证据会继续膨胀
+    return llm(f"请作答:{question}\n证据:{evidence}")
 ```
 
-要点:① 检索 query 来自**上一步的推理产物**(`retrieve(step)`),这就是"串行依赖";② `max_hops` 是**必备护栏**——交织循环不收敛会无限查,跟 [[36 Agentic RAG|Agentic RAG]] 一样要设上限 + 兜底答;③ FLARE 的差别在**触发条件**:用 token 置信度决定是否检索,而非每跳都查。
+✅ 下例把每跳拆成「推理 → 检索 → 重排」，记录每段延迟和输入/输出 token；传入真实的 `llm`、`retrieve`、`rerank`、`count_tokens` 回调即可运行。`count_tokens` 应使用与线上模型一致的 tokenizer，或改为读取供应商实际返回的 usage。
+
+```python
+from dataclasses import asdict, dataclass
+from time import perf_counter
+
+
+@dataclass
+class HopTrace:
+    hop: int
+    llm_ms: float
+    retrieve_ms: float
+    rerank_ms: float
+    input_tokens: int
+    output_tokens: int
+    query: str
+
+
+def timed(fn, *args, **kwargs):
+    start = perf_counter()
+    result = fn(*args, **kwargs)
+    return result, round((perf_counter() - start) * 1000, 1)
+
+
+def multi_hop(question, llm, retrieve, rerank, count_tokens, max_hops=4):
+    evidence, traces = [], []
+    for hop in range(1, max_hops + 1):
+        prompt = (
+            "基于证据写下一个可检索的子问题；若证据已充分则以 ANSWER: 开头。\n"
+            f"问题:{question}\n证据:\n{chr(10).join(evidence) or '(无)'}"
+        )
+        step, llm_ms = timed(llm, prompt)
+        if step.startswith("ANSWER:"):
+            traces.append(HopTrace(hop, llm_ms, 0, 0,
+                                   count_tokens(prompt), count_tokens(step), ""))
+            return step.removeprefix("ANSWER:").strip(), [asdict(t) for t in traces]
+
+        docs, retrieve_ms = timed(retrieve, step, 8)
+        ranked, rerank_ms = timed(rerank, question, docs, 3)
+        evidence.extend(ranked)
+        traces.append(HopTrace(hop, llm_ms, retrieve_ms, rerank_ms,
+                               count_tokens(prompt), count_tokens(step), step))
+
+    final_prompt = f"仅基于下列证据回答。\n问题:{question}\n证据:\n{chr(10).join(evidence)}"
+    answer, _ = timed(llm, final_prompt)  # 终答不是检索 hop；生产中另记该 span
+    return answer, [asdict(t) for t in traces]
+```
+
+`traces` 可逐跳写入 trace：出现错误答案时先看该跳的 query/证据；出现慢请求时分别看 `llm_ms`、`retrieve_ms`、`rerank_ms`；容量与计费分析则汇总 `input_tokens`、`output_tokens`。FLARE 风味只需把 `step` 的产生改为「试生成下一句 → 低置信 token span 触发检索 → 带证据重写该句」；它的触发条件仍是置信度，而不是 IRCoT 的逐步固定检索。
 
 ## 对比表
 
@@ -81,7 +112,13 @@ def flare_step(draft_sentence, token_logprobs, retrieve, llm, thresh=-2.0):
 **坑**:
 - **不收敛 / 死循环**:交织循环反复查同样的东西。必设 `max_hops` + "查不到就基于现有证据尽力答"。
 - **错误累积**:某一跳推理或检索错了,后续跳都建立在错前提上,越走越偏。中间步骤最好能自评(这就引向 [[13 Reflection 与 Reflexion|Reflection 与 Reflexion]] 和 CRAG 的纠错)。
-- **延迟 × 跳数**:每跳 = 一次推理 + 一次检索,多跳累积慢且贵。简单单跳问题别套多跳。**延迟手算**:设单跳一轮(推理 + 检索 + 重排)约 $2\text{s}$,那么 4 跳串行 ≈ $4\times 2=8\text{s}$,墙钟延迟直接 4 倍于单跳;且每跳的证据都累进上下文,prompt token 也近似 $\times 4$(第 4 跳要带前 3 跳的证据),推理成本随跳数**线性**涨。这就是「简单题别套多跳」的量化理由——单跳能答的题套 4 跳,白白多花 $6\text{s}$ 和 3 倍 token。
+- **延迟与 token 累积**:每跳 = 一次 LLM + 一次检索 + 一次重排，简单单跳问题别套多跳。设第 $h$ 跳的三段延迟分别为 $t_h^{\mathrm{llm}}$、$t_h^{\mathrm{ret}}$、$t_h^{\mathrm{rank}}$，串行墙钟时间为
+  $$T=\sum_{h=1}^{H}\left(t_h^{\mathrm{llm}}+t_h^{\mathrm{ret}}+t_h^{\mathrm{rank}}\right).$$
+  **下列仅为示意，不是通用性能承诺**：三跳分别记录为 $(420,80,45)\text{ms}$、$(510,85,50)\text{ms}$、$(650,90,55)\text{ms}$，则 $T=(545+645+795)\text{ms}=1.985\text{s}$。同一 trace 同时记录每跳 `input_tokens`、`output_tokens`，才知道慢在模型、后端还是重排。
+
+  若每跳都保留历史证据，令初始 prompt 为 $I_0$ token，第 $j$ 跳新增证据加输出为 $e_j+o_j$，第 $h$ 跳输入近似
+  $$I_h=I_0+\sum_{j=1}^{h-1}(e_j+o_j),\qquad I_{\mathrm{total}}=\sum_{h=1}^{H}I_h.$$
+  因此相同长度证据持续累积时，$I_{\mathrm{total}}$ 对跳数可能呈**超线性（近似二次）**增长，而不是简单的 $H$ 倍；摘要、去重、截断会改变这个曲线。不能只报总时延，也不能假定 token 成本必然线性。
 - **上下文膨胀**:每跳的证据都堆进上下文,token 暴涨 + lost-in-the-middle。需配 [[20 上下文工程|上下文工程]],旧跳证据压缩或只留摘要。
 - **FLARE 阈值难调**:置信阈值太松→几乎不检索(退化成纯生成);太紧→几乎每句都查(退化成 IRCoT 还更贵)。
 
@@ -93,47 +130,23 @@ def flare_step(draft_sentence, token_logprobs, retrieve, llm, thresh=-2.0):
 - **FLARE**(arXiv:2305.06983, Jiang et al. 2023):前瞻生成,**低置信 token 触发**检索;最接近"自主决定是否检索"。
 - 三者都是 [[36 Agentic RAG|Agentic RAG]] 的**前身/非 agent 化版本**:把检索↔推理循环写成固定流程/固定触发,而非模型自主调度。
 - vs Decompose([[07 查询变换 Query Transformation|查询变换 Query Transformation]]):多跳是**串行依赖**,Decompose 是**并行列全**。
-- 必备护栏:`max_hops` + 兜底答;否则不收敛。延迟/成本随跳数线性涨。
+- 必备护栏:`max_hops` + 兜底答;否则不收敛。延迟按串行 hop 累积，未压缩的历史上下文会使输入 token 成本可能超线性增长。
 
-## 工业界实践
+## 工程落地与评估
 
-工业界很少把 IRCoT/Self-Ask/FLARE 当成"论文实现"原样照搬,而是把它们的**核心 pattern**(检索↔推理交织、置信度触发)接进编排框架里跑。
+将多跳实现为显式状态循环即可：`generate_step → retrieve → rerank → grade`，仅当 `grade` 判定证据不足且未触及 `max_hops` 时回到 `generate_step`。对简单问题可先走单跳路径；是否路由到多跳应由自己的离线集和 trace 数据验证，而非套用固定流量比例或框架结论。每一跳至少记录本节代码中的 query、文档 ID、`llm_ms`、`retrieve_ms`、`rerank_ms`、`input_tokens`、`output_tokens`，以定位漏召、错误前提、超时或上下文膨胀。
 
-**主流落地框架与组件**
-- **LangGraph**:把多跳写成**有环状态图**——节点 = `retrieve` / `generate_step` / `grade` / `decide_next`,边带条件,`max_hops` 用图的递归上限 (`recursion_limit`) 兜底。社区 Adaptive-RAG / Self-RAG / CRAG 官方教程都用它,多跳是同一套骨架。这是 2025 年生产里跑迭代检索最常见的载体。
-- **LlamaIndex**:`SubQuestionQueryEngine`(偏 Decompose 并行)、`MultiStepQueryEngine`(偏串行多跳)、`QueryPipeline` + `FnComponent` 自定义循环;`StepDecomposeQueryTransform` 显式把"已有答案"喂回去生成下一跳 query,正是串行依赖的工程化。
-- **DSPy**:`dspy.ReAct` / 多跳 `dspy.ChainOfThought` + retriever 工具,配 `MIPROv2` / `BootstrapFewShot` **编译**——不手写多跳 prompt,而是用少量标注让优化器自动搜出"下一跳查什么"的提示词,框架开销也最低(约 3.5ms)。多跳的 prompt 工程在这里变成可优化的程序。
-- **检索后端**:每一跳的检索仍走标准 [[08 混合检索 Hybrid Search|混合检索 Hybrid Search]] + [[10 重排序 Reranking|重排序 Reranking]];向量库用 Qdrant / Weaviate / pgvector / Milvus,检索质量直接决定多跳能不能"接得上"。
+每跳仍可组合 [[08 混合检索 Hybrid Search|混合检索 Hybrid Search]] 与 [[10 重排序 Reranking|重排序 Reranking]]；工程护栏是：
 
-**典型架构(生产多跳问答)**
-```
-query → [复杂度路由] ──简单──→ 单跳 RAG
-                     └─复杂──→ LangGraph 环:
-                        ┌────────────────────────────┐
-                        │ generate_step(基于已有证据) │
-                        │   ↓ 提取下一跳 query        │
-                        │ retrieve + rerank          │
-                        │   ↓ grade(够答了吗?)       │
-                        └──否→回到 generate_step──────┘
-                                  ↓是 / 触顶 max_hops
-                               grounded 生成 + 引用
-```
+- `grade` 作为提前停止信号，`max_hops` 作为硬上限，触顶后只基于已留存证据回答或明确无法确认。
+- 以文档 ID / chunk ID 去重，并对历史证据做摘要或预算截断，避免同一材料重复占用上下文。
+- 离线调 FLARE 阈值，并观察平均检索次数、终答正确性和 token 成本的联动；阈值不能凭直觉固定。
 
-**规模化关键**
-- **延迟 = 跳数 × (推理 + 检索 + 重排)**,是单跳的数倍。工程上:① 用 Adaptive 路由让 80% 简单流量走单跳,只有真多跳才进环;② 跳间证据**压缩成摘要**再带入下一跳,压住 token 与 lost-in-the-middle;③ 每跳推理可换小模型(下一跳 query 生成不需要旗舰模型),只在最终生成用大模型。
-- **索引选型**对多跳尤其敏感:漏召一跳全盘崩,召回阶段宁可用 HNSW(高召回、可调 `efSearch`)而非激进量化的 IVF-PQ;`ef` 设大些保召回,把精度交给重排。
-- **缓存**:多跳里中间子问题高度重复("X 的 CEO 是谁"),对子问题 query→证据做语义缓存(GPTCache 类)能省掉大量重复检索。
+### Ragas：合成测试集，不是通用多跳指标
 
-**评估与可观测**
-- **Ragas** 的多跳专项指标:除 faithfulness / context precision 外,有针对 multi-hop 的 `MultiHopAbstractQA` / `MultiHopSpecificQA` 合成数据生成,专测"证据要跨多片段拼"的题。
-- **TruLens / LangSmith / Phoenix**:用 OpenTelemetry **trace 每一跳**——看哪一跳召回崩了、哪一跳推理跑偏、总共跳了几次、是否触顶。多跳调试的核心就是"逐跳看 trace",没有 tracing 等于盲调。
-- 数据集:**HotpotQA、2WikiMultihopQA、MuSiQue、IIRC**(IRCoT 论文用的四个),线上回归测试常驻这几套。
+**版本化说明：以下名称对应 Ragas v0.2.12 的 testset API。** 官方的 `MultiHopAbstractQuerySynthesizer` 与 `MultiHopSpecificQuerySynthesizer`（常被口语化误写成 `MultiHopAbstractQA` / `MultiHopSpecificQA`）是从知识图谱/文本块簇**生成多跳测试问题与参考答案的 synthesizer**，不是对一次线上回答直接返回分数的通用 metric。它们用来构造「需要跨片段拼证据」的回归集；回答质量仍应由你选择并版本锁定的评估指标、金标答案和逐跳 trace 一起判断。升级 Ragas 前，需对照所安装版本的 [v0.2.12 synthesizers 文档](https://docs.ragas.io/en/v0.2.12/references/synthesizers/)；API 和默认分布均可能变化。
 
-**踩坑与最佳实践**
-- 多跳**不要默认全开**:简单题套多跳是纯浪费(延迟 ×N、还可能因冗余检索引噪)。先上 Adaptive 路由([[12 Self-RAG、CRAG 与 Adaptive RAG|Self-RAG、CRAG 与 Adaptive RAG]])。
-- 每跳**必须 grade**(够不够答),否则要么提前停(漏信息)、要么跑满 max_hops(浪费)。grade 是收敛信号。
-- 跳间一定要**去重证据**:同一篇文档反复被召,既占 token 又给模型"反复确认"的错觉。
-- FLARE 的置信阈值**离线在验证集上调**,别拍脑袋;并监控"平均触发检索次数",过高过低都说明阈值偏了。
+IRCoT 论文的评测涵盖 **HotpotQA、2WikiMultihopQA、MuSiQue、IIRC**；它们可用于方法对照，但上线回归集还应纳入自己语料的真实链式问题和失败样本。
 
 ## 面试高频
 
@@ -155,7 +168,7 @@ query → [复杂度路由] ──简单──→ 单跳 RAG
 标准答:① 硬上限 `max_hops`;② 收敛判据(grade 判"信息够了"提前停);③ 触顶兜底("查不到就基于现有证据尽力答");④ 跳间去重防止反复查同一个东西。四件缺一不可。
 
 **Q5(场景题):用户问"诺贝尔物理学奖得主中,谁的母校也培养过现任某科技公司 CEO?"——你怎么设计?**
-要点:识别为多跳依赖链 → LangGraph/IRCoT 式环 → 每跳 retrieve+rerank → 跳间证据摘要压缩 → grade 收敛 → 触顶兜底 → 最终 grounded 生成带引用。能说出"路由判复杂度、逐跳 trace、证据去重"是加分项。
+要点:识别为多跳依赖链 → 显式状态循环（生成下一跳 query → retrieve + rerank → grade）→ 跳间证据摘要压缩 → grade 收敛 → 触顶兜底 → 最终 grounded 生成带引用。能说出"路由判复杂度、逐跳 trace、证据去重"是加分项。
 
 ## 知识拓展
 
@@ -163,14 +176,14 @@ query → [复杂度路由] ──简单──→ 单跳 RAG
 - **IR-CoT / Self-Ask / FLARE(2022–2023)** 是第一代"交织检索"。再往后是把循环交给模型自主调度的方向:
 - **Self-RAG(Asai 2023,ICLR 2024)**:把"是否检索 + 是否相关 + 是否有据"内化成反思 token,见 [[12 Self-RAG、CRAG 与 Adaptive RAG|Self-RAG、CRAG 与 Adaptive RAG]]。
 - **Adaptive-RAG(Jeong 2024,NAACL)**:前置复杂度分类器,把"该不该多跳"路由化——正是多跳"别默认全开"的正解。
-- **Search-o1 / RAG with reasoning models(2025)**:把检索接进 o1/R1 式**长推理链**,推理模型在 think 过程中自主决定何时调 search 工具,是 FLARE"置信度触发"思想在推理大模型上的延伸。
-- **强化学习训检索-推理(2025)**:**Search-R1 / R1-Searcher / DeepRetrieval** 等用 RL(GRPO/PPO)直接训模型"在推理中何时检索、查什么",不再手写多跳流程,把多跳能力**学进策略**——这是当前多跳研究最活跃的方向。
+- **Search-R1**（Jin et al., arXiv v1 2025-03-12，[原论文](https://arxiv.org/abs/2503.09516)）：用强化学习训练模型在逐步推理中发起多轮搜索。它是「让策略学会何时/查什么」的 2025 研究方向，实验设置、搜索后端、奖励和数据分布都需复现核验，**不应作为生产多跳的默认方案**。
+- **DeepRetrieval**（Jiang et al., arXiv v1 2025-02-28，[原论文](https://arxiv.org/abs/2503.00223)）：以检索指标为奖励训练 LLM 生成查询，覆盖真实搜索引擎、检索器与 SQL 搜索等实验；它更直接研究「如何生成能召回的 query」，也可启发多跳的 query policy。它同样是研究方向，**不应绕过自身离线评测而默认投入生产**。
 - **测试时计算(test-time compute)视角**:多跳本质是"用更多检索-推理步换准确率",和 CoT 加长、beam 加宽同属 test-time scaling;[[19 RAG vs 长上下文 vs Agentic Search|RAG vs 长上下文 vs Agentic Search]] 里"agentic search"就是多跳的极端形态。
 
 **边界与反模式**
 - **反模式一:对单跳题套多跳**——延迟 ×N、还可能因冗余检索引入噪声反而降准。多跳是把双刃剑,默认全开是典型误用。
 - **反模式二:不 grade 的固定跳数**——要么提前停漏信息,要么跑满浪费;固定跳数几乎总是次优。
-- **边界**:当单篇文档已含全部所需事实(真单跳),多跳零收益纯亏成本;当依赖链极长(>5 跳)时错误累积通常压垮收益,此时该考虑 [[14 GraphRAG 知识图谱检索|GraphRAG 知识图谱检索]]——多跳事实关系用图遍历比反复 LLM 推理更稳更省。
+- **边界**:当单篇文档已含全部所需事实(真单跳),多跳通常只增加成本；依赖链很长时，先用逐跳正确率、召回率、时延和 token 成本验证是否仍有净收益，再决定是否需要为结构化关系另建索引或图遍历能力，不能用固定 hop 阈值替代评估。
 
 **相关链接**:它是 [[36 Agentic RAG|Agentic RAG]] 的非 agent 化前身,机制上是 [[09 ReAct|ReAct]] 在检索场景的落地(Thought→retrieve→Observation);承接 [[07 查询变换 Query Transformation|查询变换 Query Transformation]](Decompose 是其并行近亲),向后接 [[12 Self-RAG、CRAG 与 Adaptive RAG|Self-RAG、CRAG 与 Adaptive RAG]];纠错思想来自 [[13 Reflection 与 Reflexion|Reflection 与 Reflexion]],上下文管理靠 [[20 上下文工程|上下文工程]]。
 
@@ -178,3 +191,6 @@ query → [复杂度路由] ──简单──→ 单跳 RAG
 - Press, Zhang, Min, Schmidt, Smith, Lewis.《Measuring and Narrowing the Compositionality Gap in Language Models》(Self-Ask). arXiv:2210.03350, 2022;EMNLP Findings 2023.
 - Trivedi, Balasubramanian, Khot, Sabharwal.《Interleaving Retrieval with Chain-of-Thought Reasoning for Knowledge-Intensive Multi-Step Questions》(IRCoT). arXiv:2212.10509, 2022;ACL 2023.
 - Jiang, Xu, Gao, Sun, Liu, Yang, Callan, Neubig.《Active Retrieval Augmented Generation》(FLARE). arXiv:2305.06983, 2023;EMNLP 2023.
+- Jin et al.《Search-R1: Training LLMs to Reason and Leverage Search Engines with Reinforcement Learning》. arXiv:2503.09516, v1 2025-03-12. https://arxiv.org/abs/2503.09516
+- Jiang et al.《DeepRetrieval: Hacking Real Search Engines and Retrievers with Large Language Models via Reinforcement Learning》. arXiv:2503.00223, v1 2025-02-28. https://arxiv.org/abs/2503.00223
+- Ragas v0.2.12 testset synthesizers 文档（2024-12-14）: https://docs.ragas.io/en/v0.2.12/references/synthesizers/
