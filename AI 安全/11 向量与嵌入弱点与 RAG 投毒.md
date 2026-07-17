@@ -30,6 +30,8 @@
 - **检索/生成侧**:召回结果**一致性投票/多源交叉验证**,降低少量毒文档主导生成;**来源可信度加权 + 引用核验**;把检索内容当不可信输入做上下文隔离,防其夹带指令(与 [[05 Prompt Injection 提示注入|提示注入]] 同源防线)。
 - **访问控制**:检索受 ACL 约束;向量库加密、不外借;**嵌入模型隔离托管**,降低反演者拿到同款模型的机会。
 
+因此,[[RAG/12 Self-RAG、CRAG 与 Adaptive RAG]] 中 CRAG 纠错和 Adaptive 的多步检索也应把每轮召回视为不可信候选,做来源准入、ACL 过滤与可信度核验。
+
 ## 关键事实(含出处)
 - **PoisonedRAG**:Wei Zou、Runpeng Geng、Binghui Wang、Jinyuan Jia,论文题为 *PoisonedRAG: Knowledge **Corruption** Attacks to Retrieval-Augmented Generation of Large Language Models*(注意是 **Corruption** 不是 Poisoning),arXiv 2402.07867(2024-02),收录 **USENIX Security 2025**。报告**向每个目标问题注入 5 篇毒文本即可在百万级库上达约 90% 攻击成功率**。
 - **BadRAG**:arXiv 2406.00083(2024-06),提出对检索部分的后门,clean 查询正常、对抗查询返回毒内容。
