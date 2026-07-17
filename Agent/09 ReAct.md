@@ -1,6 +1,6 @@
-[[09 ReAct|ReAct]] 把「推理(Reason)」和「行动(Act)」交错进同一个循环:模型不再一口气想完再动手,而是想一步(Thought)、动一步(Action)、看一眼真实结果(Observation),再想下一步——用外部观测把自己从幻觉里拽回来。
+[[09 ReAct|ReAct]] 把「推理(Reason)」和「行动(Act)」交错进同一个循环:模型不再一口气想完再动手,而是在需要时决定下一步行动、执行工具、读取真实结果,再据此继续——用外部观测校准下一步决策。
 
-它是 [[03 Agent 核心循环|Agent 核心循环]] 最经典、最被广泛实现的具体形态,几乎所有现代 agent 框架的默认推理范式都源自它。
+它是 [[03 Agent 核心循环|Agent 核心循环]] 的经典具体形态;今天的结构化工具调用也常采用同构的「模型提议调用 → runtime 执行 → 结果回灌」控制环。
 
 ## 本质:为什么要把"想"和"做"焊在一起
 
@@ -11,97 +11,134 @@
 
 ReAct 的洞见:**这两者本该互补**。
 
-- 推理(Thought)给行动**定方向**:决定下一步该查什么、该用哪个工具、信息够不够。
+- 推理/决策给行动**定方向**:决定下一步该查什么、该用哪个工具、信息够不够。
 - 行动(Action)+ 观测(Observation)给推理**喂事实**:把外部世界的真实返回注回上下文,作为下一轮推理的锚点。
 
-于是幻觉被压住了——因为每隔一步就有一次真实 Observation 来校准;过程也**可追溯**——整条 Thought/Action/Observation 轨迹就是模型的"工作底稿",出错能定位到哪一跳。
+真实 Observation 能降低「把外部事实凭空补全」的风险,但不保证正确:工具选错、参数错、来源错或结果被误读仍会传播。可追溯性也不等于保存原始思维过程——生产系统应把可验证的行动和证据做成 trace。
 
-## 机制:Thought → Action → Observation 的循环
+**生活类比:侦探查案。**侦探不会先在办公室把整案想完,而是写一条可公开的下一步目的「核对车牌归属」,去查登记库(Action),拿到登记结果(Observation),再决定要不要查监控。案卷保存的是这条目的、查询记录、结果和证据链,而不是侦探脑中的逐字自言自语。
+
+## 机制:论文中的 Thought → Action → Observation 循环
 
 ![[ReAct.png]]
 
-一轮迭代分三段,循环往复直到模型主动收尾:
+原论文的一轮迭代分三段,循环往复直到模型主动收尾:
 
-1. **Thought(推理)**:模型用自然语言写出当前的思考——任务进展到哪、还缺什么、下一步打算干嘛。这一段**不与外界交互**,纯粹是把规划显式化(也方便人读)。
+1. **Thought(推理轨迹)**:论文让模型输出可见的自然语言 reasoning trace——任务进展到哪、还缺什么、下一步打算干嘛。这是当时的研究 prompt 接口,**不等同于**任意模型的私有内部 CoT。
 2. **Action(行动)**:模型从 Thought 收敛出一个**结构化动作**,通常形如 `工具名[参数]`,例如 `Search[Apple Remote]`、`Lookup[设备]`、或终止动作 `Finish[答案]`。
 3. **Observation(观测)**:外部环境(检索器 / API / 代码执行器…)执行该 Action,把**真实返回**作为 Observation 拼回上下文。
 
-然后这段 `Thought_i / Action_i / Observation_i` 会附加到 prompt 里,模型据此生成 `Thought_{i+1}`……如此滚动,直到某一轮 Action 是 `Finish[...]`,循环终止、产出答案。
+然后这段 `Thought_i / Action_i / Observation_i` 会附加到 prompt 里,模型据此生成下一轮输出……如此滚动,直到某一轮 Action 是 `Finish[...]`,循环终止、产出答案。
 
-控制循环的是**外层程序(harness)**,不是模型:程序负责解析模型输出里的 Action、真正去调工具、把 Observation 塞回去、并设最大步数防止死循环。模型只管在每一步生成"下一段 Thought + Action"。
+控制循环的是**外层程序(harness)**,不是模型:程序负责解析模型输出里的 Action、真正去调工具、把 Observation 塞回去、并设最大步数防止死循环。模型每次只产生当前轮的决策/动作或收尾。
 
-> 注意:原始 ReAct 用的是**文本协议**(模型吐 `Action: Search[...]` 字符串,靠正则解析)。今天的等价实现几乎都改用 [[15 Function Calling 工具调用|Function Calling 工具调用]],让模型输出结构化 tool call、由 runtime 执行——本质完全一致,只是把"解析 Action 文本"换成了"解析 tool_calls 字段",更鲁棒。
+### 论文 trace 不等于生产日志
+
+论文里的显式 Thought 适合解释 ReAct 的研究机制,但生产实现**不应要求、记录或向用户暴露原始 chain-of-thought**。模型提供商可能根本不返回它;即使某个模型返回,它也可能含有不可靠、敏感或不适合展示的内容。更稳妥的做法是记录可审计的外显事实:
+
+- **简短决策摘要**:例如「为核对发布日期,下一步调用新闻检索」;它是面向人和运维的说明,不是正确性的证据。
+- **结构化动作**:工具名、经脱敏的参数、调用 ID、权限/人审决定。
+- **状态与结果**:计划/任务状态变更、工具返回的状态码、耗时、重试和错误。
+- **证据**:检索到的来源标识、引用片段或数据版本,并把最终结论关联到证据。
+
+把这些字段记为 span/trace,才能在不依赖原始 CoT 的前提下排查「选错工具、工具失败还是证据不足」,详见 [[38 Agent 评估与可观测性|Agent 评估与可观测性]]。OpenAI 在 2024 年说明其推理模型不向用户展示原始 CoT,2025 年也明确建议应用不要直接展示 CoT;这里采用的是这一类面向用户的安全边界,而不是否认论文的显式 reasoning trace。
+
+> 注意:原始 ReAct 用的是**文本协议**(模型吐 `Action: Search[...]` 字符串,靠正则解析)。许多现代实现改用 [[15 Function Calling 工具调用|Function Calling 工具调用]],让模型输出结构化 tool call、由 runtime 执行——控制环相同,只是把"解析 Action 文本"换成了结构化字段校验,通常更易做类型与权限检查。
 
 ### 一段真实 trace 长什么样
 
 ![[ReAct-trace示例.png]]
 
-这是论文里的经典多跳例子:问"Apple Remote 最初设计来控制的程序,后来还能被哪些设备控制"。模型先 `Search[Apple Remote]` 拿到"控制 Front Row",再 `Search[Front Row]` 拿到"也可由键盘功能键控制",两条真实 Observation 集齐后才 `Finish`。纯 CoT 在第二跳会直接"脑补"一个设备名而答错——这正是 Observation 的价值。
+这是论文里的经典多跳例子:问"Apple Remote 最初设计来控制的程序,后来还能被哪些设备控制"。模型先 `Search[Apple Remote]` 拿到"控制 Front Row",再 `Search[Front Row]` 拿到"也可由键盘功能键控制",两条真实 Observation 集齐后才 `Finish`。它说明了 Observation 的价值:第二跳依据检索结果而非只依赖参数知识。
 
 ## 原论文
 
 **Yao et al., _ReAct: Synergizing Reasoning and Acting in Language Models_**(2022 年 10 月 arXiv,**ICLR 2023** 接收)。作者来自 Princeton 与 Google Research(Shunyu Yao、Jeffrey Zhao、Dian Yu、Nan Du、Izhak Shafran、Karthik Narasimhan、Yuan Cao)。
 
-论文核心实验:在知识密集型问答(HotpotQA、FEVER)上,ReAct 接入维基检索 API,显著压低了纯 CoT 的幻觉;在交互决策环境(ALFWorld 具身任务、WebShop 网购)上,ReAct 大幅超过 Act-only 基线。最强的配置是 **ReAct + CoT-SC 互为补充**——能查就查、查不到就回退到内部推理。"ReAct"这个名字就是 **Reason + Act** 的合写。
+论文在 HotpotQA、FEVER、ALFWorld、WebShop 上报告实验,核心主张是将 reasoning traces 与任务动作交错,使动作能获取外部信息、推理能更新行动计划。各基准、模型和提示设置下的数值不可直接外推到今天的生产系统;应在自己的工具、模型与风险约束下做评估。"ReAct"这个名字就是 **Reason + Act** 的合写。
 
-## 可跑的最小实现
+## 可跑的最小实现:❌ 原始 Thought 入审计 vs ✅ 安全事件
 
-下面是不依赖任何框架、纯 prompt + while 循环的 ReAct 骨架(文本协议版,便于看清机制):
+下面用一个确定性脚本模拟「模型提议动作 → runtime 执行 → 结果回灌」。它不调用外部 API,可直接运行;真实系统只需将 `SAFE_TURNS` 换成经校验的结构化 tool call。
 
 ```python
-import re
+CATALOG = {
+    "Apple Remote": {
+        "result": "最初用于控制 Front Row",
+        "evidence": "catalog:apple-remote:v1",
+    }
+}
 
-SYSTEM = """你按 ReAct 范式解题。每轮严格输出:
-Thought: <你的推理>
-Action: <工具名>[<参数>]
-可用工具:Search[query]、Calculate[expr]、Finish[answer]
-拿到 Observation 后继续下一轮,信息够了就用 Finish 给出答案。"""
+def lookup(query):
+    record = CATALOG.get(query)
+    if record is None:
+        return {"ok": False, "result": None, "evidence": None,
+                "error": f"未找到: {query}"}
+    return {"ok": True, "result": record["result"],
+            "evidence": record["evidence"], "error": None}
 
-def search(q):    ...   # 接你的检索器 / API
-def calculate(e): return str(eval(e))
+# ❌ 反例:把原始 Thought/CoT 当作审计字段;它既非必要证据,也不应持久化。
+def naive_raw_thought_audit():
+    raw_reply = "Thought: 先猜答案,再搜索确认。\nAction: Lookup[Apple Remote]"
+    return {"audit": raw_reply}
 
-TOOLS = {"Search": search, "Calculate": calculate}
-ACTION_RE = re.compile(r"Action:\s*(\w+)\[(.*?)\]", re.S)
+# ✅ 示例输入只含可公开的目的与结构化动作,没有原始 CoT。
+SAFE_TURNS = [
+    {"decision_summary": "核对 Apple Remote 的最初用途",
+     "tool_call": {"name": "Lookup", "args": {"query": "Apple Remote"}}},
+    {"decision_summary": "证据已足够,结束任务",
+     "tool_call": {"name": "Finish", "args": {"answer": "最初用于控制 Front Row"}}},
+]
 
-def react(question, llm, max_steps=8):
-    scratchpad = f"Question: {question}\n"
-    for _ in range(max_steps):
-        # 只让模型生成到 Observation 之前(用 stop 截断)
-        out = llm(SYSTEM, scratchpad, stop=["Observation:"])
-        scratchpad += out
-        m = ACTION_RE.search(out)
-        if not m:                       # 没给合法 Action,提示纠正
-            scratchpad += "\nObservation: 动作格式无效,请重出。\n"
-            continue
-        tool, arg = m.group(1), m.group(2).strip()
-        if tool == "Finish":
-            return arg                  # 终止,返回答案
-        obs = TOOLS.get(tool, lambda x: "未知工具")(arg)
-        scratchpad += f"\nObservation: {obs}\n"   # 真实结果回灌
-    return "达到最大步数仍未完成"
+def safe_react_audit():
+    state, audit = {"step": 0, "facts": {}}, []
+    for turn in SAFE_TURNS:
+        call = turn["tool_call"]
+        if call["name"] == "Finish":
+            return call["args"]["answer"], audit
+        observation = lookup(call["args"]["query"])
+        state["step"] += 1
+        if observation["ok"]:
+            state["facts"][call["args"]["query"]] = observation["result"]
+        audit.append({
+            "decision_summary": turn["decision_summary"],
+            "tool_call": call,
+            "state": {"step": state["step"], "facts": dict(state["facts"])},
+            "result": observation["result"],
+            "evidence": observation["evidence"],
+            "error": observation["error"],
+        })
+    return "达到最大步数仍未完成", audit
+
+bad = naive_raw_thought_audit()
+answer, good = safe_react_audit()
+assert "Thought:" in bad["audit"]
+assert answer == "最初用于控制 Front Row"
+assert set(good[0]) == {"decision_summary", "tool_call", "state", "result", "evidence", "error"}
+print(answer, good[0]["evidence"])
 ```
 
-要点:① 用 `stop=["Observation:"]` 让模型**只生成 Thought+Action**,Observation 由你的代码填,防止模型自己伪造观测;② `max_steps` 是必须的护栏;③ 解析失败要把错误当成 Observation 回灌,让模型自我纠正。生产环境把这套文本协议换成 [[15 Function Calling 工具调用|Function Calling 工具调用]] 即可。
+要点:① Observation 只能由 `lookup` 这类 runtime 填入,不能让模型伪造;② 生产审计对象固定为**安全决策摘要 + 工具调用 + 状态/结果 + 证据/错误**,不含原始 Thought/CoT;③ `max_steps`、参数校验和权限检查仍应在外层 harness 实现。文本协议可用 `stop=["Observation:"]` 截断以防模型续写观测,生产环境宜改用 [[15 Function Calling 工具调用|Function Calling 工具调用]] 的结构化 tool call。
 
 ## 对比:ReAct 在 agent 谱系里的位置
 
 | 范式 | 推理与行动关系 | 何时问大模型 | Token / 延迟 | 抗幻觉 | 适合 |
 |---|---|---|---|---|---|
-| 纯 CoT | 只推理,不行动 | 一次 | 最省 | 差(无外部校准) | 纯逻辑/数学,无需外部信息 |
-| Act-only | 只行动,不推理 | 每步 | 中 | 中 | 动作简单、无需分解 |
-| **ReAct** | **每步交错** | **每一步** | 较高(每步重发全上下文) | **强**(每步真实观测) | 多跳、需边走边看的探索式任务 |
-| [[10 Plan-and-Execute\|Plan-and-Execute]] | 先规划再批量执行 | 规划1次+偏差时 | 较省 | 中 | 长程、步骤可预先排布 |
-| [[11 ReWOO\|ReWOO]] | 规划/取证/合成三段解耦 | 仅 Plan+Solve | 最省(中间不回灌) | 中(蓝图错难纠) | 步骤可静态规划、要省 token |
+| 纯 CoT | 只推理,不行动 | 通常单次生成 | 取决于模型与推理长度 | 无外部事实校验 | 纯逻辑/数学,无需外部信息 |
+| Act-only | 只行动,不推理 | 随动作轮数 | 取决于调用与工具延迟 | 取决于动作和校验 | 动作简单、无需分解 |
+| **ReAct** | **每步交错** | **每一步** | 历史重发时会增长 | 有外部校验,仍受工具/证据质量约束 | 多跳、需边走边看的探索式任务 |
+| [[10 Plan-and-Execute\|Plan-and-Execute]] | 先规划、通常顺序执行 | 初始规划 + 条件/批量 replan | 取决于 replan 频率、执行器与上下文策略 | 中 | 长程、步骤可预先排布 |
+| [[11 ReWOO\|ReWOO]] | 规划/取证/合成三段解耦 | Plan+Solve(取决于实现) | 中间观测不回灌时可降低模型输入 | 蓝图错时中途纠偏较弱 | 步骤可静态规划、重视 token |
 
-ReAct 的**软肋**正是它的代价:每一步都要把"到目前为止的全部 Thought/Action/Observation"重新发给大模型 → **token 随步数线性甚至更快膨胀、延迟高**;长程任务里上下文越滚越长,容易迷失方向。
+ReAct 的常见代价是:每轮都把运行历史重新提供给模型。若历史原样累积,**累计输入有二次项**、串行往返也会增加延迟;具体账单和上下文处理仍取决于缓存、摘要、外部状态和 provider。
 
-**膨胀手算**。设每步新增约 200 token(一段 Thought + 一条 Observation),跑 10 步。第 $i$ 步的 prompt 含前 $i-1$ 步全部历史 + 本步,约 $200i$ token,送进模型处理的输入 token 累积为:
+**膨胀手算**。设每步新增约 200 token(一段安全决策摘要 + 一条 Observation),跑 10 步。为只看历史增长,先忽略固定系统提示。第 $i$ 步的 prompt 含前 $i-1$ 步历史,约 $200(i-1)$ token,送进模型处理的输入 token 累积为:
 
 $$
-\sum_{i=1}^{10} 200\,i = 200\times\frac{10\times 11}{2} = 200\times 55 = 11000 \text{ token}
+\sum_{i=1}^{10} 200(i-1) = 200\times\frac{10\times 9}{2} = 200\times 45 = 9000 \text{ token}
 $$
 
-而若每步只发本步、不带历史(理想线性),只需 $10\times 200 = 2000$ token。**11000 vs 2000,5.5 倍**——这就是"超线性":单看生成是 $O(N)$,但因每步**重发全历史**,累计处理量是 $O(N^2)$。步数翻倍,账单近四倍。这正是 Prompt Caching(缓存历史前缀)和 Observation 压缩要救的命门。[[10 Plan-and-Execute|Plan-and-Execute]] 和 [[11 ReWOO|ReWOO]] 正是为压住这个成本而生——把"每步都问模型"砍成"只在关键点问"。
+若每步只带当前 200 token(理想化的线性基线),只需 $10\times200=2000$ token。**9000 vs 2000,4.5 倍**——历史重发使累计输入成为 $O(N^2)$;固定系统提示和工具定义还会叠加在两边。缓存、压缩和外部状态可改变实际账单,因此这个例子说明的是增长形状,不是任何 provider 的报价。[[10 Plan-and-Execute|Plan-and-Execute]] 和 [[11 ReWOO|ReWOO]] 的目标之一,正是减少每步都需要大模型读取的上下文。
 
 往上走,如果要让 agent **从失败中学习**就接 [[13 Reflection 与 Reflexion|Reflection 与 Reflexion]];如果要**探索多条推理/行动路径**而非单线前进,就上 [[14 树搜索：ToT 与 LATS|树搜索：ToT 与 LATS]](LATS 本质就是给 ReAct 套上蒙特卡洛树搜索)。
 
@@ -109,46 +146,35 @@ $$
 
 **该用 ReAct 的场景**:任务需要**边走边看**——下一步该干嘛严重依赖上一步的真实结果(多跳检索、网页浏览、需反复试探的环境交互、数据库探索)。这类任务无法预先排好完整计划,只能交错推进。
 
-**不该用的场景**:步骤能**预先静态排布**的长流程(用 [[10 Plan-and-Execute|Plan-and-Execute]] 更省更稳);或纯内部推理、根本不碰外部信息的题(纯 CoT 即可,套 ReAct 反而浪费)。
+**不该用的场景**:步骤能**预先静态排布**的长流程(可评估 [[10 Plan-and-Execute|Plan-and-Execute]] 是否更合适);或纯内部推理、根本不碰外部信息的题(纯 CoT 可能更直接,无需强行套 ReAct)。
 
 **常见坑**:
 - **死循环 / 不收敛**:模型反复查同一个东西或绕圈。必须设 `max_steps`,并在 prompt 里鼓励"信息够了就 Finish"。
 - **伪造 Observation**:不加 `stop` 截断,模型会自己脑补出 Observation 内容,彻底废掉抗幻觉的初衷。Observation **必须**由你的代码真实执行后填入。
-- **上下文爆炸**:步数多了 token 线性增长且越来越贵、越慢;长 trace 还会让模型"忘了"最初目标。对策:压缩历史 Observation、或换成 Plan-based 范式。
+- **上下文爆炸**:若每轮重发不断增长的历史,累计输入会按二次项增长;对策:压缩历史 Observation、外置状态,或按任务形态换 Plan-based 范式。
 - **动作解析脆弱**:文本协议靠正则,模型一手抖格式就崩。生产请用 [[15 Function Calling 工具调用|Function Calling 工具调用]] 的结构化 tool call。
 - **错误传播**:某步 Action 选错工具/错参数,后续会顺着错的 Observation 走偏;需要的话叠加 [[13 Reflection 与 Reflexion|Reflection 与 Reflexion]] 做自我修正。
 
 ## 关键事实
 
-- ReAct = **Reason + Act**,把 CoT 的"想"和工具使用的"做"统一进一个交错循环。
-- 三件套:**Thought(脑内推理,不碰外界)/ Action(结构化动作)/ Observation(外部真实返回)**。
-- 抗幻觉的根源:**每隔一步就有一次真实 Observation 校准**;可追溯的根源:整条 trace 就是工作底稿。
-- 循环由**外层 harness 控制**,模型只负责每步生成 Thought+Action;`max_steps` 与 `stop` 截断是两个必备护栏。
-- 代价:**每步重发全上下文 → token/延迟随步数膨胀**,这是 [[10 Plan-and-Execute|Plan-and-Execute]]、[[11 ReWOO|ReWOO]]、[[12 LLMCompiler|LLMCompiler]] 要解决的核心问题。
-- 现代实现普遍用 [[15 Function Calling 工具调用|Function Calling 工具调用]] 替代原始文本协议,机制不变、更鲁棒。
+- ReAct = **Reason + Act**:论文将可见 reasoning trace 与工具动作交错;生产可改用短决策摘要,而不记录原始 CoT([Yao et al., ReAct, ICLR 2023](https://openreview.net/forum?id=WE_vluYUL-X);[OpenAI, Hiding the Chains of Thought, 2024](https://openai.com/index/learning-to-reason-with-llms/))。
+- 三件套是**论文接口**的 Thought / Action / Observation;生产审计则记录安全决策摘要、脱敏工具调用、状态/结果、证据/错误,见 [[38 Agent 评估与可观测性|Agent 评估与可观测性]]([Yao et al., 2023](https://openreview.net/forum?id=WE_vluYUL-X);[OpenAI gpt-oss 安全说明, 2025](https://openai.com/index/introducing-gpt-oss/))。
+- 真实 Observation 提供外部校验,但不能保证正确;工具、参数、来源与结果解释仍需评估([Yao et al., 2023](https://openreview.net/forum?id=WE_vluYUL-X))。
+- 循环由**外层 harness 控制**,模型每轮生成动作或收尾;`max_steps` 与结构化动作校验是必要护栏([Yao et al., 2023](https://openreview.net/forum?id=WE_vluYUL-X))。
+- 若每步重发全上下文,输入量会按本文手算随步数二次增长;具体账单须实测([Yao et al., 2023](https://openreview.net/forum?id=WE_vluYUL-X))。
+- 结构化 [[15 Function Calling 工具调用|Function Calling 工具调用]] 可替代文本正则解析;具体 API 随 provider 和版本变化([OpenAI, Responses API 新工具, 2025](https://openai.com/index/new-tools-and-features-in-the-responses-api/))。
 
-## 主流开源实现 / Python 库
+## 框架落地
 
-- **`langchain-ai/langgraph`** —— prebuilt 的 `create_react_agent`,几行就起一个标准 tool-calling ReAct agent,**当下最主流首选**。注意:LangGraph v1.0(2025-10)后官方正逐步把它迁向 `langchain` 包里的 `create_agent`(带 middleware,更灵活),旧函数标了 deprecation。
-- **`langchain` 旧版 `AgentExecutor` / `initialize_agent`** —— legacy,官方已建议改用上面的 `create_react_agent`,新项目别用。
-- **`run-llama/llama_index`** —— `ReActAgent`(`llama_index.core.agent.workflow`),RAG/文档检索场景里最顺手,2026 仍活跃。
-- **`huggingface/smolagents`**(pip `smolagents`)—— 极简(核心 ~1000 行)。其 `CodeAgent` 把 Action 写成 **Python 代码**而非 JSON(仍是 ReAct 骨架),`ToolCallingAgent` 才是经典 JSON 工具调用版;模型无关。
-
-首选:做通用 agent 用 LangGraph(留意 `create_react_agent`→`create_agent` 迁移);偏检索用 LlamaIndex;想要极轻量/代码即动作用 smolagents。
+不要把 ReAct 绑定到某个框架函数名。选择框架时核对其当前官方文档是否支持:结构化工具调用、最大步数/递归限制、持久状态、超时与重试、脱敏 trace。框架 API 和弃用策略变化很快,应在集成时锁定版本并以该版本文档为准。
 
 ## 工业界实践
 
-ReAct 早已不是"论文范式"而是**几乎所有生产 agent 的默认骨架**——只是名字被各家系统隐去。一个生产级 tool-calling agent 的主循环,本质就是 ReAct:模型生成 `tool_calls` → runtime 执行 → 把 `tool` 角色的结果消息拼回 → 再次推理,直到模型不再发起调用而是直接出文本(等价于 `Finish`)。
+许多 tool-calling agent 可以用 ReAct 的控制环来理解:模型提议 `tool_calls` → runtime 执行 → 把结果回灌 → 模型继续或收尾。这是架构同构,不表示所有产品都采用论文的 prompt 或显式 Thought 字段。
 
-**主流落地形态(具体名 + 定位)**:
-- **OpenAI / Anthropic / Gemini 的原生工具调用 API**:把 ReAct 的"Action 解析"从正则换成结构化 `tool_calls` 字段,runtime 执行后用 `role:"tool"`(OpenAI)/ `tool_result` content block(Anthropic)回灌。**这是今天 ReAct 的事实标准实现**,见 [[15 Function Calling 工具调用|Function Calling 工具调用]]。
-- **LangGraph `create_react_agent` / LangChain `create_agent`**:生产里最常见的"开箱即用" ReAct 编排,自带 checkpointer(可中断/恢复)、中间件(限流、护栏)。
-- **Claude Code / Cursor / Devin 等代码 agent**:核心循环就是 ReAct——读文件(Observation)→ 想(Thought)→ 改/跑(Action)→ 看报错(Observation),见 [[28 代码 Agent 与 SWE-bench|代码 Agent 与 SWE-bench]]、[[23 Agent Harness 概览|Agent Harness 概览]]。
-- **AWS Bedrock Agents / Azure AI Agent Service**:云厂商把 ReAct 循环 + 工具注册 + trace 托管化,企业少写胶水。
+**规模化与成本/延迟**:若每轮重发完整历史,成本随 trace 增长;缓存的折扣、是否可并发和模型路由都由 provider、模型、提示和工具延迟决定,没有可脱离工作负载的统一比例。可采取历史 Observation 压缩/卸载([[21 上下文压缩与卸载|上下文压缩与卸载]])、缓存稳定前缀、限制单次工具结果大小。只有调用之间确实无依赖时,才可考虑 provider 的并行工具调用或 [[12 LLMCompiler|LLMCompiler]] 的 DAG 调度。
 
-**规模化与成本/延迟**:ReAct 的成本模型是"每步重发全上下文",因此 token 随步数**超线性**膨胀(第 N 步 prompt 含前 N-1 步全部 Observation)。生产三板斧压成本:① **Prompt Caching**——把稳定的 system + 工具定义 + 历史前缀缓存,命中后这部分按 ~10% 计费,对长 trace 省得最狠,见 [[35 Agent 成本与延迟优化|Agent 成本与延迟优化]];② **历史 Observation 压缩/卸载**——老的检索片段截断、摘要或写到外部存储,只留指针,见 [[21 上下文压缩与卸载|上下文压缩与卸载]];③ **小模型跑简单步、大模型跑难步**的分层路由。延迟上,单步串行往返是硬伤,无依赖的多工具调用要么用 provider 的 **parallel tool calls**(一轮里发多个 `tool_calls`),要么直接换 [[12 LLMCompiler|LLMCompiler]]。
-
-**可观测与运维**:ReAct 的整条 Thought/Action/Observation **trace 就是天然的可观测对象**。生产标配 **LangSmith / Langfuse / Arize Phoenix / OpenLLMetry(OpenTelemetry GenAI 语义约定)** 把每一步记成 span:输入/输出 token、工具名、参数、耗时、报错。排障时直接看"哪一跳的 Observation 偏了 / 哪一步选错工具",见 [[38 Agent 评估与可观测性|Agent 评估与可观测性]]。
+**可观测与运维**:不要把原始 Thought/CoT 当作 trace 的必需字段。每个 span 至少记录**安全决策摘要、脱敏工具调用、状态/结果、证据/错误**(另可加 token/延迟);排障时据此定位「哪一跳的 Observation 不足、哪一步选错工具」,见 [[38 Agent 评估与可观测性|Agent 评估与可观测性]]。
 
 **踩坑与最佳实践**:
 - **必设 `max_steps` / `recursion_limit`**:防死循环烧钱,这是上线红线。
@@ -157,38 +183,18 @@ ReAct 早已不是"论文范式"而是**几乎所有生产 agent 的默认骨架
 - **结构化错误回灌**:工具报错时把错误信息当 Observation 喂回去让模型自纠,而不是直接抛异常终止。
 - **超时/重试/限流**包在 runtime 层,模型不该感知这些基础设施细节。
 
-```python
-# 生产级 ReAct 主循环(Anthropic 风格,带护栏)
-def agent_loop(messages, tools, max_steps=12):
-    for _ in range(max_steps):
-        resp = client.messages.create(model="...", tools=tools,
-                                       messages=messages)   # 每步重发全上下文(命中 cache)
-        messages.append({"role": "assistant", "content": resp.content})
-        tool_uses = [b for b in resp.content if b.type == "tool_use"]
-        if not tool_uses:                       # 模型不再调工具 == Finish
-            return resp
-        results = []
-        for tu in tool_uses:                    # 可并行执行
-            try:
-                out = run_tool(tu.name, tu.input)
-            except Exception as e:
-                out = f"ERROR: {e}"             # 错误也回灌,让模型自纠
-            results.append({"type": "tool_result",
-                            "tool_use_id": tu.id,
-                            "content": truncate(out)})  # 结果瘦身
-        messages.append({"role": "user", "content": results})
-    return "达到最大步数"                         # 护栏兜底
-```
+上面的 ✅ 代码给出了可持久化审计事件的最小 schema。接入任一模型/工具 SDK 时,把原始响应限定在临时运行上下文;写入审计库前只投影为该 schema,并在 runtime 层追加 `max_steps`、超时、重试、权限和参数校验。
 
 ## 面试高频
+> 面试地图：[[Agent 面试题库]]
 
 **Q1:ReAct 到底解决了什么问题?为什么不直接用 CoT?**
-标准答:CoT 只在参数内推理、拿不到外部新事实,且中间记错无从核对(推理性幻觉);Act-only 没有推理引导动作会盲目乱点。ReAct 让 Thought 给 Action 定方向、Observation 给 Thought 喂真实事实,**每隔一步就有一次真实观测校准**,既压幻觉又让过程可追溯。
-- 追问"那为什么 Observation 能抗幻觉":因为它是外部环境的**真实返回**而非模型脑补,把模型从参数记忆拉回现实锚点。
+标准答:CoT 不会获得外部新事实,而 Act-only 缺少显式决策来引导动作。ReAct 让决策引导 Action、Observation 提供真实事实;这能降低凭空补全外部事实的风险,但工具、参数和来源仍要评估。
+- 追问"那为什么 Observation 有帮助":因为它是外部环境的返回而非模型续写,把下一步决策锚定在可检查的结果上。
 - 陷阱:面试官可能问"ReAct 是不是就一定比 CoT 准"——不是,纯逻辑/数学等不碰外部信息的题,ReAct 反而多花 token,论文最强配置是 **ReAct + CoT-SC 互为补充**(能查就查、查不到回退内部推理)。
 
 **Q2:ReAct 一轮的三段分别是什么?谁来控制循环?**
-标准答:Thought(脑内推理,不碰外界)/ Action(结构化动作,如 `Search[q]` 或 `Finish[ans]`)/ Observation(外部真实返回)。循环由**外层 harness(程序)控制**,不是模型——程序解析 Action、真正调工具、回灌 Observation、设 `max_steps`;模型只负责每步生成 Thought+Action。
+标准答:论文写作 Thought / Action / Observation;生产可把 Thought 换成不含原始 CoT 的短决策摘要。循环由**外层 harness(程序)控制**,不是模型——程序执行 Action、回灌 Observation、设 `max_steps`;模型每轮只生成动作或收尾。
 - 追问"`stop` 截断有什么用":让模型只生成到 Observation 之前,防止它自己伪造观测内容。
 - 陷阱:很多人误以为"模型自己在跑循环"——错,模型每次只前进一步,是 harness 在驱动。
 
@@ -197,14 +203,14 @@ def agent_loop(messages, tools, max_steps=12):
 - 追问"为什么不能像 ReWOO 那样只调两次模型":因为 ReAct 面向**边走边看、下一步依赖上一步真实结果**的探索式任务,无法预先排好全程。
 
 **Q4:原始 ReAct 用文本协议,今天怎么实现?**
-标准答:今天几乎都用 [[15 Function Calling 工具调用|Function Calling 工具调用]],模型输出结构化 `tool_calls`、runtime 执行,**机制完全一致**,只是把"正则解析 Action 文本"换成"解析 tool_calls 字段",更鲁棒、不怕格式抖动。
+标准答:可用 [[15 Function Calling 工具调用|Function Calling 工具调用]] 让模型输出结构化 `tool_calls`,由 runtime 执行并回灌结果;这保留控制环,同时避免文本正则解析的脆弱性。具体字段以所选 provider 的版本文档为准。
 
 **Q5:ReAct 会死循环吗?怎么防?**
 标准答:会——模型反复查同一东西或绕圈。防:必设 `max_steps` 护栏 + 在 prompt 里鼓励"信息够了就 Finish" + 检测重复动作。这是上线必做项。
 
 ## 知识拓展
 
-**谱系定位**:ReAct 是这条"减少大模型介入次数"主线的**起点**:[[09 ReAct|ReAct]](每步交错观测,最贵最灵活)→ [[10 Plan-and-Execute|Plan-and-Execute]](规划集中一次)→ [[11 ReWOO|ReWOO]](观测不回灌、固定调 2 次)→ [[12 LLMCompiler|LLMCompiler]](编译成 DAG 并行)。理解 ReAct 的"每步重发全上下文"为何贵,才懂后三者各自在省什么。
+**谱系定位**:ReAct、[[10 Plan-and-Execute|Plan-and-Execute]]、[[11 ReWOO|ReWOO]] 与 [[12 LLMCompiler|LLMCompiler]]是在「何时让模型介入、是否回灌观测、是否表达任务依赖」上的不同取舍;不能把它们简化为固定的成本/质量排序。
 
 **向上的进阶方向**:
 - **自我修正**:ReAct 单线前进、错了顺着错,叠加 [[13 Reflection 与 Reflexion|Reflection 与 Reflexion]] 让 agent 从失败 trace 里总结教训再重试。

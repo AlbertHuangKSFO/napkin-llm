@@ -1,152 +1,235 @@
-**Workflow** 是用**预设代码路径**编排 LLM 与工具的系统;**Agent** 是 LLM **动态决定**自己流程与工具用法的系统——区别只有一句话:**流程是人写死的,还是模型自己定的。**
+[[02 Workflow 与 Agent 的边界|Workflow 与 Agent 的边界]] 的核心判据是：预设代码路径在决定下一步时是 **workflow**；LLM 在运行时选择流程与工具时是 **agent**。
 
-这条线来自 [[01 什么是 AI Agent|什么是 AI Agent]] 里提到的自主性谱系。本篇把这条边界画清楚:两端各是什么、怎么取舍、什么时候该跨过去。
+两者都可以调用 LLM、工具和数据库，也都可以多步运行；这些都不是分类标准。应从控制权、验收方式和生命周期边界做设计，并与 [[01 什么是 AI Agent|AI Agent]]、[[03 Agent 核心循环|Agent 核心循环]] 一起理解。
 
-## 本质:谁掌握「下一步做什么」的控制权
+## 本质：谁掌握「下一步做什么」的控制权
 
-- **Workflow**:控制权在**代码**手里。工程师预先把流程画成图(顺序、分支、循环都写死),LLM 只是其中某个节点上的「智能算子」。流程可预测、可复现。
-- **Agent**:控制权在**模型**手里。给定目标和一组工具,模型自己在回路里决定调哪个工具、何时停下,见 [[03 Agent 核心循环|Agent 核心循环]]。流程不定,换灵活性。
+- **Workflow**：工程师在代码或图中预先定义顺序、分支、重试和终态。LLM 可以是某个节点的「智能算子」，但不能任意改变主路径。
+- **Agent**：系统给模型目标、工具和边界；模型在每轮根据状态选择工具、子任务或终态。harness 仍拥有权限、预算和最终执行权。
 
-两者都把 LLM 当组件,差别在**编排权归谁**。这正是 Anthropic《Building Effective Agents》(2024-12)给出的官方切分。
+所以它不是「有没有循环」的区别：`for` 循环、条件边、甚至多个 LLM 调用都可能是 workflow。关键是运行时对下一步的**主要编排权**在代码还是在模型。
 
 ![[Workflow 与 Agent 的边界.png]]
 
-## 机制:从同一个任务看两条路
+## 直觉：菜谱与受监督的厨师
 
-任务:「把一封英文邮件翻成中文,若含金额则同时换算成人民币。」
+workflow 像菜谱：配料、顺序和火候分支预先写好，厨师只在一个步骤内发挥。agent 像受监督的厨师：给目标与食材后，它可决定先备菜还是先试味；但燃气、采购和上菜仍由厨房规则控制。两者都能做菜，区别在谁决定下一步以及哪些动作必须经过审批。
 
-**Workflow 写法**(分支写死):
+## 小数字手算：可估算性来自预设路径
+
+有 10 封邮件：6 封无金额，4 封有金额。若 workflow 固定为「翻译；有金额再换算并润色」，无金额邮件各走 1 次模型调用，有金额邮件各走 2 次：
+
+$$
+N_{workflow}=6\times1+4\times2=14
+$$
+
+若受限 agent 每封邮件允许 1 到 4 轮模型调用，则同一批数据的调用次数落在
+
+$$
+10\times1\le N_{agent}\le10\times4\quad\Rightarrow\quad10\le N_{agent}\le40
+$$
+
+这不是二者质量比较，也不是实际成本报价；它只说明 workflow 的路径成本可由已知分支计算，agent 的成本还取决于运行时轨迹。
+
+## 公式推导：控制权如何写成程序
+
+令输入为 $x$、状态为 $s_i$、下一步动作为 $a_i$。
+
+workflow 的转移函数由工程师固定：
+
+$$
+a_i=f_{code}(s_i,x),\qquad s_{i+1}=U(s_i,a_i,o_i)
+$$
+
+agent 则把候选行动交给模型策略，harness 再施加约束 $G$：
+
+$$
+a_i=G\bigl(\pi_{LLM}(s_i,x)\bigr),\qquad s_{i+1}=U(s_i,a_i,o_i)
+$$
+
+两者都有状态更新 $U$ 和观察 $o_i$。差异是产生 $a_i$ 的控制器：前者是 $f_{code}$，后者主要是 $\pi_{LLM}$；$G$ 始终可以拒绝、暂停或终止行动。
+
+## 机制：从同一任务走两条路
+
+任务：「将英文邮件翻成中文；若有金额，按给定汇率标注人民币；最后生成摘要。」
+
+**可运行对照：workflow 固定路径 vs 模型选择动作**
+
+**❌ 朴素写法：**把一个步骤未知的任务也写成固定步骤，后续需求一变就要改流程代码。
+
+**✅ 改进写法：**保留最小工具集与预算，但每轮由 `policy(state)` 在最新 observation 上选择下一动作。
+
 ```python
-def handle(email):
-    zh = llm(f"翻译成中文:{email}")           # 节点1
-    if has_amount(zh):                          # 分支:代码判断
-        rate = get_fx_rate("USD", "CNY")        # 节点2:工具
-        zh = llm(f"把金额按 {rate} 换算并标注:{zh}")  # 节点3
-    return zh
-```
-流程图固定,你能画出来、能单测每个节点、成本可估。这就是 workflow——具体编排模式见 [[04 Prompt Chaining|Prompt Chaining]]、[[05 Routing|Routing]]、[[06 Parallelization|Parallelization]]、[[07 Orchestrator-Workers|Orchestrator-Workers]]、[[08 Evaluator-Optimizer|Evaluator-Optimizer]]。
+import re
+from collections.abc import Callable
+from dataclasses import dataclass, field
 
-**Agent 写法**(模型自己决定):
-```python
-agent(goal="翻译这封邮件,如有金额换算成人民币",
-      tools=[translate, get_fx_rate, calculator])
-# 模型自己决定:先翻译?先查汇率?要不要算?调几次?——流程不写死
-```
-模型在 [[09 ReAct|ReAct]] 式回路里自己排步骤。任务一变复杂(「顺便总结要点并起草回复」),agent 不用改代码就能适应,workflow 则要重画流程图。
+WORKFLOW_STEPS = ("translate", "convert_if_needed", "summarize")
+ALLOWED_ACTIONS = frozenset({"translate", "convert", "summarize"})
+MONEY = re.compile(r"(\d+) USD")
+ZH = {"pay": "支付"}
 
-## 取舍:一张账
+
+def translate(text: str) -> str:
+    return " ".join(ZH.get(token, token) for token in text.split())
+
+
+def convert_amount(text: str, usd_cny: int) -> str:
+    return MONEY.sub(lambda m: f"{int(m.group(1)) * usd_cny} CNY", text)
+
+
+def summarize(text: str) -> str:
+    return f"摘要：{text}"
+
+
+# ❌ 朴素写法：所有步骤和分支由工程师预先指定。
+def deterministic_workflow(email: str, usd_cny: int) -> str:
+    text = email
+    for step in WORKFLOW_STEPS:  # 每一步和分支都由代码预设。
+        if step == "translate":
+            text = translate(text)
+        elif step == "convert_if_needed" and MONEY.search(text):
+            text = convert_amount(text, usd_cny)
+        elif step == "summarize":
+            text = summarize(text)
+    return text
+
+
+# ✅ 改进写法：每轮策略都读取前一轮写回的 observation。
+@dataclass
+class AgentState:
+    text: str
+    observations: list[str] = field(default_factory=list)
+
+
+Policy = Callable[[AgentState], str]
+
+
+def decide_next_action(state: AgentState) -> str:
+    """离线策略 stub：真实系统在这里调用模型并校验其结构化动作。"""
+    if not state.observations:
+        return "translate"
+    if state.observations[-1] == "translated":
+        return "convert" if MONEY.search(state.text) else "summarize"
+    if state.observations[-1] == "converted":
+        return "summarize"
+    raise RuntimeError(f"未知 observation：{state.observations[-1]}")
+
+
+def model_directed_loop(
+    email: str, usd_cny: int, policy: Policy = decide_next_action, max_steps: int = 4
+) -> str:
+    state = AgentState(email)
+    for _ in range(max_steps):
+        action = policy(state)  # 每轮从上一次 observation 更新后的 state 决策。
+        if action not in ALLOWED_ACTIONS:
+            raise ValueError(f"未允许的动作：{action}")
+        if action == "translate":
+            state.text = translate(state.text)
+            state.observations.append("translated")
+        elif action == "convert" and MONEY.search(state.text):
+            state.text = convert_amount(state.text, usd_cny)
+            state.observations.append("converted")
+        elif action == "summarize":
+            return summarize(state.text)  # 策略选择结构化终止动作。
+        else:
+            raise RuntimeError("策略请求的动作不适用于当前 state")
+    raise TimeoutError("超过 max_steps，未得到 summarize 终止动作")
+
+
+if __name__ == "__main__":
+    email, rate = "pay 5 USD", 7
+    fixed = deterministic_workflow(email, rate)
+    seen_observations: list[tuple[str, ...]] = []
+
+    def tracing_policy(state: AgentState) -> str:
+        seen_observations.append(tuple(state.observations))
+        return decide_next_action(state)
+
+    dynamic = model_directed_loop(email, rate, policy=tracing_policy)
+    assert fixed == dynamic == "摘要：支付 35 CNY"
+    assert seen_observations == [(), ("translated",), ("translated", "converted")]
+    print(f"workflow={fixed}")
+    print(f"agent={dynamic}")
+    print(f"policy_observations={seen_observations}")
+```
+
+`decide_next_action(state)` 在每次动作把 observation 写回 state 后，才会被下一轮调用；这正是 agent 与预先传入动作序列的差别。真实系统可用模型的结构化输出替换这个 stub，但仍须保留 `ALLOWED_ACTIONS`、最大步数和参数校验。
+
+第二段并非「更高级」。只要金额规则、数据源和输出格式已稳定，第一段往往更容易验证。只有当邮件结构、所需资料或处理步骤难以预列时，第二段的运行时决策才有价值。
+
+## 取舍：一张账
 
 | 维度 | Workflow | Agent |
 |---|---|---|
-| 编排权 | 代码(人) | 模型 |
-| 可预测性 | 高,流程固定 | 低,步数不定 |
-| 可靠性 | 高,易复现 | 较低,可能跑飞 |
-| 成本/延迟 | 低且可估 | 高且波动(多轮调用) |
-| 可调试 | 易,逐节点测 | 难,要看轨迹 |
-| 灵活性 | 低,改流程要改码 | 高,改目标即可 |
-| 适用任务 | 步骤可预定 | 步骤不可预定、开放 |
+| 下一步控制权 | 代码/图定义 | 模型在护栏内选择 |
+| 路径与成本 | 可按分支估算 | 随轨迹波动 |
+| 测试重点 | 节点、边和固定输出 | 轨迹、工具选择、终态与护栏 |
+| 适用 | 步骤稳定、规则明确 | 步骤开放、需反馈探索 |
+| 失败处理 | 预设重试/补偿/升级 | 还要防重复尝试与错误工具选择 |
 
 ![[Workflow 与 Agent 的边界-决策树.png]]
 
-## 判定清单:能 workflow 就别上 agent
+## 生命周期边界：混合系统怎样不失控
 
-按顺序问自己,**一旦能停就停**(对应上面的决策树):
+真实系统常是混合体，重点是把不确定性限制在可观察、可中断的边界内：
 
-1. **单次 LLM 调用够吗?**(配上检索 + 几个示例)——够,就别搞编排。
-2. **步骤能预先列全吗?**——能列全/分支可写死 → 用 **Workflow**。
-3. **任务是否开放、步数不可预知、需多轮试错?**——是 → 才上 **Agent**。
-4. 上了 agent,**护栏配齐了吗?**——最大步数、token 预算、人工审核点、沙箱,见 [[03 Agent 核心循环|Agent 核心循环]] 的停机条件。
+1. **workflow 主干**接收请求、身份校验、路由、预算分配与最终交付。
+2. **agent 子节点**只处理开放子问题，并拥有最小工具集、独立的步数/费用/时间预算。
+3. agent 以结构化终态返回：`completed`、`needs_input`、`needs_approval`、`blocked`、`failed` 或 `budget_exhausted`。
+4. **主干而非模型**决定如何把终态变成重试、人工升级、补充信息或对外响应。
 
-> Anthropic 的核心建议:**追求能用的最简方案,只在确有必要时增加复杂度**。很多人以为自己需要 agent,其实一个 workflow(甚至单次调用)就够了。
+实现时可将上例的 `deterministic_workflow` 或 `model_directed_loop` 作为 workflow 节点：主干先做固定 Routing（见 [[05 Routing|Routing]]），仅把开放子问题交给受限 agent，并由主干消费其结构化终态。
 
-## 边界其实是连续的
+这既允许 agent 探索未知，也避免它把一次局部失败扩大为整条业务流程失控。
 
-别把它当非黑即白:
+## 判定清单：先选最小可行控制器
 
-- **受限 agent**:模型能选工具,但工具集小、步数封顶、关键动作要人确认——介于两者之间,工程上最常见。
-- **workflow 里嵌 agent**:固定流程的某个节点交给一个小 agent 处理子问题(如 [[07 Orchestrator-Workers|Orchestrator-Workers]] 里 worker 可以是 agent)。
-- **agent 里嵌 workflow**:agent 调用的某个「工具」内部其实是一段固定 workflow。
+1. **单次 LLM 调用加检索/示例是否够用？** 够用则不加编排。
+2. **步骤、分支和补偿动作能否可靠预列？** 能则用 workflow。
+3. **是否必须根据每轮环境反馈决定后续步骤？** 是则考虑受限 agent。
+4. **验收、权限、预算和终态交接是否明确？** 未明确时先补这些设计，再扩大自主性。
 
-所以真实系统往往是混合体;「边界」是设计时的决策刻度,不是产品分类。
+Anthropic 的建议是从最简单可用方案开始，在有明确收益时再增加复杂度；这是设计顺序，不是「workflow 永远优于 agent」的结论。
 
 ## 坑与反模式
 
-- **默认上 agent**:被「autonomous」噱头带跑,简单任务也套自主回路 → 慢、贵、难调、不稳。
-- **用 workflow 硬扛开放任务**:任务步骤其实不可预定,却拿一堆 if-else 死撑,分支爆炸、维护地狱——这时该换 agent。
-- **混淆「多步」和「agent」**:[[04 Prompt Chaining|Prompt Chaining]] 也是多步,但流程写死,它是 workflow 不是 agent。判据永远是**控制权归谁**。
-- **agent 无护栏**:见 [[01 什么是 AI Agent|什么是 AI Agent]] 反模式——没停机条件就是烧钱机器。
+- **把多步误认为 agent**：[[04 Prompt Chaining|Prompt Chaining]]、[[05 Routing|Routing]] 可以多步，但若路径预设，仍是 workflow。
+- **workflow 硬扛开放问题**：`if-else` 为未知步骤不断膨胀，说明应将该局部改为受限 agent。
+- **把终态交给自然语言**：模型写「完成」并不等于验收通过；上游应消费结构化状态与证据。
+- **agent 子节点无独立预算或超时**：局部重试会拖垮整个请求的延迟与费用。
+- **框架名称代替架构判断**：图框架、SDK 或多智能体库可以实现两边；判据仍是控制权归谁。
 
-## 工业界实践
+## 工业界实践：框架如何映射到边界
 
-这条边界不是学术划分,而是生产里**架构选型的第一道分叉**——选错一边,要么烧钱不稳(该 workflow 却上了 agent),要么分支爆炸维护地狱(该 agent 却硬用 workflow)。
+- **LangGraph** 文档将其描述为面向 agent 编排的运行时，支持持久化、持久执行和 human-in-the-loop；用固定边写出的图仍是 workflow，用模型决策的条件边才更接近 agent。
+- **OpenAI Agents SDK** 可管理循环、工具调用、handoff、追踪与可恢复审批；其官方文档也明确保留由 Responses API 自己拥有循环的选择。
+- **Claude Agent SDK** 提供工具、agent loop、上下文管理、权限与会话能力；是否让它自主运行，仍应由系统的验收和权限边界决定。
 
-**框架在这条线上的站位:**
-
-- **偏 workflow / 图编排**:**LangGraph** 把流程显式建成有状态的图,你能画出每个节点、单测每条边、回放每次执行——本质是「**带 LLM 节点的 workflow 引擎**」,但图里也能放循环和条件边,于是同一框架既能写纯 workflow 也能写 agent,边界由你画图的方式决定。**Apache Airflow / Prefect / Temporal** 这类传统编排器也越来越多被用来串 LLM 步骤,属于「workflow 一侧」的重武器。
-- **偏 agent / 自主回路**:**OpenAI Agents SDK**、**Claude Agent SDK**、**CrewAI**、**AutoGen** 默认把「下一步」交给模型,你只给目标和工具集。
-- **同一框架横跨两侧**:这正是当下趋势——LangGraph、PydanticAI 都允许你在「写死分支」和「让模型决定」之间自由滑动,因为真实系统几乎都是混合体。
-
-**生产里最常见的形态是「workflow 主干 + agent 子节点」:**
-
-```python
-# 主干是确定性 workflow(可预测、可单测、成本可估)
-def pipeline(ticket):
-    category = classify(ticket)            # 节点1:Routing,见 05
-    if category == "refund":
-        return refund_workflow(ticket)     # 固定分支:纯 workflow
-    elif category == "bug":
-        # 这一个节点交给受限 agent 处理开放子问题
-        return debug_agent.run(ticket,
-                               tools=[read_logs, run_tests, search_kb],
-                               max_steps=15)   # ← 护栏:步数封顶
-    else:
-        return human_escalate(ticket)
-```
-
-这种「把不确定性**关进一个有护栏的小盒子**」的做法,是工业界用得最多的折中:主流程保持可预测,只在确需自主探索的局部放 agent。
-
-**规模化与成本/延迟权衡:**
-- workflow 成本**可预先估算**(步数固定),agent 成本**按轨迹波动**且常高一个数量级——预算敏感的批量任务尽量 workflow 化。
-- 「workflow 里嵌 agent」时,务必给 agent 子节点单独配 max_steps + token 预算 + 超时,防止一个节点拖垮整条 SLA。
-
-**可观测与运维:** workflow 的可观测是「看 DAG 哪个节点失败」,粒度天然清晰;agent 的可观测是「看一条不定长的轨迹」,要专门的 trace 工具(LangSmith / LangFuse)还原每步 thought/tool_call/observation,见 [[38 Agent 评估与可观测性|Agent 评估与可观测性]]。这也是「能 workflow 就别上 agent」在运维层面的现实理由。
-
-**真实踩坑:**
-- **把 LangGraph 当 agent 框架,结果写成了 workflow 还不自知**——很多人画了一张全是固定边的图,以为自己「做了 agent」,其实控制权全在代码,这没问题但要心里有数。
-- **agent 子节点没设超时**:模型在局部反复试错,把上游 workflow 的延迟预算吃光。
-- **该用 Routing 的地方上了全自主 agent**:输入明明有清晰类别,却让模型每次重新「想」该走哪条路,既慢又不稳,见 [[05 Routing|Routing]]。
+生产选型应先决定控制面与生命周期，再决定框架：可复现的固定子流程留在 workflow；仅把真正需要探索的子问题交给 agent，并保留可追踪的输入、工具结果与终态。
 
 ## 面试高频
+> 面试地图：[[Agent 面试题库]]
 
-**Q1:Workflow 和 Agent 的唯一本质区别是什么?**
-标准答:**「下一步做什么」由代码决定(workflow)还是由模型动态决定(agent)**——即编排权归谁。其它(多步、用工具、调 LLM)都不是判据。
-- 陷阱:面试官给你一个「调了好几次 LLM、还用了工具」的系统问是不是 agent。别被表象骗——若流程是写死的(如 [[04 Prompt Chaining|Prompt Chaining]]),它就是 workflow。
+**Q1：Workflow 和 Agent 的唯一核心区别是什么？**
 
-**Q2:给定一个任务,你怎么决定用 workflow 还是 agent?**
-标准答:按顺序问——① 单次调用够吗?② 步骤能预先列全/分支可写死吗?能 → workflow;③ 任务开放、步数不可预知、需多轮试错吗?是 → 才上 agent;④ 上了 agent 护栏配齐了吗?
-- 追问:**为什么默认不上 agent?** 因为 agent 用可预测性/可靠性/成本换灵活性,多数任务不值这个代价。
+标准答：运行时「下一步做什么」的主要控制权在预设代码还是在模型。多步、LLM、工具调用都不是充分判据。
 
-**Q3:举个「workflow 里嵌 agent」和「agent 里嵌 workflow」的例子。**
-标准答:前者——客服主流程是固定 workflow,但「排查这个 bug」这一节点交给受限 agent;后者——agent 调用的某个「工具」内部其实是一段固定 workflow(如「下单」工具内部是写死的多步流程)。说明真实系统是混合体。
+**Q2：为什么不默认使用 agent？**
 
-**Q4:LangGraph 既能写 workflow 又能写 agent,这说明什么?**
-标准答:说明边界是**连续谱系而非产品分类**——同一个图引擎,边全写死就是 workflow,加了条件边/循环让模型决定走向就偏 agent。框架只是工具,控制权归谁取决于你怎么用它。
+标准答：若流程能稳定预列，workflow 的路径更易测试、审计和估算。只有需要基于环境反馈探索未知步骤时，才用 agent 的灵活性交换额外不确定性。
 
-**Q5(陷阱):"多步" 等于 "需要 agent" 吗?**
-标准答:不等于。Prompt Chaining、Routing 都是多步但流程写死,是 workflow。只有当**步数和走向到运行时才由模型决定**时才是 agent。
+**Q3：如何设计 workflow 里嵌 agent？**
 
-## 知识拓展
+标准答：workflow 主干负责入口、权限、预算和终态路由；agent 仅处理开放子问题，使用最小工具集和独立预算，并返回结构化状态而非只返回一段自然语言。
 
-- **官方出处**:这条切分来自 **Anthropic《Building Effective Agents》(2024-12)**,它把 agentic 系统分为两大类——**workflows**(LLM 与工具被预定义代码路径编排)和 **agents**(LLM 动态主导自身流程与工具),并强调「**追求能用的最简方案,只在确有必要时增加复杂度**」。
-- **五大 workflow 模式**:workflow 一侧被进一步细分为五种可组合模式,正好是本域 04–08:[[04 Prompt Chaining|Prompt Chaining]](串行)、[[05 Routing|Routing]](分流)、[[06 Parallelization|Parallelization]](并行)、[[07 Orchestrator-Workers|Orchestrator-Workers]](动态分发)、[[08 Evaluator-Optimizer|Evaluator-Optimizer]](评估闭环)。
-- **edge case:Orchestrator-Workers 是 workflow 还是 agent?** 它在边界上——orchestrator 用 LLM **动态决定**要派几个 worker、派什么任务(像 agent),但整体编排骨架仍是预设的(像 workflow)。Anthropic 把它归到 workflow,但它是「最像 agent 的 workflow」,见 [[07 Orchestrator-Workers|Orchestrator-Workers]]。
-- **反模式总览**:① 默认上 agent(被 "autonomous" 噱头带跑);② 用 workflow 硬扛开放任务(if-else 分支爆炸);③ 混淆「多步」与「agent」;④ agent 无护栏。
-- **深层联系**:本篇承接 [[01 什么是 AI Agent|什么是 AI Agent]] 的自主性谱系,下接 [[03 Agent 核心循环|Agent 核心循环]](agent 那一端的运行机制)。理解这条边界,是读懂后面所有架构([[09 ReAct|ReAct]]、[[10 Plan-and-Execute|Plan-and-Execute]]、[[22 多智能体系统|多智能体系统]])的前提——它们全是 agent 一侧的不同填法。
+**Q4：Orchestrator-Workers 是 workflow 还是 agent？**
 
-## 关键事实速记
+标准答：它可能处在边界上。若整体骨架、停止条件与 worker 调度规则预设，按 workflow 设计与验证；若模型在运行时主导分解与工具选择，则 agent 成分增加。必须说明具体控制权在哪一层。
 
-- 唯一判据:**「下一步做什么」由代码决定(workflow)还是模型决定(agent)**。
-- workflow 用可预测/可靠/便宜,换不了灵活;agent 反之。
-- 工程默认:**能不上 agent 就不上**;先单次调用 → 再 workflow → 实在不行才 agent。
-- 边界是连续谱系,真实系统常是 workflow 与 agent 互相嵌套的混合体。
-- 生产最常见形态:**workflow 主干 + 有护栏的 agent 子节点**,把不确定性关进小盒子。
+## 关键事实
+
+- workflow 与 agent 的定义、适用性以及「从最简单方案开始」的建议：Anthropic，*Building effective agents*，https://www.anthropic.com/engineering/building-effective-agents ，2024。
+- LangGraph 目前将自身定位为提供持久执行、持久化与 human-in-the-loop 的编排运行时：LangChain，*LangGraph overview*，https://docs.langchain.com/oss/python/langgraph/overview ，2026（访问于 2026-07）。
+- OpenAI 当前文档区分「由 Responses API 自己拥有循环」与「由 Agents SDK 管理循环」：OpenAI，*Agents SDK*，https://developers.openai.com/api/docs/guides/agents ，2026（访问于 2026-07）。
+- 延伸阅读：固定编排模式见 [[04 Prompt Chaining|Prompt Chaining]] 至 [[08 Evaluator-Optimizer|Evaluator-Optimizer]]；执行级终态与预算见 [[03 Agent 核心循环|Agent 核心循环]]。

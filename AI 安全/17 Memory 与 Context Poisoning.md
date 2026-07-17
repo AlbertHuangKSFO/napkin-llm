@@ -92,6 +92,9 @@ def write_memory(content, source, agent_ctx):
 - **工具**:Invariant / Lakera / Lasso / HiddenLayer 的运行时记忆防护;NeMo Guardrails、Llama Guard 做写入召回门禁;mem0 / LangMem 等记忆框架开始内建可信度与隔离原语。
 - **对抗演化**:攻击从「一次性注入」→「写进记忆求持久」→「跨用户/跨 agent 横向扩散」→「商业化变现(推荐投毒)」;防御从「会话级过滤」→「写入门禁 + provenance + TTL」→「召回时可信度分级 + 可回滚审计」。下一步是**记忆完整性证明**(给记忆条目签名、可验证未被篡改)。
 
+## Agent 与 RAG 导航
+- 实现与回灌路径见 [[19 Agent 记忆系统|Agent 记忆系统]]、[[20 上下文工程|上下文工程]]；检索语料的生命周期治理见 [[17 检索数据治理|检索数据治理]]。
+
 ## 兄弟链
 - [[14 Excessive Agency 与 Goal Hijack|过度代理]] — 毒记忆转成真实动作的放大器
 - [[11 向量与嵌入弱点与 RAG 投毒|RAG 投毒]] — 检索侧的同源攻击

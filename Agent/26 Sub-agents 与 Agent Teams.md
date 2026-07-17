@@ -1,171 +1,110 @@
-[[26 Sub-agents 与 Agent Teams|Sub-agents 与 Agent Teams]] 对照两种「多个 agent 一起干活」的形态:**Sub-agents** 是一个父代在单会话内派出若干子代、子代干完把结果**报告给父代**、彼此**不能直接对话**的树状结构;**Agent Teams** 是多个**自主会话直接互发消息**、从共享任务列表认领任务、互相质疑结论的网状结构。前者是受控的「派活—汇报」,后者是真正的「协作—博弈」。
+[[26 Sub-agents 与 Agent Teams|Sub-agents 与 Agent Teams]] 讨论两种协作拓扑：**中心式 sub-agent** 由父 agent 分派、收集结果并作最终决策；**对等 team** 允许成员显式协商。两者不是某个 SDK 必然自带的产品功能，而是由 [[23 Agent Harness 概览|Agent Harness]] 实现的通信与状态管理选择。
 
-## 本质:同样是「多 agent」,协作模型截然不同
-「让多个 agent 协作」是个笼统说法,落到工程上有两种根本不同的形态,2026 年它们被清晰区分开:
+## 直觉 / 生活类比
 
-- **Sub-agents(子代)**:存在于**单个会话内部**。一个主 agent(父代)在执行过程中派生出子代去做某块工作,子代完成后**把结果报告给父代**就结束。子代之间**不能直接对话**——它们彼此不知道对方存在,所有协调都经过父代这个中心。这是**中心化、单向、单层**的结构。
-- **Agent Teams**:是多个**独立、自主的会话**。它们是平等的实体,**能直接互发消息**、从一份**共享任务列表**里认领任务、甚至**互相质疑彼此的结论**。这是**去中心化、双向、对等**的结构。
+把中心式 sub-agent 想成主编派三位记者：主编给题、记者各自调查、最后只交一页摘要；记者之间是否能互相打电话，取决于编辑部是否给了这条线路。这样做的收益是把搜索噪声留在各自的笔记本里，主编只保留可执行的结论。
+
+peer team 更像一个项目组：成员可把未完成的证据、反例和澄清请求互相发送，并共同更新任务板。它适合任务本身需要协商，例如「一人提出方案、一人找反例、一人裁决」。但它不是“更高级的 sub-agent”：消息往返、冲突状态与不收敛都会增加成本。
+
+因此要先问通信需求，而不是先选名词：
+
+| 需求 | 合适结构 | 必须显式规定 |
+| --- | --- | --- |
+| 可独立检索、跑测试、做局部审计 | 父代—子代 | 输入范围、返回摘要、超时、父代汇总 |
+| 交叉质疑、共同写同一份方案 | 对等 team | 收件人、共享状态、仲裁者、轮次上限 |
+
+“子 agent 不能彼此通信”只对**未提供横向通道的中心式 harness**成立；若 harness 提供队列、共享状态或 `send_message`，同一批 worker 也可以通信，此时它已采用部分 team 拓扑。不要把产品实现细节误说成通用定义。
+
+## 小数字手算
+
+一次调研拆成 $3$ 个互不依赖的问题。每个子任务原始轨迹约 $1\,200$ token，最后结论约 $120$ token。
+
+中心式回传给父代的上下文负担为：
+
+$$
+3\times120=360\text{ token}
+$$
+
+若把三份完整轨迹全部广播，每位成员都读另外两份，横向阅读量约为：
+
+$$
+3\times2\times1\,200=7\,200\text{ token}
+$$
+
+这不是所有系统的精确账单，却说明了结构性差别：隔离降低的是**主上下文与消息重复量**，不是总推理成本。任务若需要两轮互相核验，则这 $7\,200$ 还会随轮次继续累积。
+
+## 公式推导
+
+令 $W_i$ 是第 $i$ 个 worker 的完整轨迹，$s(W_i)$ 是受长度约束的摘要，父代上下文为 $C_p$。中心式汇总为：
+
+$$
+C_p' = C_p \oplus \sum_{i=1}^{k}s(W_i),\qquad |s(W_i)|\ll |W_i|
+$$
+
+这里的关键不是 fork 这个词，而是**信息边界**：父代接收的是经任务契约筛过的结果。对等 team 则还需维护共享状态 $B$ 与消息集合 $M$：
+
+$$
+B_{t+1}=\operatorname{merge}(B_t, M_t),\qquad
+M_t=\{m_{i\rightarrow j}\mid i\ne j\}
+$$
+
+因此 team 的正确性还依赖冲突策略 `merge`、谁有写权限、何时停止；仅“让所有人互聊”不构成协作设计。[[22 多智能体系统|多智能体系统]] 的协调成本正从这里出现。
+
+## 手绘图
 
 ![[Sub-agents 与 Agent Teams.png]]
 
-两者的分界线,本质是 [[22 多智能体系统|多智能体系统]] 里「中心编排」与「自主协作」的分界。Sub-agents 更像 [[07 Orchestrator-Workers|Orchestrator-Workers]] 的工程化身——父代是 orchestrator,子代是 worker,派活、干、收,没有 worker 间的横向交流。Agent Teams 则跨过那条线,成为真正的多体协作:agent 之间能对话、能反驳、能基于彼此的产出迭代。
+## 可运行代码 / 配置
 
-## Sub-agents 的机制与 context forking
-Sub-agents 的核心价值,藏在一个机制里:**context forking(上下文派生/分叉)**——给子代一份**隔离的上下文**。这解决了长程 agent 的两个真问题。
-
-![[Sub-agents 与 Agent Teams-context forking.png]]
-
-**问题一:主上下文被污染。** 一个主 agent 在做大任务时,如果亲自去「探索某个方案」——读 20 个文件、试三种写法、大半都是死路——这些**试错噪声会全部堆进主上下文**,把真正重要的任务目标和关键结论淹没,引发 [[23 Agent Harness 概览|Agent Harness 概览]] 说的上下文漂移。context forking 的解法:把「探索」这件事**派给一个子代**,子代在自己**隔离的上下文**里折腾,折腾完**只把精炼结论回报给父代**——所有噪声留在子代的上下文里,**主上下文始终干净、聚焦**。这是 [[20 上下文工程|上下文工程]] 在多 agent 层面的关键手法。
-
-**问题二:无法并行探索。** 单个上下文是线性的,没法同时试三个方向。fork 出三个子代,各自在隔离上下文里探索方案甲/乙/丙,**并行**推进,最后父代汇总择优。
-
-所以 sub-agents 的机制可以概括为:**父代 fork → 子代在隔离上下文独立工作 → 子代回报精炼结论 → 父代汇总**。子代之间不通信,因为它们的设计目的就是「隔离 + 汇报」,横向通信反而会破坏隔离性。
-
-## Agent Teams 的机制与来源
-**Agent Teams(2026 年 2 月随 Opus 4.6 发布)** 是更进一步的形态。它的关键能力:
-
-- **自主会话**:每个成员是一个独立、能自主推进的会话,不是某个父代的附庸。
-- **直接互发消息**:成员之间**能直接通信**——A 可以把中间产物发给 B,B 可以回复、追问。
-- **共享任务列表认领**:有一份团队共享的任务清单,成员**自己认领**该做哪个,而不是被一个中心分派。
-- **互相质疑结论**:这是最关键、也最像「团队」的一点——成员能**质疑彼此的结论**,指出对方哪里可能错了,从而通过博弈提升整体正确性。
-
-发布时间点很重要:**Agent Teams 在 2026 年 2 月随 Opus 4.6 发布**。它把多 agent 从「受控派活」推进到「自主协作」,对应模型在长程自主性、跨会话协调上的能力到位。
-
-## context forking 的价值(为什么它值得单独讲)
-很多人以为 sub-agents 的价值是「分工干活更快」,这只对了一半。**它更深的价值是上下文隔离**:
-
-1. **防主上下文污染**:把脏活(大量读取、试错、检索)隔离进子代上下文,主上下文只接收提炼后的结论。一个能跑几小时的 agent,靠的就是这种隔离来避免主上下文被噪声撑爆、漂移。
-2. **并行探索**:多个子代在各自隔离上下文里并行试不同方向,互不干扰,显著提速且互不污染。
-3. **专注**:每个子代上下文只装它那一小块任务的相关信息,信噪比高,子代本身也做得更好。
-
-可以说:**没有 context forking,长程 agent 很难稳定——主上下文会在几十轮工具调用后退化**。这也是为什么现代 [[23 Agent Harness 概览|Agent Harness 概览]]/SDK 都把 sub-agents + context forking 作为一等能力提供。
-
-## 可跑最小示例(两种形态的伪代码对照)
-把两种形态并排写出来,差别立刻清楚——一个是「父代派、子代隔离上下文干、回报结论」,一个是「平等会话互发消息、共享任务、互相质疑」:
+下面示例只用 Python 标准库，运行 `python3 topology_demo.py`。`❌` 的广播既泄露无关轨迹，又把通信当成默认能力；`✅` 明确使用父代收集摘要。若要改成 peer team，必须由 harness 明确提供队列、身份与仲裁规则。
 
 ```python
-# ① Sub-agents:context forking,中心化,子代不互通
-def parent_agent(task):
-    subtasks = plan(task)                 # 父代拆分(中心)
-    results = []
-    for st in subtasks:                   # 可并行
-        child_ctx = fork_context(st)      # 关键:给子代一份隔离上下文
-        # 子代在隔离上下文里折腾:读文件、试错、检索——噪声全留在 child_ctx
-        conclusion = run_child(child_ctx) # 子代独立工作
-        results.append(conclusion)        # 只把"精炼结论"回报父代,不回噪声
-    return parent_synthesize(results)     # 父代汇总;子代之间从未通信
+# topology_demo.py
+import asyncio
 
-# ② Agent Teams:去中心,自主会话,互发消息+互相质疑
-def agent_team(task, shared_tasklist):
-    members = [spawn_session(role) for role in ["撰写","质疑","查证"]]
-    while not shared_tasklist.done():
-        for m in members:
-            t = shared_tasklist.claim(m)      # 自己认领任务(去中心)
-            out = m.work(t)
-            for peer in members:              # 直接互发消息
-                if peer is not m:
-                    peer.receive(out)         # 别人能看到、回复、质疑
-            shared_tasklist.update(m.critique_others())  # 互相质疑结论
-    return consensus(members)                 # 博弈到收敛
+async def investigate(topic: str) -> dict:
+    await asyncio.sleep(0.01)  # 代替检索/测试
+    return {"topic": topic, "summary": f"{topic}: 已核验一条结论"}
+
+# ❌ 把完整中间产物广播给所有 worker；无收件人和停止契约。
+async def noisy_broadcast(topics: list[str]) -> None:
+    traces = await asyncio.gather(*(investigate(t) for t in topics))
+    for trace in traces:
+        print("广播给所有成员：", trace)
+
+# ✅ 中心式：父代只接收约定格式的摘要，并独占最终合成权。
+async def parent_with_subagents(topics: list[str]) -> str:
+    reports = await asyncio.gather(*(investigate(t) for t in topics))
+    assert all(set(r) == {"topic", "summary"} for r in reports)
+    return "\n".join(r["summary"] for r in reports)
+
+async def main() -> None:
+    result = await parent_with_subagents(["成本", "证据", "风险"])
+    print(result)
+
+asyncio.run(main())
 ```
 
-注意两段的结构差异:`parent_agent` 里有 `fork_context`、子代之间**没有任何相互调用**,结论单向流回父代;`agent_team` 里有 `peer.receive`、`critique_others`,成员**横向互通、互相挑刺**。这正是「树状汇报」与「消息网」在代码层面的体现。
-
-## 何时用哪种
-- **用 sub-agents,当**:任务能被一个中心**清晰拆分**成几块独立子工作,子工作之间**不需要互相协商**,你主要图的是**上下文隔离 + 并行**。典型:主 agent 写代码时,派子代去「在大库里检索某个用法」「跑测试并总结失败」——脏活隔离、结论回报。
-- **用 agent teams,当**:任务需要**多个视角互相博弈/校验**,或子工作之间**必须横向沟通**才能推进。典型:一个写方案、一个挑刺质疑、一个查证据,三方在共享任务列表上协作迭代,互相质疑直到结论稳。
-- **判断口诀**:**只需要「隔离 + 汇报」→ sub-agents;需要「对话 + 质疑」→ agent teams。**
-
-## 对比表:sub-agents vs agent teams
-| 维度 | Sub-agents | Agent Teams |
-|---|---|---|
-| 运行边界 | 单个会话**内**运行 | 多个**独立自主会话** |
-| 通信 | 只向父代**报告**;子代间**不能直接对话** | 会话间**直接互发消息** |
-| 上下文 | context forking,子代**隔离上下文** | 各自独立上下文,可交换信息 |
-| 协调 | **中心化**:父代派活、汇总 | **去中心**:共享任务列表自主认领 |
-| 是否可质疑彼此 | 否(只汇报结果) | 是(**互相质疑结论**) |
-| 结构 | 树状(父→子,单向) | 网状(对等,双向) |
-| 发布 | 2025 即有的 harness 能力 | **2026 年 2 月随 Opus 4.6** |
-| 像哪个模式 | [[07 Orchestrator-Workers\|Orchestrator-Workers]] 工程化 | 真正的 [[22 多智能体系统\|多智能体系统]] |
-| 适用 | 上下文隔离 + 并行拆分 | 多视角博弈 + 横向协作 |
-
-## 何时用 / 坑
-- **坑一:该隔离却共享**。明明是「派去做脏活」的场景,不用 context forking,让子任务的噪声全进主上下文——主上下文很快漂移。能 fork 就 fork。
-- **坑二:该 sub-agent 却上 team**。子工作之间根本不需要对话,却搭了个互发消息的 team——平白增加协调开销、消息往返成本和不可控性。能用中心化派活就别上对等协作。
-- **坑三:子代回报太多**。context forking 的精髓是「只回精炼结论」。若子代把它上下文里的一大堆原始内容也回报给父代,隔离就白做了——主上下文照样被污染。设计好「回报什么」。
-- **坑四:agent team 不收敛**。成员互相质疑是好事,但没有收敛机制(共识规则、仲裁者、轮次上限)可能无限争论。team 要有「何时算达成结论」的约定。
-- **坑五:成本失控**。无论哪种,多 agent 都是多份上下文、多份推理,token 和延迟成倍涨;给子代数量/team 规模设上限,见 [[38 Agent 评估与可观测性|Agent 评估与可观测性]] 监控开销。
-
-## 2026 关键事实
-- **Sub-agents**:在**单个会话内运行**,把结果**报告给父代**,彼此**不能直接对话**;用 **context forking** 给子代隔离的上下文(防主上下文被污染、支持并行探索)。
-- **Agent Teams(2026 年 2 月随 Opus 4.6 发布)**:多个**自主会话直接互发消息**、从**共享任务列表认领任务**、**互相质疑彼此的结论**。
-- 核心区别:sub-agents 是**中心化、单向、树状**(隔离 + 汇报);agent teams 是**去中心、双向、网状**(对话 + 质疑)。
-- context forking 的价值:**防主上下文污染、支持并行探索、保持各子任务专注**——是长程 agent 稳定运行的关键。
-- 选择口诀:**只需隔离+汇报用 sub-agents;需对话+质疑用 agent teams**。
-- 关联:本篇是 [[22 多智能体系统|多智能体系统]] 的具体形态落地;sub-agents 近似 [[07 Orchestrator-Workers|Orchestrator-Workers]] 的工程化;两者都由 [[23 Agent Harness 概览|Agent Harness 概览]] 提供,且都深度依赖 [[20 上下文工程|上下文工程]](尤其 context forking)。
-
-## 工业界实践
-
-多 agent 在 2026 年是生产 agent 系统的标配能力,但工业界的共识是「**默认单 agent,证明需要才上多 agent**」——多 agent 是昂贵工具,不是默认架构。
-
-**主流框架与服务(具体定位)。**
-- **Claude Code / Claude Agent SDK**:原生 sub-agents(`.claude/agents/` 定义专职子代,如 `code-reviewer`、`test-runner`)+ context forking;2026-02 随 Opus 4.6 推出 **Agent Teams**(自主会话、共享任务列表、互发消息、互相质疑)。
-- **OpenAI Swarm / Agents SDK**:轻量级 handoff 模型——agent 之间通过「移交(handoff)」转移控制权,偏中心化路由,接近 sub-agents 谱系。
-- **LangGraph**:用图(StateGraph)显式编排多 agent,supervisor 模式 = orchestrator 派 worker(sub-agents 风格),network 模式 = 节点互发(teams 风格);共享状态作为「黑板」。
-- **CrewAI**:以「角色 + 任务 + 协作」为中心的多 agent 框架,sequential/hierarchical 流程,接近 teams 的角色分工但仍偏受控。
-- **AutoGen(微软)**:GroupChat 多 agent 对话,是「自主会话互发消息」的早期代表,但收敛控制是其老大难。
-- 框架取舍详见 [[37 Agent 框架对比|Agent 框架对比]]。
-
-**Anthropic 多 agent 研究系统的公开经验(可考点)。** Anthropic 公布的多 agent research 系统(orchestrator + 并行 subagent)报告:多 agent 在「广度优先、可并行检索」类任务上显著优于单 agent,但**代价是约 15× 于单次对话的 token**——这是工业界引用最多的成本数字。结论:多 agent 适合**任务可并行、价值高到能覆盖 token 暴增**的场景,不适合强顺序依赖、需共享大量中间状态的任务。
-
-**规模化、成本与延迟。**
-- **成本是线性甚至超线性膨胀**:k 个子代 = k 份上下文 + k 份推理;teams 还叠加消息往返。务必给**子代数量 / team 规模 / 总轮次**设硬上限。
-- **延迟靠并行换**:sub-agents 的并行探索能把墙钟时间压下来(三个方向同时跑),但 token 总量不降。
-- **context forking 是省主上下文、非省总成本**的机制:它让主 agent 跑得更久更稳(主上下文不被噪声撑爆),代价是子代那份上下文照样烧 token。
-
-**可观测与运维。** 多 agent 的轨迹是树/图,排障难度陡增:要记录**每个子代的输入任务、隔离上下文摘要、回报结论、token 开销**,以及 team 的**消息流与质疑链**。监控重点:子代回报是否过载(破坏隔离)、team 是否收敛、单任务总 token。纳入 [[38 Agent 评估与可观测性|Agent 评估与可观测性]]。
-
-**最佳实践。** ① 能单 agent 别多 agent;② 该 fork 就 fork(脏活隔离),但**严格约束子代「只回精炼结论」**;③ team 必须配收敛机制(共识规则/仲裁者/轮次上限);④ 子代/team 的提示里写清「回报什么、何时停」。
+生产配置至少应写下：`max_children`、`deadline`、每个子任务可访问的工具、摘要 schema、失败是否重试，以及 parent 是否允许把结果转发给其他成员。Anthropic 的多 agent research 系统（2025）报告其多 agent 任务的 token 使用约为普通 chat 的 $15\times$；这是该产品工作负载的观测值，不可当作所有框架的固定倍率。[一手工程报告，2025](https://www.anthropic.com/engineering/multi-agent-research-system)
 
 ## 面试高频
+> 面试地图：[[Agent 面试题库]]
 
-**Q1:Sub-agents 和 Agent Teams 的核心区别?**
-标准答(背):**Sub-agents = 单会话内、父代派子代、子代只向父代汇报、彼此不能直接对话(中心化、单向、树状,隔离+汇报);Agent Teams = 多个自主会话、直接互发消息、共享任务列表自主认领、互相质疑结论(去中心、双向、网状,对话+质疑)**。口诀:**只需隔离+汇报→sub-agents;需对话+质疑→agent teams**。
-- 追问发布:Agent Teams 2026-02 随 Opus 4.6 发布;sub-agents 是更早的 harness 能力。
+**Q：sub-agent 与 team 的分界是什么？**
 
-**Q2:什么是 context forking?它解决什么问题?**
-标准答:给子代一份**隔离的上下文**让它独立工作、只回报精炼结论。解决两件事:① **防主上下文污染**——把大量读取/试错/检索的噪声关在子代上下文里,主上下文始终干净聚焦,避免长程 agent 几十轮后上下文漂移退化;② **并行探索**——fork 多个子代在各自隔离上下文里同时试不同方向。
-- 追问「为什么子代之间不通信?」:它们的设计目的就是隔离+汇报,横向通信会破坏隔离性。
-- 陷阱:误以为 sub-agents 的价值只是「分工更快」——更深的价值是上下文隔离,这是长程 agent 能稳定运行的关键。
+答：是通信和控制权的拓扑，不是名字。中心式模式由父代分派、收敛与决定；team 额外提供成员间消息和共享协调。sibling 能否直接通信完全取决于 harness，不能把某个产品的限制推广为通则。
 
-**Q3:子代回报应该回什么?回多了有什么问题?**
-标准答:只回**精炼结论**。若把子代上下文里的一大堆原始内容也回给父代,隔离就白做了——主上下文照样被污染,等于没 fork。
+**Q：为什么要 context isolation？**
 
-**Q4:什么时候该用 sub-agents,什么时候该用 agent teams?**
-标准答:任务能被中心清晰拆成几块**不需互相协商**的独立子工作、图的是隔离+并行 → sub-agents(如主 agent 派子代去大库检索、跑测试总结失败)。任务需要**多视角博弈/校验**或子工作必须横向沟通 → agent teams(写方案/挑刺/查证三方在共享任务列表上互相质疑迭代)。
+答：让探索失败、长网页和工具日志留在 worker 内，只把有 schema 的结论交给父代；它减少主上下文污染，但会增加多个上下文的 token 与调度成本。
 
-**Q5(陷阱):sub-agents 和 Orchestrator-Workers 是一回事吗?**
-标准答:sub-agents 近似 [[07 Orchestrator-Workers|Orchestrator-Workers]] 的工程化身(父代=orchestrator,子代=worker,派活-干-收,无 worker 间横向交流),但 sub-agents 额外强调 **context forking 的上下文隔离**价值,这是纯编排模式不突出的点。
+**Q：什么时候不要上多 agent？**
 
-**Q6:agent team 不收敛怎么办?**
-标准答:互相质疑是优点,但必须有收敛机制——共识规则、仲裁者(裁决 agent)、轮次上限,约定「何时算达成结论」,否则可能无限争论、成本失控。
+答：强顺序依赖、需要频繁共享同一细粒度状态、或任务价值不足以覆盖额外 token 时，先用单 agent 加工具循环。可并行且证据面广的研究任务才更可能受益。
 
-## 知识拓展
+## 关键事实
 
-**多 agent 的「无声广播」陷阱。** 一个常被忽视的反模式:让多个子代彼此都能看到对方的全部输出(伪 team),会导致上下文交叉污染 + token 爆炸,且每个子代都被无关信息干扰。这正是 sub-agents 坚持「只经父代汇报、子代间不直连」的工程理由——**通信拓扑要刻意设计,不是越互联越好**。
-
-**与单 agent 长上下文的此消彼长。** 模型上下文窗口越长(百万级 token),「为隔离而 fork」的部分动机被削弱;但 fork 的另一半价值(并行探索、按子任务聚焦提升信噪比)不受窗口大小影响。所以 context forking 不会因长上下文而过时,定位会从「不得不隔离」转向「主动并行+聚焦」。
-
-**边界与反模式(汇总)。**
-- **反模式:该隔离却共享**——脏活噪声全进主上下文,主上下文漂移。
-- **反模式:该 sub-agent 却上 team**——子工作不需对话却搭互发消息架构,平白增加协调开销与不可控性。
-- **反模式:无上限**——子代数量/team 规模不封顶,token 与延迟成倍失控。
-- **边界:多 agent 不是「更聪明」**——它换来的是并行 + 隔离 + 多视角,不会让单步推理变强;若任务本身是强顺序依赖,多 agent 反而更慢更贵。
-
-**前沿与延伸(带年份)。**
-- **2023** AutoGen / CAMEL / MetaGPT 等开启「多 agent 对话/角色分工」研究热;典型批评是「会议过多、收敛难、成本高」。
-- **2024** Anthropic 公布多 agent research 系统经验,量化「约 15× token」代价,确立「默认单 agent」的工程共识。
-- **2026-02** Opus 4.6 推出 Agent Teams,把「自主会话 + 互相质疑」做成产品级能力,对应模型在长程自主与跨会话协调上的能力到位。
-- 跨会话/跨厂商协作的另一条线是 [[30 A2A 协议|A2A 协议]](agent-to-agent 通信标准),与 team 内消息互发是不同层级——A2A 解决「异构 agent 跨系统怎么通」,team 解决「同 harness 内成员怎么协作」。
-
-延伸链接:[[22 多智能体系统|多智能体系统]]、[[07 Orchestrator-Workers|Orchestrator-Workers]]、[[30 A2A 协议|A2A 协议]]、[[25 Agent Skills(SKILL.md)|Agent Skills(SKILL.md)]](skill 可被多个 sub-agent 复用)、[[35 Agent 成本与延迟优化|Agent 成本与延迟优化]]、[[21 上下文压缩与卸载|上下文压缩与卸载]]。
+- **中心式 sub-agent 是模式，不是协议**：父代—子代报告路径、上下文派生和横向通信权限均由具体 harness 定义。它与 [[07 Orchestrator-Workers|Orchestrator-Workers]] 相近，但不要求某个固定 API。
+- **peer team 必须有收敛设计**：共享任务板只是状态载体；仍要定义仲裁者、冲突合并、轮次/预算和责任边界。
+- **量化结论必须带任务口径**：Anthropic 的一手报告发表于 **2025-06-13**，其中 $15\times$ 比较的是其研究产品与 chat 的 token 使用，而非模型或架构的普适常数。[来源](https://www.anthropic.com/engineering/multi-agent-research-system)
+- 跨组织 agent 的标准化互通见 [[30 A2A 协议|A2A 协议]]；同一 harness 内该用中心式还是对等式，仍是本篇讨论的拓扑选择。

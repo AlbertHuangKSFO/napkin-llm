@@ -1,201 +1,122 @@
-**LLMCompiler** 把一组工具调用先**编译成一张 DAG(有向无环图)**,识别出彼此无依赖的任务**并行**发出执行,而不是像 [[09 ReAct|ReAct]] 那样一次只调一个工具、串行地等一个回来再调下一个。
+[[12 LLMCompiler|LLMCompiler]] 把一组函数调用表示为带变量依赖的执行计划：没有依赖的调用可同时发出，有依赖的调用等输入就绪后再执行。它借用编译器的「分析依赖—调度执行」思想来减少工具调用的关键路径延迟。
 
-它和 [[11 ReWOO|ReWOO]]、[[10 Plan-and-Execute|Plan-and-Execute]] 同属「先规划、再执行」一脉,但更进一步:[[11 ReWOO|ReWOO]] 把整条计划写成线性蓝图,LLMCompiler 把计划写成**带依赖关系的图**,从而把 [[06 Parallelization|Parallelization]] 这种并发能力直接编进 agent 的执行引擎里。本质是借了编译器的思路——**先把任务编译成依赖图,再让调度器最大化并行**。
+它与 [[11 ReWOO|ReWOO]] 都先生成变量化计划，但原论文强调的是 parallel function calling；它不是任何工具链都必然更便宜或更快的万能调度器。
 
-## 本质:为什么要编译成 DAG
+## 直觉：厨房不是只能一口锅
 
-ReAct 式回路的致命低效在于**串行**:每调一个工具,都要等 LLM 生成 → 工具返回 → 再喂回 LLM 生成下一步。如果一个任务需要 5 次工具调用,哪怕这 5 次彼此无关,也得排成 5 个 round-trip,延迟和 token 成本线性叠加。
+「洗菜」和「预热烤箱」可以同时做，「把菜放进烤箱」必须等洗菜完成。若把所有动作排成单队列，空闲资源被浪费；若忽略依赖就并发，又会在没有菜时执行后续动作。DAG 正是在「尽可能并行」和「必须先后」之间写下可检查的约束。
 
-LLMCompiler 的观察是:**很多工具调用之间根本没有数据依赖**。「查 A 的身高」和「查 B 的身高」可以同时发;只有「比较谁更高」才必须等前两个回来。把这种依赖关系显式画成 DAG,无依赖的节点就能塞进同一批并发执行。
+## 小数字手算：看关键路径，不只看节点数
 
-- **节点** = 一次工具调用(带参数,参数里可引用其他节点的输出,如 `$1`、`$2`)。
-- **边** = 数据依赖(`$3 = compare($1, $2)` 意味着 $3 依赖 $1 和 $2)。
-- **并行** = 所有入度已满足(依赖都就绪)的节点,可在同一轮一起发出。
+设任务 A、B 无依赖，分别耗时 2 秒和 3 秒；任务 C 依赖 A、B，耗时 1 秒。
+
+串行排队为 $2+3+1=6$ 秒。资源足够时，A 与 B 同发，先等较慢的 B：
+
+$$
+L_{\mathrm{DAG}}=\max(2,3)+1=4\text{ 秒}.
+$$
+
+速度比为 $6/4=1.5$。即使有两个并发任务，C 仍是等待点；因此「有并行」不等于「节点数倍加速」。这是调度算例，不是论文基准。
+
+## 公式推导：延迟下界是最长依赖链
+
+对任务图 $G=(V,E)$，节点 $v$ 的服务时间为 $d(v)$。任一有向路径 $p$ 上的任务都不能重叠，因此总完成时间满足：
+
+$$
+L\ge \max_{p\in\mathrm{paths}(G)}\sum_{v\in p}d(v).
+$$
+
+在资源无限、调度和工具无额外开销的理想条件下，DAG 的完工时间等于这个**关键路径**长度。实际系统还需计入模型生成计划、排队、限流、重试和网络延迟，所以只应把它当作设计下界。
+
+## 机制：论文的三个组件
 
 ![[LLMCompiler.png]]
 
-## 机制:四个组件,分步讲透
-
-### 1. Planner —— 一次性产出整张 DAG
-LLM 读用户任务,**一次**生成一个流式的任务计划(不是一步步生成)。计划里每个任务形如 `$k = tool(args...)`,参数中用 `$j` 占位引用尚未执行完的上游任务输出。Planner 不等任何工具返回,直接把整张依赖图吐出来——这是它和 [[09 ReAct|ReAct]] 最本质的区别:**规划与执行解耦**。原论文还做了「计划流式化」优化:Planner 一边生成任务一边就交给下游,不必等整张图生成完。
-
-### 2. Task Fetching Unit —— 解析依赖、就绪即发
-这是调度核心。它维护每个任务的依赖状态:
-- 监听 Planner 的输出流,把任务入队;
-- 解析每个任务的 `$k` 占位符,确定它依赖哪些上游;
-- 一旦某任务的所有依赖都已拿到结果,就**把占位符替换成真实值**,标记为「就绪」,立即推给 Executor;
-- 收到 Executor 回填的结果后,更新下游任务的就绪状态,形成流水线。
-
-### 3. Executor —— 并行执行就绪任务
-用一个**异步/线程池**执行器,把所有「就绪」任务真正并发跑起来。无依赖的任务在同一时刻一起发出,各自完成后把结果回写给 Task Fetching Unit,解锁下游。这一步把 [[06 Parallelization|Parallelization]] 从「应用层手动 fan-out」下沉成了「引擎自动调度」。
-
-### 4. Joiner(可选)—— 汇总或决定重规划
-所有任务跑完后,Joiner(一个 LLM 调用)看着结果做两件事之一:
-- **收尾**:信息够了,直接合成最终答案返回用户;
-- **重规划(replan)**:发现还缺信息(比如中途某工具失败、或需要基于初步结果展开新一轮查询),就把当前结果回灌给 Planner,生成新的 DAG,再跑一轮。
-
-有了 Joiner,LLMCompiler 也能处理**动态、多轮**的任务,而不只是一次性静态图。
+1. **Function Calling Planner**：生成函数调用计划，并用变量引用表示哪些输入来自上游调用。
+2. **Task Fetching Unit**：持续读取计划，解析已满足的依赖，把就绪任务交给执行层；这使规划可以与部分执行重叠。
+3. **Executor**：并行执行已就绪的函数调用并写回结果，供依赖它们的任务继续。
 
 ![[LLMCompiler-流水线.png]]
 
-## 原论文
+应用可以在全部任务完成后增加汇总或重规划节点，但那是编排选择；不应把它误写成论文声称的第四个固定核心组件。
 
-- **Kim, Moon, Hooper, Gholami et al., _An LLM Compiler for Parallel Function Calling_**(UC Berkeley,arXiv 2023-12,ICML 2024)。
-- 论文核心主张:在需要多个工具调用的任务上,相比 ReAct 可达到 **~3.7× 延迟加速、~6.7× 成本降低、~9% 准确率提升**(数据随基准而异),并支持开源模型做并行 function calling(不依赖 OpenAI 的原生 parallel function calling)。
-- 思想直接类比传统编译器:Planner≈前端生成 IR(中间表示=DAG),Task Fetching Unit≈指令调度器,Executor≈乱序执行单元。
+## 原论文与可核验结论
 
-**延迟加速从哪来(关键路径手算)。** 加速的本质是:串行延迟 $\approx$ **所有步骤之和**,并行延迟 $\approx$ **DAG 关键路径(最长依赖链)**。举「查 6 个实体身高、再两两比较、最后汇总」:设每次工具往返(含 LLM 一轮)$\approx0.8\text{s}$。**[[09 ReAct|ReAct]] 串行**:6 次查 + 3 次比较 + 1 次汇总 = 10 个往返顺序排,$10\times0.8=8.0\text{s}$。**LLMCompiler 并行**:6 次查互无依赖,**一批同发**($1$ 层);3 次比较各依赖 2 个查结果,这 3 个比较也互不依赖,**再一批同发**($1$ 层);最后汇总 $1$ 层——关键路径深度只有 $3$ 层,$3\times0.8=2.4\text{s}$。**$8.0/2.4\approx3.3\times$ 加速**,与论文 $\sim3.7\times$ 同量级。注意上限被关键路径锁死:若任务退化成纯链(每步依赖上一步),关键路径 $=$ 全部步数,DAG 与串行**无差别**——这就是为什么强串行/强探索任务用 LLMCompiler 没有收益,该回 [[09 ReAct|ReAct]]。
+Kim, Moon, Tabrizi, Lee, Mahoney, Keutzer 与 Gholami 的论文发表于 ICML 2024。论文在其多类函数调用任务中报告，相比所用 ReAct 基线，最高可达 **3.7× latency speedup**、**6.7× cost saving** 与约 **9% accuracy improvement**。这些是「up to」的实验观察，不是不同 provider、价格、并发限制下可承诺的工程指标。
 
-## 可跑最小代码(伪代码)
+- 论文（2023 arXiv，ICML 2024）：https://arxiv.org/abs/2312.04511
+- 论文代码链接：https://github.com/SqueezeAILab/LLMCompiler
+
+## 可运行的最小调度骨架
 
 ```python
-# 1) Planner 产出的 DAG —— 每个任务声明它依赖的上游
-plan = [
-    Task(id=1, tool="search", args=["A 的身高"], deps=[]),        # 根,无依赖
-    Task(id=2, tool="search", args=["B 的身高"], deps=[]),        # 根,无依赖 → 可与 1 并行
-    Task(id=3, tool="compare", args=["$1", "$2"], deps=[1, 2]),   # 依赖 1、2
-]
+from concurrent.futures import ThreadPoolExecutor
 
-# 2) Task Fetching Unit + Executor:就绪即并发发出
-import concurrent.futures as cf
-results = {}
-pending = {t.id: t for t in plan}
-with cf.ThreadPoolExecutor() as pool:
-    while pending:
-        ready = [t for t in pending.values()
-                 if all(d in results for d in t.deps)]   # 依赖全部就绪
-        futures = {}
-        for t in ready:
-            args = [results[int(a[1:])] if str(a).startswith("$") else a
-                    for a in t.args]                      # 替换 $k 占位符
-            futures[pool.submit(TOOLS[t.tool], *args)] = t  # 同批并发提交
-            del pending[t.id]
-        for fut in cf.as_completed(futures):              # 回填结果,解锁下游
-            t = futures[fut]
-            results[t.id] = fut.result()
+tasks = {
+    "A": {"deps": set(), "run": lambda _: 2},
+    "B": {"deps": set(), "run": lambda _: 3},
+    "C": {"deps": {"A", "B"}, "run": lambda x: x["A"] + x["B"]},
+}
 
-# 3) Joiner:汇总 or 触发重规划
-answer = joiner_llm(task, results)        # 够了→收尾;不够→ replan 生成新 DAG 再跑
+# ❌ 朴素串行：即使 A、B 无依赖，也固定排队执行。
+def run_serial(tasks):
+    done = {}
+    for name in ("A", "B", "C"):
+        done[name] = tasks[name]["run"](done)
+    return done
+
+assert run_serial(tasks)["C"] == 5
+
+# ✅ 改进：只要依赖满足就进入同一批；A、B 可由不同 worker 同时执行。
+done = {}
+while len(done) < len(tasks):
+    ready = {k: v for k, v in tasks.items()
+             if k not in done and v["deps"] <= done.keys()}
+    if not ready:
+        raise ValueError("依赖图有环或引用了不存在的任务")
+    with ThreadPoolExecutor(max_workers=len(ready)) as pool:
+        futures = {name: pool.submit(spec["run"], done) for name, spec in ready.items()}
+        done.update({name: future.result() for name, future in futures.items()})
+
+assert done["C"] == 5
 ```
 
-要点:`while pending` 这层循环每轮把当前所有就绪任务**一次性并发提交**,这就是「并行 function calling」的引擎实现。
+示例只说明依赖屏障；真实 Executor 还需要每个工具的超时、并发配额、幂等键、结构化错误与追踪记录。
 
-## 对比:ReAct / ReWOO / LLMCompiler
+## 对比：限定在执行计划层
 
 | 维度 | [[09 ReAct\|ReAct]] | [[11 ReWOO\|ReWOO]] | LLMCompiler |
 |---|---|---|---|
-| 规划时机 | 边走边想(无全局规划) | 一次性出**线性**蓝图 | 一次性出**DAG**(带依赖) |
-| 执行结构 | 串行,逐个调 | 蓝图按序执行(变量回填) | **就绪即并发** |
-| 并行能力 | 无 | 有限(线性蓝图难表达分叉) | **原生并行**(无依赖任务同发) |
-| 中途纠错 | 强(每步看反馈) | 弱(蓝图定死) | 中(Joiner 可重规划) |
-| token 成本 | 高(反复读历史) | 低(规划与执行分离) | 低 + 快(并行省 round-trip) |
-| 适用 | 强探索、步骤不可预定 | 步骤可预定、省 token | 多工具、有并行结构、要低延迟 |
+| 计划粒度 | 通常逐轮决定下一动作 | 变量化的完整计划 | 函数调用及其数据依赖 |
+| 主要反馈方式 | 观测进入下一轮 | 末尾统一合成 | 完成的节点解锁下游节点 |
+| 并行来源 | 取决于实现 | 无依赖证据可以并发 | 调度器显式寻找就绪节点 |
+| 核心风险 | 历史与往返增长 | 盲规划 | 图解析、关键路径与外部限流 |
 
-## 何时用 / 坑
+这张表描述常见架构取向，不声明任何一种在准确率、成本或延迟上必然优于另一种。
 
-✅ **该上 LLMCompiler**:任务需要**多个工具调用**且其中存在**可并行的无依赖子任务**(多源信息聚合、批量查询、扇出检索),且你在乎延迟和成本。典型如「对比 N 个实体」「同时查多个 API 再综合」。
+## 何时用 / 边界
 
-❌ **别上**:任务本质是**强串行、强探索**的(每一步都依赖上一步的观测来决定下一步该干嘛),这种用 [[09 ReAct|ReAct]] 更自然——硬编译成 DAG 反而因为缺乏中途反馈而更脆。
+适合：有多个独立工具调用、可明确声明输入输出依赖、并且端到端延迟受工具往返影响的流程。
 
-坑:
-- **Planner 出的 DAG 错了就全错**:依赖关系判断错(本该并行的标成串行,或本该串行的标成并行)会直接拖垮效果或导致用到未就绪的 `$k`。Planner 的 prompt/few-shot 质量是上限。
-- **并行不等于免费**:同时打多个外部 API 可能撞限流(rate limit)、放大失败面;Executor 需要做并发上限与重试。
-- **依赖解析的健壮性**:`$k` 占位符替换、循环依赖检测要做对,否则死锁。
-- **Joiner 的重规划可能震荡**:replan 没有收敛条件会反复重规划烧预算,需设最大轮数。
+不适合：图几乎是一条链、工具有不可逆副作用却没有幂等或补偿机制、或 provider 限流使并发反而放大失败的流程。
 
-## 关键事实速记
-
-- LLMCompiler = **Planner(出 DAG)+ Task Fetching Unit(解析依赖、就绪即发)+ Executor(并行)+ Joiner(汇总/重规划)**。
-- 核心收益是**并行 function calling**:把无依赖的工具调用塞进同一批并发,省 round-trip → 更快、更省。
-- 与 [[11 ReWOO|ReWOO]] 的差别:ReWOO 是线性蓝图,LLMCompiler 是**带依赖的图**,因此能表达并行分叉。
-- 与 [[09 ReAct|ReAct]] 的差别:用「中途反馈能力」换「并行与速度」;探索性任务别硬套。
-- 它把 [[06 Parallelization|Parallelization]] 从应用层 fan-out 下沉成了 agent 执行引擎的内建调度。
-
-## 主流开源实现 / Python 库
-
-- **`SqueezeAILab/LLMCompiler`** —— **原论文官方实现**(UC Berkeley,ICML 2024),完整含 Planner / Task Fetching Unit / Executor / Joiner 四组件与流式规划,`run_llm_compiler.py` 可直接复现论文的并行 function calling;不依赖 OpenAI 原生 parallel function calling,开源模型也能跑。要对齐论文数值用它。
-- **`langchain-ai/langgraph` LLMCompiler 教程** —— 官方 tutorial(`examples/llm-compiler/LLMCompiler.ipynb`),用 LangGraph 把 DAG 调度搭成状态图,**最适合拿来改造进自己工程**的工程模板。
-
-首选:做工程集成选 LangGraph 教程版(易接现有 LangChain 工具);要严谨复现论文用 `SqueezeAILab/LLMCompiler`。无独立通用 pip 包,一般以上述两种形态落地。
-
-## 工业界实践
-
-LLMCompiler 的核心思想——**把无依赖的工具调用并行发出以压延迟**——在工业界已经部分被**平台原生能力**吸收(provider 的 parallel tool calls),但完整的"编译成 DAG + 调度器"形态仍用在那些**多工具、有明显并行结构、且延迟敏感**的生产场景。
-
-**主流落地形态(具体名 + 定位)**:
-- **OpenAI / Anthropic / Gemini 的 parallel tool calls**:模型一轮里直接吐多个 `tool_calls`,runtime 并发执行。这是 LLMCompiler"无依赖并行"思想的**平台内建版**,无需自己搭 Task Fetching Unit——但它只能并行"同一轮模型已决定的调用",**跨轮、带复杂依赖的 DAG 调度**仍需 LLMCompiler 这种显式编排。
-- **LangGraph LLMCompiler 教程图**:把 Planner / Task Fetching Unit / Executor / Joiner 搭成状态图,适合接现有 LangChain 工具、需要显式 DAG 调度的工程。
-- **`SqueezeAILab/LLMCompiler`(官方实现)**:含流式规划,不依赖 OpenAI 原生 parallel function calling,**开源模型也能跑并行 function calling**——这点在自托管场景很关键。
-- **多源信息聚合服务**:典型如"同时查 N 个 API / 检索 N 个源再综合"的后端(行情聚合、多平台比价、扇出检索),正是 LLMCompiler 的甜点区,见 [[06 Parallelization|Parallelization]]、[[29 Deep Research Agent|Deep Research Agent]]。
-
-**典型架构**:`Planner(流式吐 DAG,$k 占位引用上游)→ Task Fetching Unit(解析依赖、就绪即替换占位符并发提交)→ Executor(线程池/异步并发执行就绪任务)→ Joiner(汇总 or replan)`。类比编译器:Planner≈前端生成 IR(DAG),Task Fetching Unit≈指令调度器,Executor≈乱序执行单元。
-
-**规模化与成本/延迟**:论文报告相比 ReAct 可达 **~3.7× 延迟加速、~6.7× 成本降低、~9% 准确率提升**(随基准而异)。生产里收益主要来自**省 round-trip**:把 5 个无依赖工具调用从 5 个串行往返压成 1 批并发。但"并行不等于免费"——同时打多个外部 API 容易撞**限流(rate limit)**、放大失败面,Executor 必须做**并发上限 + 重试 + 退避**。延迟收益的上限由 DAG 的**关键路径(最长依赖链)**决定:若任务本质强串行(每步依赖上一步),DAG 退化成一条链,LLMCompiler 没优势。
-
-**可观测与运维**:DAG 本身是一张可视化的执行图,适合做可观测——把每个节点的工具名、参数、依赖、并发批次、耗时记成 span,排障时直接看"哪个节点拖慢了关键路径 / 哪批并发撞了限流 / Joiner 是否在反复 replan"。生产监控重点:**并发实际命中率**(有多少任务真的并行了)、**关键路径耗时**、**replan 轮数**,见 [[38 Agent 评估与可观测性|Agent 评估与可观测性]]、[[35 Agent 成本与延迟优化|Agent 成本与延迟优化]]。
-
-**踩坑与最佳实践**:
-- **Planner 的 DAG 质量是上限**:依赖判断错(该并行标成串行、或该串行标成并行 → 用到未就绪的 `$k`)会直接拖垮效果。靠高质量 prompt / few-shot,且执行前做**循环依赖检测 + 拓扑校验**。
-- **Executor 必设并发上限与重试**:防限流和级联失败。
-- **占位符替换要稳健**:`$k` 替换、依赖回填出错会死锁。
-- **Joiner 的 replan 要设最大轮数**:否则没有收敛条件会反复重规划烧预算(震荡)。
-- **流式规划权衡**:Planner 边生成边交付能更早启动执行,但实现更复杂;简单任务不必上流式。
-
-```python
-# Task Fetching Unit + Executor:就绪即并发(核心引擎)
-import concurrent.futures as cf
-results, pending = {}, {t.id: t for t in plan}
-with cf.ThreadPoolExecutor(max_workers=N) as pool:   # 并发上限防限流
-    while pending:
-        ready = [t for t in pending.values()
-                 if all(d in results for d in t.deps)]    # 依赖全就绪
-        futures = {}
-        for t in ready:
-            args = [results[int(a[1:])] if str(a).startswith("$") else a
-                    for a in t.args]                       # 替换 $k 占位符
-            futures[pool.submit(TOOLS[t.tool], *args)] = t # 同批并发提交
-            del pending[t.id]
-        for fut in cf.as_completed(futures):               # 回填,解锁下游
-            results[futures[fut].id] = fut.result()
-answer = joiner_llm(task, results)        # 够了收尾;不够 replan 生成新 DAG(设 max_rounds)
-```
+- 对 Planner 产物做 schema、变量引用和环检测；一张错误 DAG 会并行地放大错误。
+- 以关键路径、p95 延迟、调用量和成功率共同评估；只看平均并发数会掩盖瓶颈。
+- 先为读操作并行；写操作需要幂等键、顺序约束或补偿事务。
 
 ## 面试高频
 
-**Q1:LLMCompiler 解决 ReAct 的什么问题?核心机制?**
-标准答:ReAct 串行——每调一个工具都要等"LLM 生成 → 工具返回 → 再喂回 LLM",N 次调用就是 N 个 round-trip,延迟/成本线性叠加,哪怕这些调用彼此无关。LLMCompiler 把工具调用**编译成 DAG**,识别无依赖任务**并行**发出,省掉 round-trip,论文报告 ~3.7× 加速、~6.7× 降本。
-- 追问"为什么类比编译器":Planner≈前端生成 IR(DAG),Task Fetching Unit≈指令调度器,Executor≈乱序执行单元——和 CPU 把无依赖指令乱序并行执行同构。
+**Q：LLMCompiler 为什么能降延迟？**
 
-**Q2:四个组件分别干什么?**
-标准答:Planner(一次/流式产出整张 DAG,任务形如 `$k = tool(args)`,参数用 `$j` 占位引用上游)/ Task Fetching Unit(解析依赖、就绪就把占位符换成真实值并推给 Executor)/ Executor(异步/线程池并发执行就绪任务,结果回写解锁下游)/ Joiner(可选,汇总收尾 or 触发 replan 生成新 DAG)。
-- 追问"Joiner 有什么用":让 LLMCompiler 能处理**动态、多轮**任务而不只是一次性静态图。
+答：它把函数调用依赖显式化，Task Fetching Unit 在输入就绪时立刻派发，独立节点可并行。延迟下界由最长依赖链决定；强串行任务并不会因为画成 DAG 就加速。
 
-**Q3:LLMCompiler 和 ReWOO 的区别?**
-标准答:两者都用"带依赖的变量计划"、都是先规划后执行。区别:[[11 ReWOO|ReWOO]] 是**线性蓝图**(难表达并行分叉),主打**省 token**;LLMCompiler 是**带依赖的 DAG**,能表达并行分叉,主打**降延迟**(原生并行 + Joiner 可重规划)。
-- 陷阱:别说"LLMCompiler 一定更省 token"——它的主轴是延迟;省 token 是规划/执行分离的副产物。
+**Q：它与 ReWOO 的区别？**
 
-**Q4:什么时候不该用 LLMCompiler?**
-标准答:任务**强串行、强探索**(每步都依赖上一步观测决定下一步)时别用——DAG 退化成一条链,没有并行收益,且缺中途反馈更脆,该用 [[09 ReAct|ReAct]]。LLMCompiler 的甜点是"多工具 + 存在无依赖可并行子任务 + 延迟敏感"。
+答：二者都可使用变量化计划。ReWOO 的论文重点是避免把观测反复放回推理提示词；LLMCompiler 的论文重点是并行调度函数调用。真实系统可组合两种思想，但组合后的指标必须重新测量。
 
-**Q5:并行带来哪些工程风险?**
-标准答:① 撞**限流**、放大失败面 → Executor 要并发上限 + 重试退避;② Planner 把依赖判错 → 用到未就绪 `$k` 或丢掉本可并行的机会,需拓扑/循环依赖校验;③ Joiner 无收敛条件 → replan 震荡烧预算,设 max_rounds。
+## 关键事实
 
-## 知识拓展
-
-**谱系定位**:这是"减少大模型介入次数 / 降本提速"主线的**终点**:[[09 ReAct|ReAct]](每步串行问)→ [[10 Plan-and-Execute|Plan-and-Execute]](规划集中一次)→ [[11 ReWOO|ReWOO]](观测不回灌、省 token)→ **LLMCompiler(编译成 DAG、并行降延迟)**。它把 [[06 Parallelization|Parallelization]] 从"应用层手动 fan-out"**下沉成 agent 执行引擎的内建调度**——这是它最独特的贡献。
-
-**延伸/进阶**:
-- **平台内建并行**:provider 的 parallel tool calls 已把"单轮无依赖并行"做进 API,但**跨轮、复杂依赖的 DAG 调度**仍是 LLMCompiler 的领地;理解二者边界很重要。
-- **与多 agent 的关系**:LLMCompiler 在"单 agent 内并行工具调用",而 [[22 多智能体系统|多智能体系统]] / [[07 Orchestrator-Workers|Orchestrator-Workers]] 在"多个 agent 并行干子任务"——前者是引擎级并发,后者是组织级并发,可叠加。
-- **更动态的图**:Joiner 的 replan 让静态 DAG 能演化成多轮;再往前是把规划本身做成搜索(见 [[14 树搜索：ToT 与 LATS|树搜索：ToT 与 LATS]])。
-
-**相关论文/前沿**:
-- **Kim, Moon, Hooper, Gholami et al., _An LLM Compiler for Parallel Function Calling_(UC Berkeley,arXiv 2023-12,ICML 2024)**——本范式原点,首次把编译器调度思路引入 agent。
-- **OpenAI parallel function calling(2023-11 起)/ Anthropic parallel tool use(2024)**——平台把"单轮并行"内建,改变了手搓 LLMCompiler 的性价比。
-- **DAG 调度 + Agentic RAG**:多源并行检索再合成,见 [[36 Agentic RAG|Agentic RAG]]、[[29 Deep Research Agent|Deep Research Agent]]。
-
-**边界与反模式**:
-- **反模式 1:对强串行/强探索任务硬编译成 DAG**——退化成链且缺中途反馈,比 ReAct 更脆。
-- **反模式 2:无并发上限地狂打外部 API**——撞限流、放大失败,反而更慢更不稳。
-- **反模式 3:Joiner replan 不设收敛条件**——震荡烧预算。
-- **边界**:延迟收益上限由 DAG **关键路径**决定;若关键路径就是整个任务长度(纯串行),LLMCompiler 无加速空间。当 provider 原生 parallel tool calls 已够用时,优先用它而非自搭调度器。
+- 原论文为 Kim et al. 的 *An LLM Compiler for Parallel Function Calling*（ICML 2024；Kim et al., 2023, [arXiv:2312.04511](https://arxiv.org/abs/2312.04511)）。
+- 核心组件是 Planner、Task Fetching Unit、Executor；任务并发的前提是数据依赖已满足（Kim et al., 2023, [arXiv:2312.04511](https://arxiv.org/abs/2312.04511)）。
+- 论文的 3.7×、6.7×、约 9% 都是特定实验中的最高/报告值，应连同比较基线和任务语境引用（Kim et al., 2023, [arXiv:2312.04511](https://arxiv.org/abs/2312.04511)）。
+- [[06 Parallelization|Parallelization]] 解释并行本身；这里额外解决的是如何从模型生成的计划中恢复可安全执行的依赖图（Kim et al., 2023, [arXiv:2312.04511](https://arxiv.org/abs/2312.04511)）。

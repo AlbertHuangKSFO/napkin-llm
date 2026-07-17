@@ -7,6 +7,8 @@ Routing 的核心动作是**先分类、后分流**:一个轻量的 router 先�
 
 它属于 [[02 Workflow 与 Agent 的边界|Workflow 与 Agent 的边界]] 里的 **workflow 一侧**:支路是开发者**预先定义**好的,router 只是在运行时选一条,不会凭空造出新支路。与全自主的 [[09 ReAct|ReAct]] 对照。
 
+**生活类比:** 像医院分诊台先判断病人该去内科、骨科还是急诊，再送到对应科室。分诊台不替医生看病；它选错科会增加绕路，所以要有“症状不明 → 急诊/人工复核”的兜底。
+
 ## 机制:一进多出的分叉
 ![[Routing.png]]
 
@@ -22,27 +24,46 @@ Routing 的核心动作是**先分类、后分流**:一个轻量的 router 先�
 ## 来源
 出自 Anthropic《Building Effective Agents》(2024-12)。文中典型例子:客服系统先把进来的工单分成「退款 / 技术故障 / 一般咨询」等类别,各类用专门的下游 prompt 与流程;以及「把简单问题路由给小模型(省钱省延迟)、难问题路由给大模型」的成本优化用法。
 
-## 可跑最小代码(伪代码)
+## 可跑最小代码
 ```python
-def route(query):
-    # 1) router:小模型只做分类,输出一个 label
-    label = small_llm(
-        f"把用户请求分到 [refund, tech, general] 之一,只输出标签:\n{query}"
-    ).strip()
+# 这是可直接运行的路由器替身；生产里可替换为规则、分类器或 LLM。
+def universal_model(query):
+    return f"通用支路（成本 10）：{query}"
 
-    # 2) 分流:每条支路有各自的 prompt / 模型 / 工具
-    if label == "refund":
-        return small_llm(REFUND_PROMPT + query)          # 流程固定,小模型够用
-    elif label == "tech":
-        return llm_with_tools(TECH_PROMPT + query,        # 需查日志、调 API
-                              tools=[search_logs, call_api])
-    else:  # general / 兜底
-        return big_llm(GENERAL_PROMPT + query)            # 疑难走大模型
+def classify(query):
+    if "退款" in query:
+        return "refund", 0.95
+    if "报错" in query:
+        return "tech", 0.90
+    return "general", 0.40
+
+def refund_branch(query):
+    return f"退款支路（成本 2）：{query}"
+
+def tech_branch(query):
+    return f"技术支路（成本 6）：{query}"
+
+# ❌ 朴素写法：所有请求都交给一个昂贵的通用处理器。
+def universal_handle(query):
+    return universal_model(query)
+
+# ✅ 改进写法：先分类，再进入固定支路；低置信和未知标签走兜底。
+def routed_handle(query, threshold=0.80):
+    label, confidence = classify(query)
+    branches = {"refund": refund_branch, "tech": tech_branch}
+    if confidence < threshold:
+        return universal_model(query)
+    return branches.get(label, universal_model)(query)
+
+assert "通用支路" in universal_handle("想退款")
+assert "退款支路" in routed_handle("想退款")
+assert "通用支路" in routed_handle("今天怎么样？")
+print(routed_handle("登录报错"))
 ```
-要点:router 的输出是个**离散标签**;分流逻辑是**确定性代码**,选错支路就全错——所以 router 的分类质量是命门。
+要点:router 的输出是个**离散标签**；分流逻辑可以是确定性代码。错路由会提高下游失配风险，但不必然「整条全错」——通用兜底、二次校验或人工升级仍可恢复，因此要把恢复率一并纳入评估。
 
 ## 对比表
-| 维度    | Routing      | [[04 Prompt Chaining \| Prompt Chaining]] | [[06 Parallelization\|Parallelization]] |
+| 维度    | Routing      | [[04 Prompt Chaining\|Prompt Chaining]] | [[06 Parallelization\|Parallelization]] |
 | ----- | ------------ | ----------------------------------------- | --------------------------------------- |
 | 拓扑    | 一进多出(选 1 条)  | 串行单链                                      | 一进多出(全部跑)                               |
 | 运行时动作 | 分类后**只走一条**  | 顺序走完所有步                                   | **同时**跑多条                               |
@@ -52,33 +73,45 @@ def route(query):
 ## 何时用 / 坑
 - **何时用**:输入有**清晰、可区分的类别**,且各类**确实需要不同处理**(不同 prompt/模型/工具)。典型:客服分流、按难度做成本优化、多语言/多领域分发。
 - **坑一**:类别边界要清晰。若类别模糊、大量输入卡在分界,router 频繁误判,收益被抵消。
-- **坑二**:router 选错则**整条全错**——它是单点。高风险场景给 router 配兜底类、置信度阈值,低置信时升级人工或走通用支路。
-- **坑三**:别把 router 做得太重。它该是**小模型/小分类器**;若 router 本身就要复杂推理,说明分类没设计好。
+- **坑二**:router 是高影响单点。高风险场景给它配兜底类、置信度阈值与升级路径；低置信时走通用支路或人工，不要硬猜。
+- **坑三**:router 的成本与延迟必须用端到端账本验证。轻量分类器常合适，但若语义确实复杂，使用更强 router 也可能合理；关键是它带来的质量收益是否超过代价。
 - **坑四**:支路一多就难维护。类别数控制在「少而互斥」,不要无限细分。
 
 ## 关键事实
-- router **可以用很便宜的模型甚至非 LLM 分类器**,这是它常被用作**成本优化**手段的原因:难易分流,把贵模型只留给难题。
-- Routing 是**静态分流**——支路集合预先固定;若要运行时**动态生成**子任务,那是 [[07 Orchestrator-Workers|Orchestrator-Workers]],别混淆。
-- 常与其他模式嵌套:某条支路内部可以是一条 [[04 Prompt Chaining|Prompt Chaining]],或一组 [[06 Parallelization|Parallelization]]。
-- 与 Parallelization 的一句话区分:Routing 分类后**只走一条**;Parallelization **多条全跑**再聚合。
+- router 可以用较低成本模型或非 LLM 分类器；分类可准确时，难易分流才可能带来成本/速度收益。[Anthropic, 2024](https://www.anthropic.com/engineering/building-effective-agents)
+- Routing 是**静态分流**——支路集合预先固定；若要运行时**动态生成**子任务，应看 [[07 Orchestrator-Workers|Orchestrator-Workers]]。[Anthropic, 2024](https://www.anthropic.com/engineering/building-effective-agents)
+- 路由支路可嵌一条 [[04 Prompt Chaining|Prompt Chaining]]，或嵌一组 [[06 Parallelization|Parallelization]]；组合后的质量仍须按端到端任务评测。[Anthropic, 2024](https://www.anthropic.com/engineering/building-effective-agents)
+- 与 Parallelization 的一句话区分：Routing 分类后选定支路；Parallelization 同时运行多个预设调用再聚合。[Anthropic, 2024](https://www.anthropic.com/engineering/building-effective-agents)
 
 ## 工业界实践
-Routing 在生产里几乎无处不在,但很少叫这个名字——它常被包装成「模型路由 / model router」「网关 / gateway」「分发」。落地分三层成熟度。
+Routing 常部署在入口层：`输入 → 分类/置信度 → 固定支路 → 兜底或升级`。分类器可以是规则、传统模型、embedding 检索或 LLM；选择不是信仰题，而是由准确率、延迟、模型价格、错误代价和可观测性共同决定。
 
-**主流框架与服务(具体名 + 定位):**
-- **RouteLLM**(LMSYS,2024-07 开源 / ICLR 2025):用**人类偏好数据**训练 router,把简单 query 路给小模型、难 query 路给大模型。官方数据:MT-Bench 上省 85%+ 成本、MMLU 省 45%、GSM8K 省 35%,同时保住 ~95% GPT-4 质量;整体成本降 2 倍以上不显著掉质量。是「成本优化型 Routing」的标杆实现。
-- **vLLM Semantic Router / LLM Semantic Router**(2025,Red Hat 等推动):与 vLLM + Envoy `ext_proc` 集成的**信号驱动**路由,把成本、隐私、延迟、安全等异构信号编成路由策略。典型用法:用 BERT 类小分类器判 query 是否需要「开推理 / reasoning」,不需要的直接走快路径(对应论文《When to Reason》arXiv 2510.08731)。
-- **语义路由(semantic routing)**:用 embedding 把 query 匹配到预设「话题向量」选支路,代表库 **semantic-router**(Aurelio AI)。比让 LLM 输 label 更快更便宜,适合意图清晰的场景。
-- **托管网关**:**OpenRouter**、**LiteLLM Router**、**Portkey**、**Martian** 等在 API 层做跨厂商/跨模型路由 + 降级(failover)+ 负载均衡,是「多模型混用」工程的事实标准入口。
-- **平台内置**:不少 IDE/客服产品有「auto」档,内部就是一个难度 router:轻问题给小模型,重问题给旗舰模型。
+**成本手算：先算期望值再谈省钱。** 设始终调用强模型的单次成本为 $C_b$，router 成本为 $C_r$，轻支路成本为 $C_s$，被判为轻任务的比例为 $p$。若其余请求走强支路，则
 
-**典型架构:** 入口网关 → router(小分类器 / embedding / 小 LLM)→ 命中支路(各自的 prompt + 模型 + 工具)。router 与业务逻辑解耦,常单独部署成一个低延迟微服务;路由表(label→支路)放配置中心,改路由不动代码。
+$$
+E[C_{route}] = C_r + pC_s + (1-p)C_b
+$$
 
-**规模化与成本/延迟:** router 必须**比最便宜的支路还便宜**,否则得不偿失——所以工业界优先用**非 LLM 分类器**(逻辑回归 / 小 BERT / embedding 最近邻),P50 延迟压到个位数毫秒;只有类别语义很微妙时才退而用小 LLM。成本账本上,Routing 的核心价值是把**贵模型的调用占比**从 100% 压到「只有难题的那一小撮」,这是大规模降本最直接的杠杆之一。
+相对全走强模型的节省为
+
+$$
+\Delta C = C_b-E[C_{route}] = p(C_b-C_s)-C_r.
+$$
+
+例如 $C_b=10$、$C_s=2$、$C_r=0.4$、$p=0.7$：
+
+$$
+E[C_{route}]=0.4+0.7\times2+0.3\times10=4.8,
+\qquad \Delta C=10-4.8=5.2.
+$$
+
+这说明该**假设下**成本下降；它没有计入错路由造成的返工、人工升级或质量损失，故上线前还要在标注集与线上影子流量中验证端到端效用。
+
+**研究例证（非通用承诺）:** RouteLLM 用偏好数据在强、弱模型间学习路由；论文报告某些基准配置可把成本降到一半以下而不牺牲其测量的响应质量，但结果依赖模型对、数据与阈值，不能外推成固定节省比例。[Ong et al., 2024/2025, arXiv:2406.18665](https://arxiv.org/abs/2406.18665)
 
 ![[Routing-成本分流.png]]
 
-**可观测与运维:** 必须埋点记录**每条 query 的 label、命中支路、置信度、最终是否被人工纠偏**。线上要监控**路由分布漂移**(某类突然暴涨往往是上游变化或被攻击的信号)和**误分类率**;评估见 [[38 Agent 评估与可观测性|Agent 评估与可观测性]]。router 是单点,要做灰度发布 + 影子流量(shadow:新 router 只记录不生效,比对老 router)。
+**可观测与运维:** 记录每条 query 的 label、命中支路、置信度、最终结果、升级/纠偏情况。监控路由分布漂移、每类的混淆矩阵和端到端成功率；高风险类别尤其看召回率而非只看总体准确率。新 router 可先走影子流量：只记录、不生效，再与当前策略比对。评估方法见 [[38 Agent 评估与可观测性|Agent 评估与可观测性]]。
 
 **踩坑与最佳实践:**
 - router 给**兜底类 + 置信度阈值**:低置信走通用支路或转人工,别硬猜。
@@ -89,11 +122,11 @@ Routing 在生产里几乎无处不在,但很少叫这个名字——它常被�
 ```python
 # 生产化 router:优先小分类器,带置信度兜底
 def production_route(query):
-    label, conf = classifier.predict(query)        # 小 BERT / 逻辑回归,毫秒级
+    label, conf = classifier.predict(query)        # 分类器实现由实际延迟/质量目标决定
     log_routing(query, label, conf)                 # 必埋点:可观测 + 回放
     if conf < THRESHOLD:                            # 低置信不硬猜
         return general_branch(query)                # 兜底走通用支路
-    return BRANCHES[label](query)                   # 命中专属支路
+    return BRANCHES.get(label, general_branch)(query)  # 未知标签仍走兜底
 ```
 
 ## 面试高频
@@ -106,16 +139,16 @@ def production_route(query):
 - 陷阱:别答「为了模块化」这种泛词,要点在**能力解耦 + 成本分层**。
 
 **Q3:router 用什么模型?**
-标准答:**越轻越好**。优先非 LLM 分类器(embedding 最近邻 / 小 BERT / 逻辑回归),次选小 LLM 输 label。绝不该用旗舰大模型当 router——那样路由本身的成本就吃掉了路由的收益。
-- 追问「router 需要复杂推理才能分对类怎么办?」→ 说明**分类设计本身有问题**,类别边界不清,该重新设计类别,而不是给 router 加力。
+标准答:先比较端到端效用。类别清晰时，规则、embedding 或小分类器往往足够；语义复杂时可用 LLM router。用强模型并非绝对错误，只是要证明其增量质量、风险降低或成本收益能覆盖 router 本身的代价。
+- 追问「router 需要复杂推理才能分对类怎么办?」→ 先检查类别定义、训练数据和兜底策略；若仍需复杂判断，就把更强 router 的成本与误路由代价一起做 A/B 测，而不是凭直觉断言它不该存在。
 
 **Q4:Routing 的单点风险怎么兜?**
-标准答:router 选错则整条全错,它是单点。三道防线:① 置信度阈值,低置信走通用支路/转人工;② 兜底类(default branch)接住所有未命中;③ 影子流量 + 灰度发布换 router。
+标准答:router 是高影响单点，但错路由可被恢复。三道防线:① 置信度阈值，低置信走通用支路/转人工；② 兜底类(default branch)接住未命中；③ 影子流量 + 灰度发布，并量测每类端到端结果。
 
 **陷阱题:「把简单问题给小模型、难问题给大模型」是哪个模式?** → 就是 Routing(成本优化用法),不是什么新东西;RouteLLM 是其代表实现。
 
 ## 知识拓展
-- **进阶:从「硬路由」到「软路由 / cascade」。** 硬路由一次定终身;**级联(model cascade)**则是「先用小模型试,不行再升级到大模型」,本质是带 fallback 的串行 Routing,在「大多数 query 小模型就够」时更省。FrugalGPT(2023)是经典思路,RouteLLM 把它学习化了。
-- **前沿(2024-2025):** RouteLLM 用**偏好数据**学路由策略(arXiv 2406.18665,ICLR 2025);vLLM Semantic Router 把路由做成**多信号决策**(成本/隐私/延迟/安全联合),《When to Reason》(arXiv 2510.08731,2025)专门研究「何时该开推理模式」的路由——这是推理模型时代的新路由维度:不只路由到哪个模型,还路由「要不要思考链」。
-- **边界与反模式:** ① 类别模糊、大量 query 卡在分界 → router 频繁误判,收益被抵消,此时别用 Routing,考虑统一支路 + 更强模型;② router 做得太重(本身要复杂推理)→ 反模式,说明分类没设计好;③ 支路无限细分 → 维护灾难,保持「少而互斥」。
+- **进阶:从「硬路由」到「软路由 / cascade」。** 硬路由一次定支路；**级联(model cascade)**则是「先用较低成本支路，再按明确的失败/置信规则升级」。它是否更省，仍由前文的 $\Delta C$、升级率和质量指标决定。
+- **证据边界:** Anthropic 将 Routing 定义为「把输入分类并导向专用后续任务」，要求类别可准确地由 LLM 或传统分类器判断；它没有给出适用于所有业务的模型、延迟或节省比例。[Anthropic, 2024](https://www.anthropic.com/engineering/building-effective-agents)
+- **边界与反模式:** ① 类别模糊、大量 query 卡在分界 → router 频繁误判，需比较统一支路、重定义类别和升级策略；② 没算 $\Delta C$ 与错路由代价就声称省钱；③ 支路无限细分 → 维护灾难，保持「少而可评估」。
 - **与兄弟模式的关系:** Routing 与 [[06 Parallelization|Parallelization]] 拓扑都是一进多出,但前者**选一条**后者**全跑**;某条支路内部常嵌一条 [[04 Prompt Chaining|Prompt Chaining]] 或一组 Parallelization。真正动态分流要上 [[07 Orchestrator-Workers|Orchestrator-Workers]]。Routing 也是 [[36 Agentic RAG|Agentic RAG]] 的常见入口(先判 query 该不该检索、走哪个知识库)。成本/延迟权衡见 [[35 Agent 成本与延迟优化|Agent 成本与延迟优化]]。

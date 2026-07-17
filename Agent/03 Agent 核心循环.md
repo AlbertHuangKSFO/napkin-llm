@@ -1,175 +1,224 @@
-**Agent 核心循环**就是一个 `observe → think → act → observe` 的回路(tool-use loop):模型读上下文、决定下一步、runtime 执行、把结果回灌,再循环——直到触发停机条件。
+[[03 Agent 核心循环|Agent 核心循环]] 是 harness 驱动的 `observe → decide → act → observe` 回路：模型提出下一步，运行时受控执行并回灌结果，直到返回一个可被上游处理的结构化终态。
 
-它是 [[01 什么是 AI Agent|什么是 AI Agent]] 里那根「感知-推理-行动」闭环的工程化骨架,也是 [[02 Workflow 与 Agent 的边界|Workflow 与 Agent 的边界]] 中 agent 那一端的运行机制。把这个循环讲透,后面所有架构([[09 ReAct|ReAct]]、[[10 Plan-and-Execute|Plan-and-Execute]]、[[13 Reflection 与 Reflexion|Reflection 与 Reflexion]])都只是在它上面加料。
+它是 [[01 什么是 AI Agent|AI Agent]] 的工程骨架，也是 [[02 Workflow 与 Agent 的边界|Agent]] 一侧的运行机制。注意：**没有 tool call 不是成功的充分条件**。模型可能在等用户数据、等待批准、被工具阻塞，或只是没有按协议输出；只有 `completed` 且验收条件满足，才可报告任务完成。
 
-## 本质:一个带停机条件的 while 循环
+## 本质：一个带状态机的 while 循环
 
-去掉所有花哨,agent 运行时只有一个循环 + 三个状态:
+去掉框架名，循环包含三类工作：
 
-- **observe(观察)**:把当前上下文 + 上一步产生的 observation 一起读进来。
-- **think(思考)**:模型据此产出一段思考(thought)并决定下一步——通常是一次工具调用(tool call),也可能直接收尾。
-- **act(行动)**:runtime(即 [[23 Agent Harness 概览|Agent Harness 概览]])真正执行那次工具调用,得到结果。
+- **observe（观察）**：读取目标、历史、最新工具结果、剩余预算与权限状态。
+- **decide（决策）**：模型选择工具调用、请求输入/批准，或提出终态与证据。
+- **act（行动）**：[[23 Agent Harness 概览|harness]] 校验并执行工具，将结果截断、格式化为 observation。
 
-结果作为新的 observation 回灌,进入下一轮。**没有 tool call = 任务完成,正常退出**;否则继续转,直到撞上某个停机条件。
+一轮的状态更新是「模型给候选行动 → harness 检查 → 环境返回结果 → 写回状态」。单次模型调用只依据被提供的输入；会话连续性由 harness 或平台保存、压缩并重新提供状态。
 
 ![[Agent 核心循环.png]]
 
-## 机制:一轮里到底发生了什么(分步)
+## 直觉：流水线上的受控回合
 
-把单轮拆到帧级,跑这个循环的不是模型自己,而是模型和 harness 一来一回:
+模型像提出下一张工单的调度员；harness 像值班工程师。调度员说「执行测试」并不直接触发命令：值班工程师要先核对工具、参数、权限与预算，再把日志摘要回传。若工单要求付款，值班工程师返回「等待批准」；若缺少收件人，返回「需要输入」。这些都是正确结束，而不是把「没再发工单」误判为成功。
 
-1. **harness → 模型**:把累积上下文(目标 + 历史 + 最新 observation)和**工具定义**一起发给模型。
-2. **模型推理**:模型内部决定「下一步该干嘛」。
-3. **模型 → harness**:吐出 thought + 一个结构化的 `tool_call(name, args)`(机制见 [[15 Function Calling 工具调用|Function Calling 工具调用]])。
-4. **harness 校验**:检查工具名/参数是否合法、是否超频、是否需人工批准。
-5. **harness → 工具**:真正执行 `tool(args)`。
-6. **工具 → harness**:返回结果或报错。
-7. **harness 处理**:把结果**截断/格式化**成 observation(原始输出可能巨大,这步极关键,见 [[20 上下文工程|上下文工程]])。
-8. **harness → 模型**:observation 回灌进上下文,**回到第 1 步**开始下一轮。
+## 小数字手算：预算如何产生终态
 
-注意:**模型本身是无状态的**,它不记得上一轮——是 harness 把历史一路累积着喂回去,才形成「连续干活」的错觉。
+设本次运行 token 预算为 $B=3500$。前三次模型调用分别消耗 $900$、$1200$、$1600$ token：
+
+$$
+T_1=900,\qquad T_2=900+1200=2100,\qquad T_3=2100+1600=3700
+$$
+
+第 3 轮后 $T_3>B$，因此本轮应返回 `budget_exhausted`（`budget_type="tokens"`），而不是继续执行第 3 轮模型建议的工具。若另有 `max_steps=4`，第 4 个回合结束后仍未得到可验证终态，也应以 `budget_exhausted`（`budget_type="steps"`）结束。预算是终态协议的一部分，不只是日志指标。
+
+## 公式推导：回路、约束与完成判定
+
+令状态为 $s_i$，模型提出候选输出 $r_i$，策略为 $\pi$，harness 的约束/执行器为 $H$：
+
+$$
+r_i=\pi(s_i),\qquad (a_i,o_i)=H(r_i,s_i),\qquad s_{i+1}=U(s_i,a_i,o_i)
+$$
+
+当模型提出 `completed` 时，系统还需验证验收谓词 $V$：
+
+$$
+\text{成功} \iff \text{status}=\texttt{completed}\ \land\ V(\text{evidence},\text{goal})=\text{true}
+$$
+
+因此「无工具调用」至多表示 $r_i$ 没有要求行动，不能推出 $V=true$。例如修复代码时，`V` 可以检查测试输出、变更范围和人工评审要求。
+
+## 机制：一轮里到底发生什么
+
+1. **harness → 模型**：发送目标、相关历史、最新 observation、工具定义、预算和权限上下文。
+2. **模型 → harness**：返回一个或多个结构化 tool call，或符合协议的终态/请求。
+3. **harness 校验**：检查工具名、参数 schema、速率、策略和是否需要审批。
+4. **harness → 工具**：执行允许的工具；失败也应产生可控的错误 observation。
+5. **工具 → harness**：返回结果、错误或外部阻塞信号。
+6. **harness 回灌**：对结果做脱敏、截断或摘要后更新状态，进入下一轮，或把终态交给上游 workflow。
 
 ![[Agent 核心循环-时序.png]]
 
-## 停机条件:不设就是烧钱机器
+## 终态协议：把「停下」说清楚
 
-循环必须有出口,否则会跑飞、烧光预算。常见五种:
-
-| 停机条件 | 触发时机 | 性质 |
+| 状态 | 含义 | 上游的典型动作 |
 |---|---|---|
-| 任务完成 | 模型不再发 tool call(或调用 `finish`) | 正常出口 |
-| 超最大步数 | 轮数 ≥ max_steps | 熔断 |
-| 超 token 预算 | 累计 token ≥ 预算 | 熔断 |
-| 触发人工审核 | 命中敏感动作(删库/付款) | 暂停转人工 |
-| 报错熔断 | 连续 N 次工具失败 | 防死循环 |
+| `completed` | 验收条件已满足，附可核查证据 | 交付结果 |
+| `needs_input` | 缺少用户提供的数据、目标或选择 | 请求补充输入后续跑 |
+| `needs_approval` | 下一动作有副作用且需授权 | 展示动作与影响，等待批准 |
+| `blocked` | 外部前提、工具可用性或策略限制阻断且无安全替代 | 升级、修复依赖或改目标 |
+| `failed` | 已允许的路径在重试/降级后仍无法完成 | 返回错误与诊断，必要时人工接手 |
+| `budget_exhausted` | token、费用、时间或步数预算耗尽 | 终止或由上游分配新预算 |
 
-工程上**至少配 max_steps + token 预算**;涉及外部副作用(写文件、调真实 API)时再加人工审核点。
-
-表格看不出拓扑——把五个出口画回 while 循环上,正常出口与熔断/暂停一目了然:
+人工审批和用户输入通常是**可恢复暂停**，但对当前 `run` 仍是明确终态。`completed` 应包含结果、证据与验收版本；其余状态应包含原因、可恢复方式和已消耗预算。
 
 ![[Agent核心循环-停机状态机.png]]
 
-## 最小可跑骨架(伪代码)
+## 最小可运行例子：类型化终态不把「停止」当成功
+
+**❌ 朴素写法：**把模型给出的终态字符串原样交付，`"completed"` 即使没有证据也会被误判为成功。
+
+**✅ 改进写法：**用枚举、字面量、`TerminalState` 与验收谓词约束终态；无证据的 `completed` 会转为 `failed`。
 
 ```python
-def run_loop(goal, tools, llm, max_steps=20, token_budget=100_000):
-    ctx = [{"role": "user", "content": goal}]   # 累积上下文
-    used = 0
-    for step in range(max_steps):                # ← 停机①:最大步数
-        resp = llm(ctx, tools=tools)             # observe + think
-        used += resp.usage.total_tokens
-        if used > token_budget:                  # ← 停机②:token 预算
-            return "超预算,中止"
-        if not resp.tool_calls:                  # ← 停机③:无 tool call = 完成
-            return resp.content
-        ctx.append(resp.message)
-        for call in resp.tool_calls:             # act
-            if needs_human_review(call):         # ← 停机④:人工审核
-                return pause_for_human(call)
-            try:
-                obs = tools[call.name](**call.args)
-            except Exception as e:               # ← 停机⑤:报错熔断(简化)
-                obs = f"工具报错:{e}"
-            ctx.append(tool_result(call, truncate(obs)))  # 回灌(注意截断)
-    return "达到最大步数,未完成"
+from dataclasses import dataclass
+from enum import Enum
+from typing import Callable, Literal
+
+
+# ❌ 朴素写法：终止字符串被直接当成完成，无法表达证据或预算原因。
+def naive_finalize(status: str) -> str:
+    return status
+
+
+# ✅ 改进写法：终态有受限的状态名、证据和预算维度。
+class TerminalStatus(str, Enum):
+    COMPLETED = "completed"
+    NEEDS_INPUT = "needs_input"
+    NEEDS_APPROVAL = "needs_approval"
+    BLOCKED = "blocked"
+    FAILED = "failed"
+    BUDGET_EXHAUSTED = "budget_exhausted"
+
+
+TerminalName = Literal[
+    "completed", "needs_input", "needs_approval",
+    "blocked", "failed", "budget_exhausted",
+]
+BudgetType = Literal["tokens", "steps", "time", "cost"]
+
+
+@dataclass(frozen=True)
+class TerminalState:
+    status: TerminalStatus
+    detail: str
+    evidence: str | None = None
+    used_tokens: int = 0
+    budget_type: BudgetType | None = None
+
+
+def terminal(
+    status: TerminalName,
+    detail: str,
+    evidence: str | None = None,
+    used_tokens: int = 0,
+    budget_type: BudgetType | None = None,
+) -> TerminalState:
+    return TerminalState(TerminalStatus(status), detail, evidence, used_tokens, budget_type)
+
+
+def is_success(state: TerminalState, accepts: Callable[[str], bool]) -> bool:
+    return (
+        state.status is TerminalStatus.COMPLETED
+        and state.evidence is not None
+        and accepts(state.evidence)
+    )
+
+
+def finalize(state: TerminalState, accepts: Callable[[str], bool]) -> TerminalState:
+    if state.status is TerminalStatus.COMPLETED and not is_success(state, accepts):
+        return terminal(
+            "failed", "completed 缺少可验收证据", state.evidence,
+            state.used_tokens, state.budget_type,
+        )
+    return state
+
+
+if __name__ == "__main__":
+    accepts = lambda evidence: evidence == "tests=green"
+    naive = naive_finalize("completed")
+    missing_evidence = finalize(terminal("completed", "模型说已完成"), accepts)
+    verified = finalize(terminal("completed", "测试已通过", "tests=green"), accepts)
+    waiting = finalize(terminal("needs_input", "缺少仓库路径"), accepts)
+    exhausted = finalize(
+        terminal("budget_exhausted", "达到 token 上限", used_tokens=100_000, budget_type="tokens"),
+        accepts,
+    )
+
+    assert naive == "completed"  # 这正是朴素写法的问题：没有证据仍显示完成。
+    assert missing_evidence.status is TerminalStatus.FAILED
+    assert verified.status is TerminalStatus.COMPLETED and is_success(verified, accepts)
+    assert waiting.status is TerminalStatus.NEEDS_INPUT and not is_success(waiting, accepts)
+    assert exhausted.status is TerminalStatus.BUDGET_EXHAUSTED
+    assert exhausted.budget_type == "tokens" and exhausted.used_tokens == 100_000
+    print(f"naive: {naive}（无证据仍被当作完成）")
+    print(f"{missing_evidence.status.value}: {missing_evidence.detail}")
+    print(f"{verified.status.value}: {verified.evidence}")
+    print(f"{waiting.status.value}: {waiting.detail}")
+    print(f"{exhausted.status.value}: {exhausted.budget_type}={exhausted.used_tokens}")
 ```
 
-这就是一切 agent 的心脏。三态(observe/think/act)、回灌、五个出口——全在这里。
+这里的 `TerminalName` 和 `BudgetType` 限制允许的字符串字面量，`TerminalStatus` 提供运行时枚举，`TerminalState` 是上游可消费的类型化终态。`finalize` 明确将「声称 completed 但证据不通过」转成 `failed`；真实循环只需在每次模型/工具回合后构造并消费这个终态。
 
 ## 与 ReAct 的关系
 
-[[09 ReAct|ReAct]] **不是另一个循环,而是这个循环的一种 prompt 实现**:它用「Thought → Action → Observation」的文本模板,引导模型在每轮里**先显式写出推理再行动**。
+[[09 ReAct|ReAct]] 是这类回路的重要 prompt 范式：论文让模型交错生成 reasoning trace 与 action，再从外部环境取得 observation。现代 function calling 可把 action 表达成结构化调用，模型的推理也未必暴露给用户；但两者都遵循「行动结果影响下一步」的闭环。
 
-- 核心循环 = 抽象骨架(observe/think/act,与实现无关)。
-- ReAct = 在「think」这步强制产出可见的 reasoning trace 的具体玩法。
-- 现代 Function Calling 把 action 结构化成 JSON tool_call,本质仍是同一个循环;ReAct 的「思考」退化成模型的内部推理或 thinking 块。
+- 核心循环是实现无关的运行时骨架。
+- ReAct 是让模型以 `Thought → Action → Observation` 形式组织回合的一种具体方法。
+- [[10 Plan-and-Execute|Plan-and-Execute]]、[[13 Reflection 与 Reflexion|Reflection]] 等是在同一骨架上增加规划或评估步骤，而不是自动取消终态、预算和审批要求。
 
-换句话说:**ReAct 是循环的一种填法,循环是 ReAct 的上位概念。** 其它填法还有 [[10 Plan-and-Execute|Plan-and-Execute]](先规划整条路线再逐步执行)、[[13 Reflection 与 Reflexion|Reflection 与 Reflexion]](在循环里加自我批判)。
+## 何时用、坑与反模式
 
-## 何时用 / 坑 / 反模式
+✅ 任务需要多轮工具交互、步骤不可可靠预定，且每轮有可用反馈与可验证验收时，才需要这个循环。
 
-✅ **该用循环**:任务需多步工具交互、步数不可预定——这正是 agent 的定义场景。
+- **把无 tool call 当完成**：会吞掉缺输入、缺批准、未验证结果和协议异常；用终态 schema 与验收谓词替代。
+- **错误直接抛出**：可恢复的工具错误应作为 observation 回灌；连续失败再以 `failed` 结束。
+- **observation 不处理**：超长日志、机密数据或无关输出会污染上下文；回灌前做裁剪、摘要和脱敏，见 [[20 上下文工程|上下文工程]]。
+- **只增不减地累积状态**：长任务需压缩或外置记忆，见 [[19 Agent 记忆系统|Agent 记忆系统]]、[[21 上下文压缩与卸载|上下文压缩]]。
+- **用循环硬扛固定任务**：路径若可预列，应回到 [[02 Workflow 与 Agent 的边界|workflow]]。
 
-**坑:**
-- **无停机条件**:最常见、最致命,务必设步数 + 预算上限。
-- **observation 不截断**:工具吐回几万 token 原始日志直接灌进上下文,几轮就爆窗口、推高成本、淹没信号——必须在第 7 步做摘要/截断,见 [[20 上下文工程|上下文工程]]。
-- **上下文只增不减**:长程任务里历史无限累积,信噪比崩塌——需要压缩/外置记忆,见 [[19 Agent 记忆系统|Agent 记忆系统]]。
-- **错误不回灌**:工具报错时直接抛异常退出,而不是把错误信息当 observation 喂回去让模型自我纠正——白白浪费 agent 的纠错能力。
+## 工业界实践：谁来跑循环
 
-**反模式:**
-- 用核心循环硬扛**流程可预定**的任务——那是 [[02 Workflow 与 Agent 的边界|Workflow 与 Agent 的边界]] 里该用 workflow 的场景。
-- 把「多步骤」误当「需要循环」:有些多步其实是固定链,用 [[04 Prompt Chaining|Prompt Chaining]] 更稳。
+- **OpenAI Agents SDK**：官方文档说明 SDK runner 可执行工具循环、handoff，并在 run 完成或为审批暂停时停止；若需要自定义循环与分支，可使用 Responses API 自行拥有循环。
+- **Claude Agent SDK**：官方文档提供与 Claude Code 相同的工具、agent loop 与上下文管理，并暴露权限、会话与可观测能力。
+- **LangGraph**：文档将其定位为支持持久执行、持久化和 human-in-the-loop 的编排运行时，适合把状态、暂停和恢复显式建模。
 
-## 工业界实践
-
-生产里那个「心脏」循环很少由你亲手写——它被框架封进 **agent harness / runtime**,你只配工具、提示、护栏。
-
-**谁来跑这个循环:**
-
-- **Claude Agent SDK**(原 Claude Code SDK,2025-09 改名):Anthropic 把 Claude Code 背后那套 **agent harness 抽出来**——`Agent SDK` 让 Claude **自主跑完循环、自带工具执行与上下文管理**;若用更底层的 `Client SDK`,则要你自己写 tool loop。同一套循环既驱动 Claude Code 也驱动你的自定义 agent,见 [[23 Agent Harness 概览|Agent Harness 概览]]。
-- **OpenAI Agents SDK**:官方文档把这叫 **agent loop**——runner 反复「调模型 → 看输出 → 执行工具 → (或切换 agent / 返回结果)」,直到模型给出无 tool call 的终答。底层是 **Responses API**(2025-03 发布)。
-- **LangGraph**:把循环显式建成图里的一条带条件边的环(`agent` 节点 ↔ `tools` 节点),好处是**每一轮都是一个 checkpoint**,可持久化、可中断、可回放。
-
-**生产级循环比伪代码多出的关键件:**
-- **持久化执行(durable execution)**:长程任务必须把每步落盘,崩溃后从断点恢复而非从头重跑。LangGraph 用 checkpointer 在应用层防故障;Temporal / Restate 在基础设施层防故障(机器宕机也能续);DBOS 把状态直接存进 Postgres,「天生 durable」无需显式打点。OpenAI Agents SDK 文档也指向 DBOS 集成做长程/人在环。深入见 [[34 Agent 部署与持久化执行|Agent 部署与持久化执行]]。
-- **observation 处理层**:工具原始输出常是几万 token 日志,必须在回灌前**截断/摘要**,否则几轮爆窗口。这是循环里最被低估的一步,机制见 [[20 上下文工程|上下文工程]]、[[21 上下文压缩与卸载|上下文压缩与卸载]]。
-- **并行工具调用**:现代模型一轮能吐多个 tool_call,harness 并发执行能显著降延迟,见 [[06 Parallelization|Parallelization]]、[[35 Agent 成本与延迟优化|Agent 成本与延迟优化]]。
-- **可观测**:每一轮的 thought / tool_call / observation 都要可回放,否则线上 agent 出错无从查。LangSmith / LangFuse / Arize Phoenix,见 [[38 Agent 评估与可观测性|Agent 评估与可观测性]]。
-
-```python
-# 生产循环 = 伪代码骨架 + 持久化 + 可观测 + observation 处理
-# LangGraph 风格:每一轮自动成为可恢复 checkpoint
-def agent_node(state):           # observe + think
-    resp = llm.invoke(state["messages"], tools=TOOLS)
-    return {"messages": [resp]}
-
-def tools_node(state):           # act + 回灌(注意截断)
-    results = run_tools_parallel(state["messages"][-1].tool_calls)
-    return {"messages": [truncate(r) for r in results]}
-
-graph.add_conditional_edges("agent", lambda s:
-    "end" if not s["messages"][-1].tool_calls else "tools",
-    {"tools": "tools", "end": END})
-app = graph.compile(checkpointer=PostgresSaver(...))   # ← 崩溃可续跑
-```
-
-**真实踩坑与最佳实践:**
-- **错误要回灌而非抛出**:工具报错时,把错误信息当 observation 喂回去让模型自我纠正——ReAct 的核心优势正是「靠对 observation 的推理从坏的 tool call 里恢复」。直接抛异常退出 = 白白浪费纠错能力。
-- **停机条件是底线**:至少 max_steps + token 预算;有外部副作用(写文件/调真实 API/付款)再加人工审核点和沙箱。
-- **上下文只增不减是慢性死亡**:长程任务历史无限累积,信噪比崩塌——需压缩/外置记忆,见 [[19 Agent 记忆系统|Agent 记忆系统]]。
+无论使用哪个 SDK，应用仍需定义自己的成功谓词、工具权限、预算维度和终态消费逻辑；框架只能帮你运行循环，不能替你判定业务完成。
 
 ## 面试高频
+> 面试地图：[[Agent 面试题库]]
 
-**Q1:画出 / 描述 agent 的核心循环。**
-标准答:`observe(读上下文+上一步 observation)→ think(模型出 thought + tool_call)→ act(harness 执行工具)→ 把结果回灌 → 再 observe`,直到触发停机条件。**没有 tool call = 任务完成,正常退出。**
-- 追问:**模型自己记得上一轮吗?** 不记得——**模型是无状态的**,是 harness 把历史一路累积着喂回去,才形成「连续干活」的错觉。这是高频追问,务必答对。
+**Q1：描述 agent 的核心循环。**
 
-**Q2:一轮里 harness 和模型怎么分工?**
-标准答:harness 组装上下文+工具定义发给模型 → 模型出 tool_call → harness **校验**(工具名/参数合法?超频?需审批?)→ 执行工具 → 把结果**截断/格式化**成 observation → 回灌。模型只负责「决定」,harness 负责「执行+管状态+管护栏」。
+标准答：harness 组装状态和工具定义 → 模型提出 tool call 或结构化终态 → harness 校验、执行、处理 observation → 回灌进入下一轮。循环由预算、权限和终态协议约束。
 
-**Q3:Agent 为什么会跑飞?停机条件有哪些?**
-标准答:循环没出口就烧光预算。五种停机:① 任务完成(无 tool call)② 超 max_steps ③ 超 token 预算 ④ 触发人工审核(敏感动作)⑤ 报错熔断(连续失败)。**至少配步数 + 预算。**
-- 陷阱:有人只答「任务完成」就停——那是正常出口,熔断类的步数/预算才是防跑飞的关键。
+**Q2：为什么「无 tool call」不等于成功？**
 
-**Q4:ReAct 和核心循环是什么关系?**
-标准答:**ReAct 不是另一个循环,而是这个循环的一种 prompt 实现**——它用「Thought → Action → Observation」文本模板强制模型每轮先显式写推理再行动。核心循环是上位抽象,ReAct 是其一种填法;现代 Function Calling 把 action 结构化成 JSON tool_call,本质仍是同一循环,见 [[09 ReAct|ReAct]] 与 [[15 Function Calling 工具调用|Function Calling 工具调用]]。
+标准答：它只说明这一轮没有请求工具，可能是模型在等输入/批准、协议格式错误或没有验证结果。只有 `status=completed` 且验收谓词对证据为真，才算成功。
 
-**Q5(进阶):observation 不截断会怎样?为什么这是最致命的坑之一?**
-标准答:工具吐回几万 token 原始日志直接灌进上下文 → 几轮就爆窗口、推高成本、淹没信号导致模型决策崩。必须在回灌前做摘要/截断,见 [[20 上下文工程|上下文工程]]。
+**Q3：六种终态怎样区分？**
 
-## 知识拓展
+标准答：`completed` 是验收通过；`needs_input` 和 `needs_approval` 是可恢复暂停；`blocked` 是外部前提或策略阻断；`failed` 是允许路径重试后仍失败；`budget_exhausted` 是资源限制触发。上游据此决定续跑、升级还是终止。
 
-- **「模型无状态」的深意**:这是理解一切 agent 工程的钥匙。所谓「记忆」「连续」「断点续跑」全是 harness 在管理外部状态——所以才有上下文工程([[20 上下文工程|上下文工程]])、记忆系统([[19 Agent 记忆系统|Agent 记忆系统]])、持久化执行([[34 Agent 部署与持久化执行|Agent 部署与持久化执行]])这些独立话题。
-- **循环之上的「加料」全景**:同一根 `observe→think→act` 循环,加不同料就成不同架构——加显式推理 = [[09 ReAct|ReAct]];先规划整条路线再执行 = [[10 Plan-and-Execute|Plan-and-Execute]];规划与执行解耦省 token = [[11 ReWOO|ReWOO]];把步骤编译成 DAG 并行 = [[12 LLMCompiler|LLMCompiler]];加自我批判 = [[13 Reflection 与 Reflexion|Reflection 与 Reflexion]];把循环展开成搜索树 = [[14 树搜索：ToT 与 LATS|树搜索：ToT 与 LATS]]。
-- **durable execution 是 2025–2026 的工程主线**:随着 agent 跑得越来越长(分钟到小时甚至天),「崩溃从断点恢复」从可选变成刚需。Temporal(基础设施级)、LangGraph checkpointer(应用级)、DBOS(Postgres 原生)各代表一种思路;生产常是「应用级 + 基础设施级」双层。
-- **反模式**:① 无停机条件;② observation 不截断;③ 上下文只增不减;④ 错误不回灌(抛异常退出);⑤ 用核心循环硬扛流程可预定的任务(那是 [[02 Workflow 与 Agent 的边界|Workflow 与 Agent 的边界]] 里该用 workflow 的场景)。
-- **历史脉络**:循环的工程范式上游是 **ReAct(Yao et al., 2022,arXiv 2210.03629)**;它报告 ReAct 在知识密集问答上胜过纯 CoT 和纯 act 基线,优势主要来自「靠对 observation 推理从坏 tool call 中恢复」——这正是「错误回灌」最佳实践的理论依据。
+**Q4：harness 与模型如何分工？**
 
-## 关键事实速记
+标准答：模型做受约束的候选决策；harness 管状态、参数校验、执行、权限、预算、脱敏、持久化和终态交接。不要让模型文本绕过这些控制面。
 
-- Agent = 一个带停机条件的 `observe → think → act` while 循环;模型无状态,靠 harness 累积上下文。
-- 一轮 = 模型出 tool_call → harness 执行 → observation 回灌;**「无 tool call」是正常出口**。
-- 停机五件:任务完成 / 超步数 / 超预算 / 人工审核 / 报错熔断;至少配步数 + 预算。
-- [[09 ReAct|ReAct]] 是这个循环的一种 prompt 实现,不是另一种东西。
-- 两个最致命的工程坑:**不设停机条件** 和 **observation 不截断**。
-- 生产循环比伪代码多三件:**持久化执行(断点续跑)+ observation 截断 + 可观测回放**。
+**Q5：ReAct 与核心循环的关系？**
+
+标准答：ReAct 是交错 reasoning 与 action 的一种 prompt 范式；核心循环是更上位的运行时抽象。现代结构化工具调用可以采用同一闭环而不公开详细推理。
+
+## 关键事实
+
+- ReAct 研究将 reasoning trace 与 task-specific action 交错生成，并通过外部环境获得信息：Yao 等，*ReAct: Synergizing Reasoning and Acting in Language Models*，https://arxiv.org/abs/2210.03629 ，2022。
+- Anthropic 建议 agent 在执行中利用环境的 ground truth、在检查点或阻塞时回到人，并设置最大迭代等停止条件：*Building effective agents*，https://www.anthropic.com/engineering/building-effective-agents ，2024。
+- OpenAI 当前文档说明 Agents SDK runner 管理工具循环、handoff、审批暂停与运行生命周期：*Agents SDK*，https://developers.openai.com/api/docs/guides/agents ，2026（访问于 2026-07）。
+- Claude Agent SDK 当前提供工具、agent loop 与上下文管理：Anthropic，*Agent SDK overview*，https://code.claude.com/docs/en/agent-sdk/overview ，2026（访问于 2026-07）。
+- LangGraph 当前将 durable execution、persistence 与 human-in-the-loop 列为编排运行时能力：LangChain，*LangGraph overview*，https://docs.langchain.com/oss/python/langgraph/overview ，2026（访问于 2026-07）。

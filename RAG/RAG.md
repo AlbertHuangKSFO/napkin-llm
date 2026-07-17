@@ -42,5 +42,7 @@
 ## ⑩ 生态
 - [[20 RAG 开源生态全景|RAG 开源生态全景]]
 
-## ⑪ Agent 桥接 · 检索成为工具
-- [[36 Agentic RAG|Agentic RAG]](定义在 Agent 域:把检索从写死的管线步骤变成 agent 自主调用的工具)
+## ⑪ Agent 与安全桥接
+- [[36 Agentic RAG|Agentic RAG]]
+- [[29 Deep Research Agent|Deep Research Agent]]
+- [[17 Memory 与 Context Poisoning|Memory 与 Context Poisoning]]

@@ -1,214 +1,126 @@
-[[37 Agent 框架对比|Agent 框架对比]] 的本质是:主流框架并不是「谁更好」,而是各自在**「控制粒度 ↔ 抽象层级」这条一维谱**上占了一段——你写得越多、能改的越多(高控制低抽象),框架就越像一套积木;你写得越少、开箱即用越多(低控制高抽象),框架就越像一个黑盒。选框架=选你想停在这条谱的哪一段。
+[[37 Agent 框架对比|Agent 框架对比]] 的本质是：选的不是“最流行的 agent 名字”，而是一组运行时语义——状态如何保存与恢复、工具怎样受控、分支/并发怎样表达、失败怎样重放、日志怎样导出。框架只能降低这些工程成本；它不能替代 [[16 工具设计与工具层|权限设计]]、[[38 Agent 评估与可观测性|评估]] 或业务的 terminal verifier。
 
-## 本质:一条谱,不是一张排行榜
-所有「LangGraph 和 CrewAI 哪个好」的争论都问错了问题。正确的问法是:**这个任务,你需要多细的控制?你愿意为此写多少样板代码?**
+本文所有框架信息都是**截至 2026-07-17 的官方文档/发布页快照**，不是市场份额、星标或通用排名。依赖落地时应将“候选版本 + provider + 工具协议 + 评测结果”锁进 `requirements`/lockfile，而不能仅凭这张表升级。
 
-- **高控制 / 低抽象**:框架把「[[03 Agent 核心循环|Agent 核心循环]]」「状态」「分支」全摊开给你,你像搭电路一样显式连线。优点是每一步可见、可改、可调试;代价是样板多、上手慢。代表:**LangGraph**。
-- **低控制 / 高抽象**:框架把循环、协作、停机都内建,你只声明「有哪些角色 / 工具 / 目标」。优点是几行起步、协作开箱即用;代价是出错时难定位、想改中间一步要和框架的抽象搏斗。代表:**CrewAI**。
-- 中间地带:**AutoGen**(对话式多体)、**OpenAI Agents SDK**(轻量声明式)、**Claude Agent SDK**(把 [[23 Agent Harness 概览|Agent Harness 概览]] 的 harness 能力 SDK 化)。
+## 直觉：选施工规范，不是选魔法棒
 
-记住这条谱,后面所有对比都只是它的展开。
+同样是“送包裹”，有的业务只需一张收件单；有的必须记录中转站、可暂停、人工签收、失败重派。前者用一个小而透明的循环或 SDK 可能更好，后者需要显式状态图、持久化与审计。把后者塞进隐式 `while True`，或把前者强塞进多 agent 角色扮演，都会增加不必要的故障面。
+
+先问**不可妥协的运行时约束**：是否需要断点续跑？是否存在有副作用的审批节点？是否必须自托管与 OTel 导出？是否已锁定某语言/云/模型 provider？答案先淘汰不合格候选，再谈开发体验。
+
+## 小数字手算：硬门槛先行，评分只用于同类候选
+
+某团队给四项“软偏好”权重：显式控制 $0.35$、持久化 $0.25$、类型/结构化输出 $0.20$、团队熟悉度 $0.20$。候选 A 的分数为 $(0.9,0.8,0.6,0.7)$：
+
+$$
+S_A=0.35\times0.9+0.25\times0.8+0.20\times0.6+0.20\times0.7
+=0.775
+$$
+
+候选 B 为 $(0.5,0.9,0.9,0.5)$：
+
+$$
+S_B=0.35\times0.5+0.25\times0.9+0.20\times0.9+0.20\times0.5
+=0.680
+$$
+
+似乎 A 更适合。但若 B 不支持项目要求的私网部署或可导出的审计 trace，B 应在**硬门槛**阶段直接淘汰；反过来，A 若不支持必须的恢复语义，也不能被 $0.775$ 掩盖。分数用于比较“都能交付”的候选，不是粉饰缺失能力。
+
+## 公式推导：从需求到可验证选择
+
+令必须项集合为 $H$，候选框架为 $f$，其能力谓词为 $cap(f,h)$。可行性为：
+
+$$
+\operatorname{feasible}(f)=\bigwedge_{h\in H}cap(f,h)
+$$
+
+对可行候选才计算加权效用：
+
+$$
+U(f)=\sum_{j=1}^{m}w_jr_j(f)-\lambda\,\operatorname{migration}(f),\qquad \sum_jw_j=1
+$$
+
+`migration` 要把既有工具封装、观测、状态迁移和团队学习写入；否则“快速原型”会被错误地当成总成本最低。最终决策还要通过一个纵切 POC：跑真实工具、注入失败、暂停恢复、输出 OTel trace，再由 [[38 Agent 评估与可观测性|eval harness]] 对任务结果与资源预算验收。
+
+## 手绘图
 
 ![[Agent 框架对比.png]]
 
-## 五个框架逐个拆
-
-### LangGraph(高控 / 低抽:把 agent 建成图)
-**心智模型**:agent = 一张**有向图 / 状态机**。节点是函数(常是一次 LLM 调用或一次工具执行),边是控制流,**状态(State)显式地在节点间流动**。它是 LangChain 团队为「LangChain 的链太线性、装不下循环和分支」而做的下层引擎。
-
-- **控制粒度**:最细。循环、条件分支、人审中断(`interrupt`)、检查点(checkpoint)持久化、断点续跑、时间旅行回放——全是一等公民。
-- **为什么独特**:它不替你决定「下一步做什么」,你在图里写死或写成条件边。所以它能精确实现 [[10 Plan-and-Execute|Plan-and-Execute]]、[[13 Reflection 与 Reflexion|Reflection 与 Reflexion]]、[[07 Orchestrator-Workers|Orchestrator-Workers]] 这些**有明确骨架**的模式,而不会「失控乱跑」。
-- **状态管理**:一等公民。`StateGraph` 定义一个带 schema 的共享状态(常用 reducer 合并),天然支持持久化与恢复——这是它做长程、可中断 agent 的杀手锏。
-- **多体支持**:能,但要你自己用「子图 / 多节点」搭,不是开箱的「角色」抽象。
-- **学习曲线**:陡。要理解图、状态、reducer、检查点这套概念。
-- **适合**:复杂但**确定流程**的生产系统;需要人审、需要断点续跑、需要精确控制每一步的场景。
-
-### CrewAI(低控 / 高抽:角色 + 任务的多体协作)
-**心智模型**:你**招一个团队(Crew)**,每个成员是一个有 `role / goal / backstory` 的 Agent,你把工作拆成 `Task` 派给他们,框架负责把活按顺序(sequential)或层级(hierarchical)跑完。
-
-- **控制粒度**:粗。你描述「谁、目标是什么、用什么工具」,**怎么循环、怎么交接由框架兜底**。
-- **为什么独特**:抽象贴近人类组织直觉——「研究员→作家→审校」。Demo 友好,几十行就能跑出一个多角色流水线。
-- **多体支持**:这是它的主场。sequential / hierarchical(有一个 manager agent 派活,本质是 [[07 Orchestrator-Workers|Orchestrator-Workers]] 的封装)两种内建协作。
-- **状态管理**:弱。靠 Task 之间传 output、靠 context 串联,没有 LangGraph 那种显式可持久化状态机。
-- **学习曲线**:最平。
-- **适合**:快速原型、流程相对固定的多角色内容生产;**不适合**需要精细控制、复杂分支或强可靠性的生产核心链路。
-
-### AutoGen(中间:微软,对话式多 agent)
-**心智模型**:多个 agent **通过「对话」协作**。最经典的是 `AssistantAgent` ↔ `UserProxyAgent` 两者来回发消息,`UserProxy` 还能执行代码;多体则用 `GroupChat` + `GroupChatManager` 决定「下一个谁说话」。
-
-- **控制粒度**:中。编排的核心抽象是**「发言权调度」(谁下一个说话、何时终止)**,而不是图或循环。
-- **为什么独特**:把多 agent 协作建模成**会话**,天然适合「写代码—执行—看报错—改」这类需要来回的任务(UserProxy 能跑代码并回灌结果,等于内建了一个执行回路)。新版 AutoGen(0.4+)做了事件驱动的 actor 架构重写,更工程化。
-- **多体支持**:强,且是「对话式」这一独特范式;但「靠对话收敛」有时不如显式图可控。
-- **状态管理**:以消息历史为主。
-- **学习曲线**:中。
-- **适合**:需要 agent 间多轮协商、需要内建代码执行回路的研究 / 编码任务。
-
-### OpenAI Agents SDK(中间偏高抽:轻量、handoffs、guardrails)
-**心智模型**:声明一个 `Agent(instructions, tools, handoffs)`,调 `Runner.run()`,框架替你跑 [[03 Agent 核心循环|Agent 核心循环]]。它是 OpenAI 把早期实验项目 Swarm 产品化的结果。
-
-- **控制粒度**:中。你声明「是什么」,循环、工具调度、停机交给框架——但比 CrewAI 更贴近原始的「单 agent + 工具」,不强加「角色 / Crew」这层组织抽象。
-- **三个核心原语**:
-  - **handoffs**:一个 agent 可以把控制权**移交**给另一个 agent(本质是把「换 agent」做成一种特殊工具调用)——这是它做多体的方式,轻量、显式。
-  - **guardrails**:在输入 / 输出上挂校验,不合规就提前中断,是内建的安全/质量闸。
-  - **sessions / tracing**:内建会话记忆与追踪。
-- **多体支持**:靠 handoffs,去中心、链式移交,不是中心编排。
-- **学习曲线**:平缓。
-- **适合**:想要轻量、少魔法、和 OpenAI 生态贴合的生产 agent;尤其是「分诊 → 移交专家 agent」这类 [[05 Routing|Routing]] + handoff 形态。
-
-### Claude Agent SDK(把 harness SDK 化)
-**心智模型**:Anthropic 把 **Claude Code 背后的 [[23 Agent Harness 概览|Agent Harness 概览]]**(文件读写、bash、[[24 Agentic Search：grep vs 向量检索|代码搜索]]、[[17 MCP 模型上下文协议|MCP 模型上下文协议]] 接入、子代理、权限沙箱、上下文压缩)抽出来,做成可编程 SDK。它原名 Claude Code SDK,2025 年更名以示「不止写代码」。
-
-- **控制粒度**:中。你不必自己写循环——**循环、工具编排、上下文管理(自动压缩长对话)是 harness 内建的**;你控制的是工具集、权限、系统提示、子代理定义。这正是 [[23 Agent Harness 概览|Agent Harness 概览]] 里说的 **HaaS(Harness as a Service)**。
-- **为什么独特**:它自带一套**经过 Claude Code 实战打磨的工具与上下文工程**(参见 [[20 上下文工程|上下文工程]])。你不是从零搭 agent,而是站在一个成熟 harness 上。内建 **[[26 Sub-agents 与 Agent Teams|subagents]]**、**[[25 Agent Skills(SKILL.md)|Agent Skills(SKILL.md)]]**、MCP、hooks。
-- **多体支持**:内建 subagents(主 agent 派子 agent,本质是 [[07 Orchestrator-Workers|Orchestrator-Workers]] 的工程化加强)。
-- **状态管理**:会话 + 自动上下文压缩;长任务友好。
-- **学习曲线**:中。概念不多,但要理解 harness/权限/MCP 模型。
-- **适合**:要直接复用「Claude Code 级」工程能力(尤其代码、文件、终端类自主任务)的场景;以及想要 Anthropic 官方上下文工程默认值的团队。
-
-## 核心对比表(本篇的心脏)
-| 维度 | LangGraph | CrewAI | AutoGen | OpenAI Agents SDK | Claude Agent SDK |
-|---|---|---|---|---|---|
-| 抽象层级 | 低(图/状态机) | 高(角色/任务) | 中(对话/会话) | 中(声明式 agent) | 中高(harness 内建) |
-| 控制粒度 | **最细** | 粗 | 中(发言权调度) | 中 | 中(工具/权限可控,循环内建) |
-| 核心抽象 | 节点+边+State | Agent role + Task + Crew | 多 agent 对话 + GroupChat | Agent + tools + **handoffs** | harness + tools + subagents |
-| 多体支持 | 自己搭子图 | **内建**(seq/hier) | **内建**(对话式) | handoffs(链式移交) | 内建 subagents |
-| 可观测性 | LangSmith 深度集成 | 基础(可接外部) | 内建 logging,可接 | 内建 tracing | 内建,可接 OTel |
-| 状态管理 | **一等公民**(可持久化/续跑) | 弱(Task 传 output) | 消息历史 | sessions | 会话+自动压缩 |
-| 人审/中断 | **原生** interrupt/checkpoint | 弱 | 靠 UserProxy | guardrails | hooks/权限 |
-| 学习曲线 | 陡 | **最平** | 中 | 平缓 | 中 |
-| 厂商 | LangChain | CrewAI Inc. | 微软 | OpenAI | Anthropic |
-| 典型场景 | 复杂确定流程、强可靠生产 | 快速多角色原型 | 多轮协商/代码执行 | 轻量生产、分诊移交 | 复用 Claude Code 工程能力 |
-
 ![[Agent 框架对比-代码风格对照.png]]
 
-## 最小代码风格对照(同一任务的四种写法)
-同样是「先研究、再写作」,看抽象层级如何决定你写什么。
+## 可运行代码：❌ 口号选型 vs ✅ 可重复的门槛与打分
 
-**LangGraph(画图,显式状态与边):**
 ```python
-from langgraph.graph import StateGraph, END
-from typing import TypedDict
+from dataclasses import dataclass
 
-class S(TypedDict):
-    topic: str; notes: str; draft: str
+@dataclass(frozen=True)
+class Candidate:
+    name: str
+    hard: dict[str, bool]
+    soft: dict[str, float]
+    migration_cost: float
 
-g = StateGraph(S)
-g.add_node("research", lambda s: {"notes": llm(f"研究:{s['topic']}")})
-g.add_node("write",    lambda s: {"draft": llm(f"基于笔记写作:{s['notes']}")})
-g.add_edge("research", "write")
-g.add_edge("write", END)
-g.set_entry_point("research")
-app = g.compile()                 # 你掌控每一条边
-app.invoke({"topic": "agent 框架"})
+REQUIRED = {"audit_trace", "approval", "resume"}
+WEIGHTS = {"control": 0.35, "persistence": 0.25, "typing": 0.20, "familiarity": 0.20}
+
+# ❌ “大家都在用 X”没有说明版本、约束或验收方式。
+
+def choose(candidates: list[Candidate]) -> list[tuple[str, float]]:
+    viable = [c for c in candidates if all(c.hard.get(k, False) for k in REQUIRED)]
+    ranked = []
+    for c in viable:
+        score = sum(WEIGHTS[k] * c.soft[k] for k in WEIGHTS) - 0.10 * c.migration_cost
+        ranked.append((c.name, round(score, 3)))
+    return sorted(ranked, key=lambda item: item[1], reverse=True)
+
+if __name__ == "__main__":
+    candidates = [
+        Candidate("explicit-state-runtime", dict.fromkeys(REQUIRED, True),
+                  {"control": .9, "persistence": .8, "typing": .6, "familiarity": .7}, .2),
+        Candidate("typed-service-runtime", dict.fromkeys(REQUIRED, True),
+                  {"control": .5, "persistence": .9, "typing": .9, "familiarity": .5}, .1),
+        Candidate("prototype-only", {"audit_trace": True, "approval": False, "resume": False},
+                  {"control": 1, "persistence": 1, "typing": 1, "familiarity": 1}, 0),
+    ]
+    print(choose(candidates))  # prototype-only 因硬门槛失败被排除
 ```
 
-**CrewAI(招角色,派任务):**
-```python
-from crewai import Agent, Task, Crew
-researcher = Agent(role="研究员", goal="收集资料", backstory="资深分析师")
-writer     = Agent(role="作家",   goal="写成文章", backstory="科技作者")
-t1 = Task(description="研究 agent 框架", agent=researcher)
-t2 = Task(description="据资料成文",     agent=writer, context=[t1])
-Crew(agents=[researcher, writer], tasks=[t1, t2]).kickoff()  # 循环框架兜底
-```
+代码只说明决策过程，不宣称任何框架天然支持这些谓词。每个 `True` 都需要在锁定版本的 POC 中由测试、文档或运行 trace 证明。
 
-**OpenAI Agents SDK(声明 agent + handoff):**
-```python
-from agents import Agent, Runner
-writer = Agent(name="Writer", instructions="把研究笔记写成文章")
-researcher = Agent(name="Researcher", instructions="研究主题后移交给 Writer",
-                   handoffs=[writer])      # handoff = 把控制权交出去
-Runner.run_sync(researcher, "研究 agent 框架并成文")
-```
+## 截图式生态快照：按运行时能力选候选
 
-**Claude Agent SDK(配工具/子代理,循环交给 harness):**
-```python
-from claude_agent_sdk import query, ClaudeAgentOptions
-# harness 自带文件/bash/搜索工具与上下文压缩,你只声明意图与权限
-opts = ClaudeAgentOptions(system_prompt="研究后写成 markdown", allowed_tools=["Read","Write","WebSearch"])
-async for msg in query(prompt="研究 agent 框架并写成 report.md", options=opts):
-    print(msg)
-```
-看出差别没有:**LangGraph 你写「流程」,CrewAI 你写「组织」,SDK 你写「意图」**。越往下抽象越高、代码越少、可控越少。
+| 候选 | 本文使用的版本/来源快照 | 适合先验证的场景 | 先验证的风险 |
+|---|---|---|---|
+| LangGraph | [1.2.9 发布页](https://github.com/langchain-ai/langgraph/releases) | 显式状态图、分支、检查点与长流程 | 状态 schema、恢复、部署与观测是否匹配团队 |
+| Google ADK | [2.4.0 发布页](https://github.com/google/adk-python/releases)，[官方文档](https://adk.dev/) | 已在多语言/Google 工具生态内 | provider、会话服务与部署边界是否可移植 |
+| AutoGen | [Python v0.7.5 发布页](https://github.com/microsoft/autogen/releases)，[官方仓库快照](https://github.com/microsoft/autogen) | **既有** AutoGen 项目的维护或迁移 POC | 官方仓库标记为 maintenance mode、后续由社区维护；新项目应同时评估 [Microsoft Agent Framework 官方发布页](https://github.com/microsoft/agent-framework/releases)（核验：2026-07-17） |
+| PydanticAI | [2.12.0 发布页](https://github.com/pydantic/pydantic-ai/releases)，[官方文档](https://pydantic.dev/docs/ai/overview/) | Python 服务、强类型输入/输出、结构化测试 | 图、provider 与运行期持久化是否覆盖需求 |
+| CrewAI | [1.15.4 发布页](https://github.com/crewAIInc/crewAI/releases)，[文档 v1.14.6](https://docs.crewai.com/) | 以 agent/crew/flow 快速组织业务自动化 | 文档与发布版本不一致时，不能推断功能，须锁定后验收 |
+| LlamaIndex Workflows | [0.14.23 发布页](https://github.com/run-llama/llama_index/releases)，[Workflow 文档](https://developers.llamaindex.ai/python/llamaagents/workflows/) | 检索/知识工作流为中心的应用 | 事件模型、索引层与应用状态的边界 |
 
-## 何时选哪个(决策建议)
-- **流程明确、要强可靠 / 人审 / 断点续跑** → **LangGraph**。它是唯一把「状态可持久化 + 中断恢复」做成一等公民的;生产核心链路首选。
-- **快速验证一个多角色想法、Demo / 内容流水线** → **CrewAI**。最快出活,但别把它放进高可靠生产核心。
-- **任务本身就是多 agent 来回协商、或需要内建代码执行回路** → **AutoGen**。
-- **想要轻量、贴 OpenAI 生态、做「分诊→移交专家」** → **OpenAI Agents SDK**。handoffs + guardrails 的组合很顺手。
-- **要直接吃到「Claude Code 级」的文件/终端/搜索/上下文工程能力**(尤其代码与自主任务)→ **Claude Agent SDK**。
-- **一个朴素但常对的建议**:能用 [[02 Workflow 与 Agent 的边界|workflow]] 解决就别上 agent 框架;能用裸 [[15 Function Calling 工具调用|Function Calling 工具调用]] + 一个 while 循环解决,就别急着引框架。框架是为「复杂度真到了那一步」准备的。
+这不是横向冠军榜。一个候选的“适合”仅是基于该来源快照的能力定位；任何推荐都以你的语言、数据边界、版本和 POC 结果为条件。
 
-## 坑
-- **坑一:被抽象绑架**。CrewAI 这类高抽象框架,顺着它的范式很爽,一旦要做框架没预设的事(改中间一步、加奇怪分支),就要和抽象搏斗,常比裸写还累。
-- **坑二:把 Demo 框架塞进生产**。很多框架 Demo 惊艳、生产翻车——错误处理、重试、可观测性、成本控制这些「无聊的工程」才是生产门槛,而它们恰恰是高抽象框架最弱的地方。
-- **坑三:多体不等于更好**。多数任务一个 agent + 好工具就够了(见 [[22 多智能体系统|多智能体系统]] 的成本/协调代价讨论)。别因为框架支持多体就上多体。
-- **坑四:可观测性是后悔药**。选型时容易忽略,出问题时最致命——见 [[38 Agent 评估与可观测性|Agent 评估与可观测性]]。LangGraph+LangSmith、各 SDK 内建 tracing 的差距,要在选型期就算进去。
-- **坑五:版本动荡**。这些框架都在高速迭代(AutoGen 大改过架构、OpenAI SDK 由 Swarm 演化、Claude SDK 改过名),教程极易过期,认准官方最新文档。
+## 最小 POC 验收清单
 
-## 关键事实
-- 一句话记忆:**LangGraph 写流程、CrewAI 写组织、AutoGen 写对话、OpenAI SDK 写意图+移交、Claude SDK 站在 harness 上写意图**。
-- 这条谱不是「越右越先进」——**高抽象的代价永远是失控时的不可见**;成熟团队常选偏左,因为可调试性在生产里比上手快值钱。
-- 框架的本质是把 [[03 Agent 核心循环|Agent 核心循环]]、[[07 Orchestrator-Workers|Orchestrator-Workers]]、[[05 Routing|Routing]] 等模式**封装成可复用的工程件**;理解了这些底层模式,框架只是它们的不同打包方式。
-- Claude Agent SDK 是 [[23 Agent Harness 概览|Agent Harness 概览]] 所说 **HaaS** 的最直接体现:harness 本身成了产品。
-- 选型不是一次性的:原型期可用 CrewAI 验证想法,生产期常重写到 LangGraph 或裸 SDK 以换可控与可观测——参见 [[38 Agent 评估与可观测性|Agent 评估与可观测性]] 把这件事做成闭环。
-- **最新进展(2025-2026)**:微软已把 **AutoGen + Semantic Kernel 合并为 Microsoft Agent Framework**,2026-04 发布 v1.0 GA;**AutoGen 转入维护模式**(独立项目不再主推),新项目微软栈应直接用 Agent Framework。引用 AutoGen 时需注明此归并(Microsoft Agent Framework GA,2026)。
+1. **结果**：用固定任务集跑多次，检查答案或 terminal state verifier，而不只看 demo。
+2. **状态**：在工具调用前后强制中断，证明可恢复、不会重复写入。
+3. **安全**：对写入型工具注入越权参数和提示注入，证明最小权限、审批与幂等键有效。
+4. **运维**：导出 trace，至少含模型/版本、脱敏工具事件、状态迁移、token、延迟、错误与 trace ID。
+5. **可迁移性**：替换一个模型 provider 或一个工具实现，量化 adapter 改动与回归结果。
 
-## 工业界实践
-
-**生产里框架不是「单选」,而是「分阶段组合」。** 2026 一个反复出现的企业模式:**用 CrewAI 做研究/综合阶段、把结构化 JSON 交给 LangGraph 做执行阶段**——前者搭得快、贴组织直觉,后者状态机稳、失败节点能优雅恢复。也就是说,本篇那条「谱」在真实系统里往往是**两段拼接**,而非停在一点。
-
-**采用度与基准(2026 实测,供谈资,别背死):**
-- **GitHub 热度**:CrewAI 约 31k star(从 2024 年 1 月 2.8k 暴涨 ~1000%,绝对增速最快);LangGraph 约 12.8k 但**企业采用更快**。按 Gartner,2026 Q1 在 1000+ 员工公司的生产架构文档里,**LangGraph 占 agent 框架引用的 34%**——星数不等于生产份额。
-- **任务成功率基准**(第三方,口径各异):中等任务 LangGraph ~76% > CrewAI ~71% > AutoGen ~68%;复杂任务 LangGraph ~62% > CrewAI ~54%,差距来自 LangGraph 的图状态机**对失败节点的优雅处理**(可重试、可续跑)。
-- **成本**:CrewAI 的多角色协作有 ~18% 的 token 开销(3-agent crew 比等价 LangGraph 实现多花 token)——多体的协调代价是真实的(呼应 [[22 多智能体系统|多智能体系统]])。
-
-**这 18% 从哪来——选型算例**。假设一条「研究员→作家→审校」3-agent 流水线,等价 LangGraph 实现单次跑掉 100k token。CrewAI 多出的 ~18% 即 $100\text{k}\times0.18=18\text{k}$ token/次,主要来自每个 Agent 的 `role/goal/backstory` 系统提示被反复注入、以及成员间用自然语言交接(而非 LangGraph 那种结构化 State 直传)。按 $\$3/\text{M}$ 输入 token 估,单次多花 $18\text{k}\times\$3/10^6=\$0.054$;日均 10 万次请求,一天就是 $0.054\times10^5=\$5400$ 的纯协调溢价。**选型结论**:原型期这 18% 换「几十行就跑通」很值;但高频生产核心链路上,它会被请求量放大成实打实的钱,这正是「原型 CrewAI → 生产重写 LangGraph」的成本动因之一。
-
-**部署侧的关键差异——LangGraph Platform(2026 已 GA)。** LangGraph 不只是库,还有配套的**持久化执行平台**:
-- 内建 **task queue + 状态持久化 + 断点续跑**,把本篇说的「checkpoint 一等公民」做成了托管服务,长程/有状态 agent 不用自己搭 [[34 Agent 部署与持久化执行|持久化执行]]。
-- 部署形态:**Cloud SaaS**(Plus $49/月单部署、Pro $99/月五部署)、**Hybrid**(SaaS 控制面 + 自托管数据面,Enterprise)、**完全自托管**(数据不出 VPC)。
-- 成本陷阱:生产常驻有 **standby 计费(~$0.0036/分钟,空闲也算)**,高可用常驻服务这笔钱可能超过按节点执行的费用——选型时要把它算进 TCO。
-- 开源库本身 MIT、永久免费,但自己跑要自备基础设施、调度、扩缩容。
-
-**其余框架的生产现状:**
-- **CrewAI**:除开源库外有商业 **AMP / Enterprise** 平台,补齐了部署、监控、连接器;Flows(事件驱动、更可控的低层 API)缓解了「纯 Crew 太黑盒」的批评。
-- **AutoGen**:0.4+ 事件驱动 actor 架构重写后更工程化;微软同时推 **AutoGen + Semantic Kernel** 双线,企业版能力向 SK 收敛。
-- **OpenAI Agents SDK**:2026 加了 **sandbox agents**(在沙箱里跑命令/改代码的长程任务),向「成品编码 agent」靠拢;吃 OpenAI 全家桶时 tracing/guardrails 最顺。
-- **Claude Agent SDK**:复用 Claude Code 实战打磨的 harness(工具集、自动上下文压缩、subagents、Skills、hooks),代码/终端/文件类自主任务开箱即强。
-
-**可观测必须同步选型(别等出事)。** LangGraph 配 LangSmith 最丝滑,但会**框架锁定**;追求中立则全栈走 **OpenTelemetry GenAI 语义约定** + Langfuse/Phoenix,埋点一次、后端随便换。这点在选型期就要算进去,详见 [[38 Agent 评估与可观测性|Agent 评估与可观测性]]。
+若核心 POC 失败，回到更薄的 runtime 或重谈需求；不要为了保住框架选择而隐藏失败。
 
 ## 面试高频
+> 面试地图：[[Agent 面试题库]]
 
-**Q1:LangGraph、CrewAI、AutoGen 怎么选?给一句话心智模型。**
-**LangGraph 写流程(图/状态机,最细控制)、CrewAI 写组织(角色+任务,最高抽象)、AutoGen 写对话(发言权调度)**。再加两个:OpenAI Agents SDK 写「意图 + handoff 移交」、Claude Agent SDK「站在 harness 上写意图」。一维谱:控制粒度 ↔ 抽象层级,**不是排行榜**。
-- *追问:这条谱越往高抽象越先进吗?* 不是。高抽象的代价永远是**失控时的不可见**;成熟团队常选偏左(LangGraph/裸 SDK),因为生产里可调试性比上手快值钱。
-- *陷阱:「CrewAI 最简单,生产就用它?」* 不。CrewAI 状态管理弱、错误难定位,适合原型/demo;放进高可靠生产核心链路常翻车,典型路径是原型 CrewAI → 生产重写 LangGraph。
+**Q：何时不该上 agent 框架？**  单次、确定性、无恢复需求的任务用普通函数、队列或工作流往往更透明。只有需要模型决策、工具循环、可暂停状态或人工接管时，框架带来的语义才值得其复杂度。
 
-**Q2:LangGraph 的「杀手锏」是什么?为什么生产派偏爱它?**
-**状态(State)是一等公民 + 可持久化 checkpoint + 中断恢复**。它能精确实现 [[10 Plan-and-Execute|Plan-and-Execute]]、[[13 Reflection 与 Reflexion|Reflection]]、[[07 Orchestrator-Workers|Orchestrator-Workers]] 这些有明确骨架的模式而不失控乱跑;失败节点能优雅重试、断点续跑、时间旅行回放。这正是长程、可中断、要人审(`interrupt`)的生产系统所需。
-- *追问:那它的代价?* 学习曲线陡(图/状态/reducer/checkpoint 一套概念),样板多,上手慢。
+**Q：多 agent 是选型理由吗？**  不是。先证明一个 agent 无法清晰地分解权限、上下文或并发边界；多角色名称不会自动带来可靠协作，反而增加状态关联与评测难度。
 
-**Q3:什么时候根本不该用 agent 框架?**
-能用 [[02 Workflow 与 Agent 的边界|workflow]] 解决(固定的 [[05 Routing|Routing]]/[[04 Prompt Chaining|Prompt Chaining]])就别上 agent;能用裸 [[15 Function Calling 工具调用|Function Calling]] + 一个 while 循环解决就别急着引框架。框架是负债——每加一层多一份升级成本和锁定风险。多数任务一个 agent + 好工具就够,别因为框架支持多体就上多体。
-- *陷阱:「多 agent 一定比单 agent 强?」* 不。多体有真实的 token 开销(~18%)和协调代价(见 [[22 多智能体系统|多智能体系统]]),多数任务单 agent 更省更稳。
+**Q：为什么版本要写进选型记录？**  agent SDK 的状态、持久化、工具与观测 API 变化会直接影响运行时语义。文档能说明方向，锁定版本的 POC 和回归集才说明你的部署真的可用。
 
-**Q4:handoff、guardrail、subagent 各属于哪个框架,本质是什么?**
-**handoff**(OpenAI Agents SDK)= 把「换 agent」做成一种特殊工具调用,链式去中心移交,做 [[05 Routing|分诊→专家]] 很顺;**guardrail**(OpenAI SDK)= 输入/输出校验闸,不合规提前中断;**subagent**(Claude Agent SDK)= 主 agent 派子 agent,本质是 [[07 Orchestrator-Workers|Orchestrator-Workers]] 的工程化。三者底层都是同几个模式的不同封装。
+## 关键事实
 
-## 知识拓展
-
-**框架本质 = 把模式打包。** 理解了 [[03 Agent 核心循环|Agent 核心循环]]、[[07 Orchestrator-Workers|Orchestrator-Workers]]、[[05 Routing|Routing]]、[[10 Plan-and-Execute|Plan-and-Execute]] 这些底层模式,框架只是它们的不同打包方式——所以**先学模式,再学框架**,换框架的成本就低。Anthropic 的 "Building effective agents"(2024)反复强调:从最简单的 workflow 起步,只在复杂度真到了那步才上 agent。
-
-**新兴方向(带年份):**
-- **CodeAct 范式**(2024):让模型**写 Python 代码当动作**(而非填 JSON tool call),一段代码能组合多个工具、带控制流,表达力更强;`smolagents`(HuggingFace,核心约 1000 行)主打这个,见 [[39 Agent 开源生态全景|Agent 开源生态全景]] ① 层。
-- **类型安全派**:`pydantic-ai` 把 Pydantic 类型校验带进 agent(FastAPI 式手感),重结构化输出、想看清每一步时强。
-- **协议化解耦**:框架内部怎么写在收敛,框架之间靠 [[17 MCP 模型上下文协议|MCP]](Agent↔工具)和 [[30 A2A 协议|A2A]](Agent↔Agent)互通——长期看「用哪个框架」会比「框架间能不能互操作」次要。
-
-**反模式:**
-- **被抽象绑架**:顺着 CrewAI 的范式很爽,一旦要做它没预设的事(改中间一步、加奇怪分支),和抽象搏斗常比裸写还累。
-- **把 demo 框架塞进生产**:错误处理、重试、可观测、成本控制这些「无聊工程」才是生产门槛,恰是高抽象框架最弱处。
-- **版本动荡当事实**:这些框架高速迭代、还改名搬家(AutoGen→ag2、Swarm→OpenAI Agents SDK、Claude Code SDK→Claude Agent SDK),教程极易过期,认官方最新文档与 **pip 包名**(见 [[39 Agent 开源生态全景|Agent 开源生态全景]] 的「以 pip 名为锚」)。
-
-**相关链接:** 完整生态分层与同层竞品见 [[39 Agent 开源生态全景|Agent 开源生态全景]](本篇是其 ① 编排层的代码级展开);harness 视角见 [[23 Agent Harness 概览|Agent Harness 概览]];部署持久化见 [[34 Agent 部署与持久化执行|Agent 部署与持久化执行]];选型闭环交给 [[38 Agent 评估与可观测性|Agent 评估与可观测性]]。
+- [LangGraph 1.2.9 发布页](https://github.com/langchain-ai/langgraph/releases)、[Google ADK 2.4.0 发布页](https://github.com/google/adk-python/releases)、[PydanticAI 2.12.0 发布页](https://github.com/pydantic/pydantic-ai/releases) 是本篇版本快照的主要来源（均核验于 2026-07-17）；它们不是长期兼容承诺。
+- [AutoGen 官方仓库快照](https://github.com/microsoft/autogen)（核验：2026-07-17）说明 AutoGen 已进入 maintenance mode、停止新增特性并转为 community-managed；因此它适合既有系统维护/迁移评估，而新项目应把 [Microsoft Agent Framework 官方发布页](https://github.com/microsoft/agent-framework/releases)（同日核验）作为单独候选做同一套 POC，并在部署仓库锁定实际测试版本。另有 [CrewAI 文档](https://docs.crewai.com/) 对 agents、crews、flows 的分层，以及 [LlamaIndex Workflow 文档](https://developers.llamaindex.ai/python/llamaagents/workflows/) 对事件与步骤类型检查的说明；这些来源支持“按运行时语义分层”，不支持全局排名。
+- 框架必须与 [[17 MCP 模型上下文协议|MCP]]、工具权限、状态存储和 [[38 Agent 评估与可观测性|eval/trace]] 一起选；框架名不是安全或质量保证。

@@ -1,157 +1,172 @@
-**AI Agent** 是以 LLM 为「大脑」、能感知环境、自主推理、调用工具采取行动、并根据反馈不断迭代直到完成任务的系统——它不是回答一句话,而是「自己想办法把活干完」。
+[[01 什么是 AI Agent|AI Agent]] 是为了达成目标而让模型根据环境反馈选择下一步行动的系统；本文聚焦以 LLM 为决策器、能调用工具的 LLM Agent。
 
-要分清它和 [[02 Workflow 与 Agent 的边界|Workflow 与 Agent 的边界]]:狭义的 agent 指模型**自己动态决定**流程与工具用法的那一端;本篇先讲清楚 agent 这个整体概念长什么样、由什么组成、和它的近亲有何不同。
+这里的 **agent** 是系统角色，不等于某个模型或一段 prompt：LLM 负责提出下一步，[[23 Agent Harness 概览|Agent Harness]] 负责保存状态、执行工具、施加权限与预算。更宽泛的「AI agent」还可用规则或规划器实现；本域讨论的边界是 LLM 是否在运行时主导流程与工具使用。它与 [[02 Workflow 与 Agent 的边界|Workflow 与 Agent 的边界]] 的区别，归根到底是「下一步由谁决定」。
 
-## 本质:一个感知-推理-行动的闭环
+## 本质：一个感知—决策—行动的闭环
 
-把 agent 拆开,只有四个部件 + 一根回路:
+一个 LLM Agent 通常由四个部件和一条回路组成：
 
-- **大脑(LLM)**:核心决策器。每一步读当前上下文,输出「我接下来要做什么」——可能是一段思考(thought),也可能是一次工具调用(tool call)。
-- **工具(Tools)**:大脑伸向世界的手。搜索、跑代码、读写文件、调 API……见 [[15 Function Calling 工具调用|Function Calling 工具调用]] 与 [[16 工具设计与工具层|工具设计与工具层]]。
-- **记忆(Memory)**:短期=当前任务的上下文窗口;长期=跨会话的经验/事实存储。见 [[19 Agent 记忆系统|Agent 记忆系统]]。
-- **环境(Environment)**:动作真正落地的地方(文件系统、浏览器、数据库、用户),也是反馈(observation)的来源。
+- **决策器（LLM）**：基于当前上下文提出行动、询问用户，或给出结构化终态。
+- **工具（Tools）**：让系统搜索、读写文件、执行代码或访问受控 API，见 [[15 Function Calling 工具调用|Function Calling 工具调用]]、[[16 工具设计与工具层|工具设计]]。
+- **状态与记忆（State/Memory）**：短期状态是本次运行的消息、观察和预算；跨会话知识可放在外部存储，见 [[19 Agent 记忆系统|Agent 记忆系统]]。
+- **环境（Environment）**：文件系统、浏览器、数据库或用户；行动的可验证反馈从这里来。
 
-闭环是关键:**感知环境 → 推理下一步 → 执行动作 → 拿到反馈 → 再感知**,循环往复。正是这根回路把「会说话的模型」变成「会干活的系统」。这根回路的机制细节见 [[03 Agent 核心循环|Agent 核心循环]]。
+闭环是：**观察环境 → 决定下一步 → 执行动作 → 回灌反馈 → 再观察**。模型并不直接「做事」；它提出候选行动，harness 进行校验、执行与记录。核心运行机制见 [[03 Agent 核心循环|Agent 核心循环]]。
 
 ![[什么是 AI Agent.png]]
 
-## 机制:一次完整的 agent 运行(分步)
+## 直觉：像一位有权限边界的实习生
 
-1. **接任务**:用户给一个高层目标(「帮我把这个仓库的测试修绿」),目标开放、步骤未知。
-2. **观察**:模型读到当前状态(报错日志、文件树)。
-3. **推理 + 决策**:模型产出思考 + 决定调哪个工具(`run_tests`、`read_file`、`edit_file`)。
-4. **行动**:runtime(即 [[23 Agent Harness 概览|Agent Harness 概览]])执行工具,得到结果。
-5. **回灌反馈**:把工具结果(observation)塞回上下文,模型据此修正下一步。
-6. **判停**:任务达成 / 超步数 / 超预算 / 触发人工审核时停下。
+把 agent 想成实习生而不是「会自动完成任务的模型」：你给目标、工具清单和权限边界；它先看日志，再选择读文件、跑测试或向你提问。每次动作的结果都会改变下一步。若缺少账号、验收标准或付款批准，正确行为是停下来报告 `needs_input` 或 `needs_approval`，不是猜测后继续。
 
-跟单次问答最大的差别:agent **不预先知道要做几步**,步数由任务和反馈动态决定。
+## 小数字手算：一次修测试的回路成本
 
-## 来源:这个词怎么定下来的
+设 agent 为「修复一个测试失败」运行三轮：第 1 轮搜索报错，调用 1 个工具；第 2 轮读取 2 个文件，调用 2 个工具；第 3 轮运行测试，调用 1 个工具，随后提交终态。
 
-- 「agent」概念源自经典 AI(Russell & Norvig《AIMA》:agent = 感知环境并行动的实体)。
-- LLM 时代的现代用法被 **Anthropic《Building Effective Agents》(2024-12)** 收紧:agent 特指「LLM 动态主导自身流程与工具使用」的系统,与 workflow 区分开。
-- 工程范式上游是 **ReAct(Yao et al., 2022)**,首次把「推理 + 行动」交错进同一个 LLM 回路,见 [[09 ReAct|ReAct]]。
+$$
+N_{tool}=1+2+1=4,\qquad N_{model}=3+1=4
+$$
 
-## 最小可跑骨架(伪代码)
+其中最后一次模型调用用于根据测试结果报告终态，而不是调用工具。这个数字不是性能基准；它说明 agent 的模型调用和工具调用数由轨迹决定，不能仅从用户目标预先精确写死。
+
+## 公式推导：为什么「反馈」使它成为回路
+
+令第 $i$ 轮进入模型的状态为 $s_i$，模型策略为 $\pi$，harness 的执行器为 $E$：
+
+$$
+a_i=\pi(s_i),\qquad o_i=E(a_i),\qquad s_{i+1}=U(s_i,a_i,o_i)
+$$
+
+若 $a_i$ 是工具调用，$o_i$ 是工具结果；若 $a_i$ 是结构化终态，则运行结束。关键在 $U$：下一轮状态包含真实环境反馈，因此下一步能随结果改变。若所有 $a_i$ 与分支都由代码预先给定，便是 [[02 Workflow 与 Agent 的边界|workflow]]，即使其中调用了多次 LLM。
+
+## 机制：一次完整运行的生命周期
+
+1. **接收目标与约束**：明确成功条件、可用工具、权限、预算与截止时间。
+2. **观察**：读取当前状态，例如报错日志、文件树或用户补充的信息。
+3. **决策**：模型选择工具、给出下一步计划，或声明需要输入/批准。
+4. **受控执行**：harness 校验参数、权限和频率，再执行工具。
+5. **回灌与评估**：将截断后的结果写入状态，检查是否满足验收条件。
+6. **返回终态**：完成、需要用户输入、需要批准、被阻塞、失败或预算耗尽；「不再调用工具」本身不足以证明完成。
+
+与单次问答的差别不在于「用了几个 prompt」，而在于系统是否基于环境反馈动态选择后续行动与终态。
+
+## 来源：现代 LLM Agent 的工程切分
+
+- 经典 AI 中，agent 是能感知环境并采取行动的实体。
+- Anthropic 将 agentic system 区分为两类：**workflow** 由预定义代码路径编排 LLM 与工具；**agent** 由 LLM 动态主导流程和工具使用。
+- [[09 ReAct|ReAct]]（Yao 等，2022）提出将推理轨迹与行动交错生成，是理解「观察—行动—再观察」的一条重要研究脉络，而非所有实现都必须采用的格式。
+
+## 最小可运行例子：消费结构化终态
 
 ```python
-def agent(goal, tools, llm, max_steps=20):
-    messages = [{"role": "user", "content": goal}]
-    for _ in range(max_steps):
-        resp = llm(messages, tools=tools)          # 大脑:决定下一步
-        if resp.tool_calls:                         # 决策=调工具
-            for call in resp.tool_calls:
-                obs = tools[call.name](**call.args) # 行动 + 拿反馈
-                messages.append(tool_result(call, obs))  # 回灌
-        else:
-            return resp.content                     # 没有工具调用 = 收尾,任务完成
-    return "达到最大步数,未完成"
+from dataclasses import dataclass
+from enum import Enum
+
+
+class TerminalStatus(str, Enum):
+    COMPLETED = "completed"
+    NEEDS_INPUT = "needs_input"
+    NEEDS_APPROVAL = "needs_approval"
+    BLOCKED = "blocked"
+    FAILED = "failed"
+    BUDGET_EXHAUSTED = "budget_exhausted"
+
+
+@dataclass(frozen=True)
+class RunResult:
+    status: TerminalStatus
+    detail: str
+    evidence: str | None = None
+
+
+HANDLERS = {
+    TerminalStatus.COMPLETED: lambda r: f"交付：{r.evidence or r.detail}",
+    TerminalStatus.NEEDS_INPUT: lambda r: f"请求输入：{r.detail}",
+    TerminalStatus.NEEDS_APPROVAL: lambda r: f"请求批准：{r.detail}",
+    TerminalStatus.BLOCKED: lambda r: f"升级阻塞：{r.detail}",
+    TerminalStatus.FAILED: lambda r: f"记录失败：{r.detail}",
+    TerminalStatus.BUDGET_EXHAUSTED: lambda r: f"停止并重分配预算：{r.detail}",
+}
+
+
+def dispatch_terminal(result: RunResult) -> str:
+    if set(HANDLERS) != set(TerminalStatus):
+        raise RuntimeError("每种终态都必须有上游处理器")
+    return HANDLERS[result.status](result)
+
+
+if __name__ == "__main__":
+    cases = [
+        RunResult(TerminalStatus.COMPLETED, "测试已通过", "tests=green"),
+        RunResult(TerminalStatus.NEEDS_INPUT, "缺少仓库路径"),
+        RunResult(TerminalStatus.NEEDS_APPROVAL, "准备提交付款"),
+        RunResult(TerminalStatus.BLOCKED, "测试服务不可用"),
+        RunResult(TerminalStatus.FAILED, "连续三次工具错误"),
+        RunResult(TerminalStatus.BUDGET_EXHAUSTED, "token=100000"),
+    ]
+    for case in cases:
+        print(f"{case.status.value}: {dispatch_terminal(case)}")
 ```
 
-这就是一个能跑的最小 agent。把 `llm`/`tools` 换成真实实现即可——剩下的所有花样(规划、反思、多智能体)都是在这个回路上加料。
+这个离线例子完整覆盖六种终态，并把结构化 `RunResult` 交给上游。真实 `run_loop` 还要回灌工具结果、执行验收与权限检查，见 [[03 Agent 核心循环|Agent 核心循环]]。
 
-## 对比:agent vs chatbot vs RPA
+## 对比：Agent、chatbot 与 RPA
 
-| 维度 | Chatbot | RPA(机器人流程自动化) | AI Agent |
+| 维度 | 对话式 chatbot | RPA | LLM Agent |
 |---|---|---|---|
-| 核心 | 单轮/多轮对话 | 硬编码脚本 | LLM 大脑 + 回路 |
-| 流程 | 无流程 | 人写死的固定流程 | 模型动态决定 |
-| 工具 | 一般无 | 固定的录制动作 | 动态选择调用 |
-| 应对变化 | 不能 | 流程变就失效 | 据反馈自适应 |
-| 适用 | 答疑 | 规则明确、稳定重复 | 任务开放、步骤不可预定 |
+| 下一步控制权 | 对话逻辑或产品代码 | 预设规则/脚本 | 模型在允许范围内选择 |
+| 环境反馈 | 可有，但未必驱动行动 | 按固定规则处理 | 反馈参与下一步决策 |
+| 工具使用 | 可选 | 固定动作序列 | 动态选择受控工具 |
+| 典型适用 | 问答、信息呈现 | 稳定重复流程 | 开放任务、多轮试错 |
 
 ![[什么是 AI Agent-自主性谱系.png]]
 
-注意:RPA 和 chatbot 不是「弱 agent」,而是**另一类东西**——它们没有「据反馈改下一步」的回路。自主性是一条谱系(见上图),从单次调用 → workflow → 受限 agent → 全自主 agent 渐变。
+这不是能力高低排序。带工具的 chatbot 也可能只是 workflow；RPA 也可非常可靠。判定时只问：运行时的流程与工具选择，主要由预设代码还是模型决定？
 
 ## 何时真的需要 agent
 
-✅ **该上 agent**:任务开放、步骤无法预先列全、需要多轮试错与工具交互(写代码改 bug、深度调研、操作浏览器完成订单)。
+✅ 任务开放、子步骤难以预先列全，且每轮能从环境得到可用反馈时，例如排查代码问题、跨资料调研或受控浏览器操作。
 
-❌ **别上 agent**:流程固定可预定、对成本/延迟/可靠性敏感。这时用 [[02 Workflow 与 Agent 的边界|Workflow 与 Agent 的边界]] 里的固定编排更稳更便宜。
-
-> 原则(Anthropic):**先用最简方案,能不上 agent 就不上**。agent 用灵活换可预测性,代价是更高的 token 成本、更慢、更难调试。
+❌ 步骤稳定可枚举、需要严格可复现或预算/延迟很紧时，先用单次调用或 [[02 Workflow 与 Agent 的边界|workflow]]。多轮 agent 往往增加调用次数和轨迹不确定性；是否值得，应由评测与验收结果决定。
 
 ## 坑与反模式
 
-- **为 agent 而 agent**:简单分类/抽取任务硬套自主回路,徒增成本和不确定性。
-- **没有停机条件**:回路跑飞、烧光预算——必须设最大步数/token 预算/熔断,见 [[03 Agent 核心循环|Agent 核心循环]]。
-- **工具设计糟糕**:工具描述含糊、返回噪声大,模型决策就崩;工具是 agent 的上限,见 [[16 工具设计与工具层|工具设计与工具层]]。
-- **上下文塞爆**:长程任务里把所有历史堆进窗口,信噪比下降,见 [[20 上下文工程|上下文工程]]。
+- **为 agent 而 agent**：分类、抽取等固定任务硬套循环，只增加成本与不确定性。
+- **把模型文本当作完成证明**：模型不调工具或说「完成」时，仍应由 harness 对照验收条件检查证据。
+- **没有边界**：缺少最大步数、token/费用/时间预算、权限与人工批准，会让失败难以收敛。
+- **工具接口含糊**：不清楚的参数和噪声过大的结果会降低决策质量，见 [[16 工具设计与工具层|工具设计]]。
+- **上下文只增不减**：长任务要截断、摘要或外置状态，见 [[20 上下文工程|上下文工程]]、[[21 上下文压缩与卸载|上下文压缩]]。
 
-## 工业界实践
+## 工业界实践：框架只是运行时选择
 
-真实生产里几乎没人从零手写那个 while 循环——而是站在某个 **agent 框架 / harness** 上,把精力花在工具、提示、护栏上。
+- **OpenAI Agents SDK**：官方将其定位为管理 agent loop、反复工具调用、审批暂停、状态与追踪的 SDK；若要完全自定义循环，则使用 Responses API 自己执行函数调用回合。
+- **Claude Agent SDK**：提供驱动 Claude Code 的工具、agent loop 与上下文管理，适合把同类 harness 能力嵌入应用。
+- **LangGraph**：文档定位为编排运行时，强调持久化、持久执行和 human-in-the-loop；图中的边是否由代码或模型决定，才决定它在本题里更像 workflow 还是 agent。
 
-**主流框架与服务(给名字 + 定位):**
-
-- **LangGraph**(LangChain 出品):把 agent 建模成**有状态的图**(节点 = 步骤,边 = 转移),2025-05 发布 1.0 GA、2025-12 出 v1.1,被 Uber、LinkedIn、Klarna 等近 400 家公司用于生产。卖点是**持久化状态(checkpoint)+ human-in-the-loop 中断 + LangSmith 可观测**。适合需要可控流程、可回放的复杂 agent。
-- **OpenAI Agents SDK**(2025-03-11 发布,是实验性 Swarm 的生产化继任):轻量 `Agent + handoff + guardrail` 抽象,底层跑 **Responses API**(2025-03 发布,合并了 Chat Completions 的简洁与 Assistants 的工具能力)。注意:旧的 **Assistants API 已于 2025-08-26 宣布弃用,2026-08-26 下线**,新项目直接用 Responses/Agents SDK。
-- **Claude Agent SDK**(原名 Claude Code SDK,2025-09 改名):把 Claude Code 背后的 **agent harness** 抽出来给你嵌进自己的应用——`Client SDK` 要你自己写 tool loop,`Agent SDK` 则让 Claude **自主跑完循环、自带工具执行与上下文管理**,见 [[23 Agent Harness 概览|Agent Harness 概览]]。
-- **LlamaIndex**(偏数据/检索型 agent)、**AutoGen**(微软,多 agent 对话编排)、**CrewAI**(角色化多 agent 协作)、**PydanticAI / Mastra / Vercel AI SDK**(类型安全、前端友好)各占一块生态,详细横评见 [[37 Agent 框架对比|Agent 框架对比]] 与 [[39 Agent 开源生态全景|Agent 开源生态全景]]。
-
-**典型架构与数据流:** 用户目标 → harness 组装上下文(system prompt + 工具定义 + 历史)→ 模型出 tool_call → 沙箱内执行工具 → observation 截断后回灌 → 循环,直到停机。生产里这条链路外面还会包一层**编排/持久化**(见下「durable execution」)、一层**可观测**(trace 每一步)、一层**护栏**(沙箱、审批、预算)。
-
-**规模化与成本/延迟权衡:**
-- agent 是「多轮 LLM 调用」,成本和延迟天然比单次问答高一个数量级;生产里靠**模型分级**(规划用大模型、批量子步用小模型)、**prompt 缓存**、**并行工具调用**压成本,系统性方法见 [[35 Agent 成本与延迟优化|Agent 成本与延迟优化]]。
-- 长程任务要做**持久化执行(durable execution)**:用 Temporal / Restate / DBOS / LangGraph checkpointer 把每步落盘,崩溃后从断点恢复而非从头重跑,见 [[34 Agent 部署与持久化执行|Agent 部署与持久化执行]]。
-
-**可观测与运维:** 生产 agent 必须能**回放轨迹**(每步的 thought / tool_call / observation),否则线上出错无从排查。主流方案 LangSmith、LangFuse、Arize Phoenix、OpenTelemetry GenAI 语义约定,详见 [[38 Agent 评估与可观测性|Agent 评估与可观测性]]。
-
-**真实踩坑与最佳实践:**
-- **先别上框架**:Anthropic 明确建议很多场景直接用裸 LLM API 几行代码就够;框架的抽象有时反而挡住你看清 prompt 与上下文。
-- **工具是上限**:再强的循环,工具描述含糊、返回噪声大,agent 就崩,见 [[16 工具设计与工具层|工具设计与工具层]]。
-- **上下文是战场**:长程任务的成败八成在上下文管理(截断、压缩、外置记忆),见 [[20 上下文工程|上下文工程]]、[[21 上下文压缩与卸载|上下文压缩与卸载]]。
-
-```python
-# 用框架 vs 裸写:两种心智
-# 裸写(Anthropic 推荐的起点):你掌控每一行
-from anthropic import Anthropic
-client = Anthropic()
-resp = client.messages.create(model="claude-...", tools=TOOLS, messages=msgs)
-
-# 框架(LangGraph):你描述图,框架管状态/持久化/可观测
-from langgraph.graph import StateGraph
-g = StateGraph(AgentState)
-g.add_node("agent", call_model)
-g.add_node("tools", run_tools)
-g.add_conditional_edges("agent", should_continue, {"continue": "tools", "end": END})
-app = g.compile(checkpointer=checkpointer)   # ← 持久化,可断点续跑
-```
+选择框架前先写清：目标的验收条件、可用工具、哪些动作需批准、预算如何计量、每个终态如何交给上游处理。框架不能替代这些产品与安全决策。
 
 ## 面试高频
+> 面试地图：[[Agent 面试题库]]
 
-**Q1:一句话定义 AI Agent,它和 chatbot / workflow 的本质区别?**
-标准答:Agent = 以 LLM 为大脑、能调工具、据环境反馈**自主迭代**直到完成开放任务的系统。与 chatbot 区别在**有「据反馈改下一步」的闭环**;与 workflow 区别在**「下一步做什么」由模型动态决定而非代码写死**(见 [[02 Workflow 与 Agent 的边界|Workflow 与 Agent 的边界]])。
-- 追问:**那 RPA 算弱 agent 吗?** 不算——RPA 是死脚本,没有据反馈自适应的回路,是另一类东西。
-- 陷阱:别把「多步 LLM 调用」就叫 agent;[[04 Prompt Chaining|Prompt Chaining]] 也多步,但流程写死,是 workflow。判据永远是**控制权归谁**。
+**Q1：一句话定义 AI Agent；它和 chatbot / workflow 的本质区别？**
 
-**Q2:Agent 由哪几部分组成?**
-标准答:大脑(LLM)、工具、记忆(短期=上下文窗口/长期=外置存储)、环境(动作落地 + 反馈来源),加一根 `感知→推理→行动→反馈` 的闭环。
-- 追问:**记忆为什么单独拎出来?** 因为模型本身无状态,跨轮/跨会话的「连续」全靠外部把历史累积喂回去(机制见 [[03 Agent 核心循环|Agent 核心循环]])。
+标准答：本文的 LLM Agent 是让模型在工具与权限边界内，根据环境反馈动态决定下一步的系统。chatbot、RPA 或多步 LLM 系统不自动等于 agent；判据是「编排权归谁」，详见 [[02 Workflow 与 Agent 的边界|Workflow 与 Agent 的边界]]。
 
-**Q3:什么时候该上 agent,什么时候不该?**
-标准答:任务**开放、步骤无法预先列全、需多轮试错**才上 agent;流程固定、对成本/延迟/可靠性敏感就用 workflow 或单次调用。Anthropic 原则:**能不上 agent 就不上**。
-- 陷阱:面试官常引诱你「什么都用 agent」,要主动说出 agent 的代价(贵、慢、难调、不稳)。
+**Q2：一个 agent 的最小组成是什么？**
 
-**Q4:Agent 为什么会「跑飞」,怎么防?**
-标准答:循环没有出口 → 烧光预算。必配**停机条件**:max_steps、token 预算、人工审核点、报错熔断,见 [[03 Agent 核心循环|Agent 核心循环]]。
+标准答：LLM 决策器、工具、外部状态/记忆、环境，以及运行这些部件的 harness。模型决定候选下一步；harness 负责状态、执行、权限、预算和终态处理。
 
-**Q5(进阶):自主性谱系是什么?**
-标准答:从「单次调用 → workflow → 受限 agent(工具集小/步数封顶/关键动作要人确认)→ 全自主 agent」连续渐变,不是开关。工程上大多数生产系统落在 workflow 与受限 agent 之间。
+**Q3：什么时候该上 agent？**
 
-## 知识拓展
+标准答：当任务步骤无法可靠预列、需要多轮环境反馈且能设置验证与护栏时才上。先验证单次调用或 workflow 是否足够；agent 是用可预测性、成本和调试难度交换灵活性。
 
-- **理论根**:「agent」概念出自经典 AI(Russell & Norvig《AIMA》:能感知环境并行动的实体);LLM 时代的现代收紧定义来自 **Anthropic《Building Effective Agents》(2024-12)**;工程范式上游是 **ReAct(Yao et al., 2022,arXiv 2210.03629)**,首次把推理与行动交错进同一回路,见 [[09 ReAct|ReAct]]。2026 年主流编码 agent(Claude Code、Cursor、Aider)内部仍跑 ReAct 式循环。
-- **「augmented LLM」是地基**:Anthropic 把一切 agentic 系统的最小积木定义为**增强版 LLM**——LLM + 检索 + 工具 + 记忆。Agent 只是在这块积木上加了「自主编排」这层。
-- **边界与反模式**:最常见反模式是**为 agent 而 agent**(简单分类/抽取硬套自主回路)和**无护栏 agent**(没停机条件 = 烧钱机器)。判断锚点永远是那句:**步骤能否预先定全?**
-- **深层联系**:本篇是整个 Agent 域的总入口——核心机制展开在 [[03 Agent 核心循环|Agent 核心循环]];与 workflow 的切分在 [[02 Workflow 与 Agent 的边界|Workflow 与 Agent 的边界]];多 agent 协作扩展见 [[22 多智能体系统|多智能体系统]];把 agent 用于具体场景(编码/研究/操作浏览器)见 [[28 代码 Agent 与 SWE-bench|代码 Agent 与 SWE-bench]]、[[29 Deep Research Agent|Deep Research Agent]]、[[27 计算机使用与浏览器 Agent|计算机使用与浏览器 Agent]]。
-- **前沿方向**:用 RL 直接训练 agent 行为(而非只靠 prompt)是 2024–2026 热点,见 [[32 Agentic RL 与训练|Agentic RL 与训练]];让 agent 在长程任务中自我改进见 [[33 长程任务与自我改进(Ralph loop)|长程任务与自我改进(Ralph loop)]]。
+**Q4：agent 为什么会跑飞，如何防？**
 
-## 关键事实速记
+标准答：无明确终态、重复失败、预算无限或把模型输出误认完成都会跑飞。应设结构化终态、验收检查、最大步数/费用/时间预算、失败阈值、审批和沙箱，见 [[03 Agent 核心循环|Agent 核心循环]]。
 
-- Agent = LLM 大脑 + 工具 + 记忆 + 环境回路;灵魂是「据反馈迭代」的闭环。
-- 与 chatbot(无回路)、RPA(死脚本)的本质区别在于**流程由模型动态决定**。
-- 自主性是谱系,不是开关;工程上多数任务落在 workflow 与受限 agent 之间。
-- 判定是否用 agent 的关键问题:**步骤能否预先定全?** 能则 workflow,不能才 agent。
-- 生产框架按定位记:LangGraph(图+持久化)、OpenAI Agents SDK(轻量+Responses API)、Claude Agent SDK(harness 抽取)、LlamaIndex/AutoGen/CrewAI(数据/多 agent)。
+## 关键事实
+
+- Anthropic 对 workflow 与 agent 的工程切分，以及「先找最简单可用方案」的建议：*Building effective agents*，https://www.anthropic.com/engineering/building-effective-agents ，2024。
+- ReAct 交错生成 reasoning trace 与 action，并从环境取回信息：Yao 等，*ReAct: Synergizing Reasoning and Acting in Language Models*，https://arxiv.org/abs/2210.03629 ，2022。
+- OpenAI 当前文档说明：Responses API 适合自行拥有循环；Agents SDK 可管理循环、追踪、护栏与可恢复审批：*Agents SDK*，https://developers.openai.com/api/docs/guides/agents ，2026（访问于 2026-07）。
+- 对应关系：概念总览在本篇；控制权边界见 [[02 Workflow 与 Agent 的边界|Workflow 与 Agent 的边界]]；实现级状态机见 [[03 Agent 核心循环|Agent 核心循环]]；多智能体扩展见 [[22 多智能体系统|多智能体系统]]。

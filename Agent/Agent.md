@@ -2,6 +2,8 @@
 
 > 从「模型」到「会自己干活的系统」。这一域讲清:agent 是什么、怎么编排、怎么推理、怎么用工具、怎么记忆、怎么协作、怎么落地——以及 2026 年最吃工程的那层:把模型包成 agent 的脚手架(harness),和让它真正能跑长、跑省、跑稳的能力/协议/优化/部署。这里只放定位与链接,不写正文。
 
+- 面试准备：[[Agent 面试题库|Agent 面试题库]]
+
 ## ① 基础
 - [[01 什么是 AI Agent|什么是 AI Agent]]
 - [[02 Workflow 与 Agent 的边界|Workflow 与 Agent 的边界]]
@@ -66,3 +68,13 @@
 - [[37 Agent 框架对比|Agent 框架对比]]
 - [[38 Agent 评估与可观测性|Agent 评估与可观测性]]
 - [[39 Agent 开源生态全景|Agent 开源生态全景]]
+
+## ⑭ 2026 Agent 工程
+- [[40 Loop Engineering：可验证的 Agent 外循环|Loop Engineering]]
+- [[41 Agent 指令设计：Prompt Contract 与行为边界|Prompt Contract 与行为边界]]
+- [[42 代码 Agent 评估：可靠性、验证器与反作弊|代码 Agent 评估]]
+- [[23 Agent Harness 概览|Agent Harness]]
+- [[20 上下文工程|上下文工程]]
+- [[25 Agent Skills(SKILL.md)|Agent Skills(SKILL.md)]]
+- [[34 Agent 部署与持久化执行|Agent 部署与持久化执行]]
+- [[38 Agent 评估与可观测性|Agent 评估与可观测性]]

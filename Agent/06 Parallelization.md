@@ -8,6 +8,8 @@
 
 它属于 [[02 Workflow 与 Agent 的边界|Workflow 与 Agent 的边界]] 里的 **workflow 一侧**:并行的路数与切分都是开发者**预先设计**的,不是运行时由模型决定。与全自主的 [[09 ReAct|ReAct]] 对照。
 
+**生活类比:** 像三位同学同时检查一份作业：一位看错别字、一位看计算、一位看引用，这叫 Sectioning；若三位都独立做同一道选择题再多数表决，才叫 Voting。前提都是他们不必等彼此的答案。
+
 ## 变体一:Sectioning(扇出—扇入)
 ![[Parallelization-Sectioning.png]]
 
@@ -31,30 +33,33 @@
 ## 来源
 出自 Anthropic《Building Effective Agents》(2024-12)。文中明确把 Parallelization 分为 **Sectioning** 与 **Voting** 两类,并指出它适合「子任务可并行以提速」或「需要多视角/多次尝试以提高置信」的场景。
 
-## 可跑最小代码(伪代码)
+## 可跑最小代码
 ```python
-import concurrent.futures as cf
+from concurrent.futures import ThreadPoolExecutor
+from time import perf_counter, sleep
 
-# --- Sectioning:独立子任务并行,再聚合 ---
-def sectioning(doc):
-    tasks = {
-        "summary":  f"用三句话总结:\n{doc}",
-        "safety":   f"这段内容有无违规?只答 是/否 + 理由:\n{doc}",
-        "keywords": f"抽 5 个关键词:\n{doc}",
-    }
-    with cf.ThreadPoolExecutor() as ex:
-        results = {k: ex.submit(llm, p) for k, p in tasks.items()}
-        out = {k: f.result() for k, f in results.items()}
-    return out                      # 聚合:这里直接拼成 dict
+def inspect(part):
+    sleep(0.03)  # 模拟一次独立的模型/API 调用
+    return part.upper()
 
-# --- Voting:同一任务多跑,投票 ---
-def voting(code, n=3, threshold=2):
-    prompt = f"这段代码有安全漏洞吗?只答 yes/no:\n{code}"
-    with cf.ThreadPoolExecutor() as ex:
-        votes = [f.result().strip().lower()
-                 for f in [ex.submit(llm, prompt, temperature=0.8)
-                           for _ in range(n)]]
-    return "有漏洞" if votes.count("yes") >= threshold else "无"
+# ❌ 朴素写法：彼此独立的工作仍串行等待。
+def serial_sectioning(parts):
+    return [inspect(part) for part in parts]
+
+# ✅ 改进写法：扇出独立工作，再按原顺序扇入聚合。
+def fanout_sectioning(parts):
+    with ThreadPoolExecutor(max_workers=len(parts)) as pool:
+        return list(pool.map(inspect, parts))
+
+parts = ["摘要", "安全", "关键词"]
+start = perf_counter()
+serial = serial_sectioning(parts)
+serial_seconds = perf_counter() - start
+start = perf_counter()
+fanout = fanout_sectioning(parts)
+fanout_seconds = perf_counter() - start
+assert serial == fanout and fanout_seconds < serial_seconds
+print(f"串行={serial_seconds:.3f}s, 并行={fanout_seconds:.3f}s, 结果={fanout}")
 ```
 
 ## 对比表
@@ -74,30 +79,62 @@ def voting(code, n=3, threshold=2):
 - **坑四**:它是**静态**并行;若子任务数量/内容要运行时才知道,那是 [[07 Orchestrator-Workers|Orchestrator-Workers]],不是 Parallelization。
 
 ## 关键事实
-- 两个变体动机不同:Sectioning 主**性能/聚焦**,Voting 主**可靠性**——别混为一谈。
-- 与 [[05 Routing|Routing]] 的一句话区分:Routing 分类后**只走一条**支路;Parallelization **多条全跑**再聚合。
-- 与 [[07 Orchestrator-Workers|Orchestrator-Workers]] 的本质差别:这里的并行任务是**预先写死**的;那里的子任务是**编排者运行时动态拆**的。
-- 常与 [[05 Routing|Routing]]、[[04 Prompt Chaining|Prompt Chaining]] 嵌套组合,真实系统很少只用单一模式。
+- 两个变体动机不同：Sectioning 主**性能/聚焦**，Voting 主**可靠性**，不可混为一谈。[Anthropic, 2024](https://www.anthropic.com/engineering/building-effective-agents)
+- 与 [[05 Routing|Routing]] 的一句话区分：Routing 分类后选定支路；Parallelization 多条预设调用全跑后再聚合。[Anthropic, 2024](https://www.anthropic.com/engineering/building-effective-agents)
+- 与 [[07 Orchestrator-Workers|Orchestrator-Workers]] 的关键差别：这里的并行任务是**预先写死**的；后者由编排者按输入动态拆分。[Anthropic, 2024](https://www.anthropic.com/engineering/building-effective-agents)
+- 可与 [[05 Routing|Routing]]、[[04 Prompt Chaining|Prompt Chaining]] 嵌套组合；组合后仍应针对任务测量质量、成本和尾延迟。[Anthropic, 2024](https://www.anthropic.com/engineering/building-effective-agents)
+
+## 小数字手算与公式推导
+
+**Sectioning 省的是墙钟时间，不自动省调用成本。** 设三条独立支路耗时为 $t_1,t_2,t_3$，聚合耗时为 $t_m$。串行与并行的理想墙钟时间分别是
+
+$$
+T_{serial}=t_1+t_2+t_3+t_m,\qquad
+T_{parallel}=\max(t_1,t_2,t_3)+t_m.
+$$
+
+若三路为 $2,3,4$ 秒，聚合为 $0.5$ 秒：
+
+$$
+T_{serial}=2+3+4+0.5=9.5\text{s},
+\quad T_{parallel}=\max(2,3,4)+0.5=4.5\text{s}.
+$$
+
+理想加速比为 $9.5/4.5\approx2.11$。这忽略队列、限流和慢尾；请求数仍是 3 路加 1 次聚合，token 成本是否变化取决于 prompt 与聚合策略。
+
+**Voting 只在误差不高度相关时才会放大可靠性。** 设每次判断错误率为 $e$，三票多数错意味着恰有两票或三票错：
+
+$$
+P_{wrong}=\binom{3}{2}e^2(1-e)+\binom{3}{3}e^3.
+$$
+
+若 $e=0.2$ 且三次采样独立：
+
+$$
+P_{wrong}=3\times0.2^2\times0.8+0.2^3=0.104.
+$$
+
+错误率从 $0.2$ 降到 $0.104$。同模型、同 prompt 的错误常相关，因此这个数字是独立性下界式的教学例子；是否有收益必须实测，不可保证。
 
 ## 工业界实践
 两个变体在生产里走的是两条完全不同的工程路线,别用一套话术套两者。
 
-**Sectioning(分块并行)——这是延迟优化的主力。**
+**Sectioning(分块并行)——适合独立工作带来的延迟改善。**
 - **落地形态:** 任何「关注点分离」都该并行。最经典的是**主回答 + 安全审查并行**:一路正常回答用户,另一路专门判「有无越权/违规/PII 泄露」,两路同时跑、互不污染上下文,审查路否决就拦截。客服、内容平台普遍这么做。
-- **框架支持:** **LangGraph** 用图的 fan-out/fan-in 节点原生表达并行分支;**LlamaIndex Workflows**、**Haystack** 的 pipeline、**OpenAI Agents SDK** 都支持并发子任务。底层是 `asyncio.gather` / 线程池——并行的是 **I/O 等待**(等模型返回),所以用协程比多线程更省资源。
+- **落地方式:** 用任务队列、协程或线程池把独立调用同时发起；具体并发模型取决于 SDK、限流规则与运行环境。无论框架如何，须给每一路设置超时、取消与部分结果策略。
 - **长文档处理:** RAG 里把长文切多段并行摘要/打分再汇总(map-reduce 式),是把「上下文塞不下」转成「分而治之」的标准手法,见 [[21 上下文压缩与卸载|上下文压缩与卸载]]。
 
-**Voting(投票)——这是可靠性 / 准确率优化的主力,学术上就是 self-consistency。**
-- **核心方法:** Self-Consistency(Wang et al. 2023)——同一推理任务采样 N 条路径,对**最终答案多数表决**,在 GSM8K/MATH 等有唯一解的任务上稳定涨点。生产里用于数学/代码/抽取这类「有明确对错」的场景。
+**Voting(投票)——用额外采样换取条件性的可靠性提升。**
+- **核心方法:** Self-Consistency 提出对同一问题采样多条推理路径，再聚合最一致的答案；它适合可规范化、可比较的最终答案。开放式写作不能直接按字符串多数投票，需改用任务特定的聚合或外部验证器。[Wang et al., 2022/ACL 2023, arXiv:2203.11171](https://arxiv.org/abs/2203.11171)
 - **代码审漏洞 / 内容审核:** 多路各审一遍,按容错需求调阈值——保守场景「任一路报警就深查」(高召回),激进场景「多数同意才放行」(降误报)。
-- **成本是 N 倍**,所以工业界普遍用**自适应采样**:先采少量,若已高度一致就早停,只有分歧大才继续采(对应 DeepConf、Adaptive-Consistency 等思路),把 N 倍成本压回来。
+- **成本与停止:** $N$ 次完整采样通常近似 $N$ 倍生成成本；可用预算上限或在结果已满足预设置信规则时早停，但早停本身也要在离线数据上验证偏差。
 
-**规模化与成本/延迟:** Sectioning 用并发**换墙钟时间**(总时间 ≈ 最慢那一路,而非各路之和),但**总 token 不降反略升**,要的是延迟不是省钱;Voting 则是**纯花算力换准确率**,token 是 N 倍。两者都要做**并发上限 + 限流**,防止瞬时打爆下游模型配额。
+**规模化与成本/延迟:** Sectioning 用并发压低墙钟时间（接近最慢一路加聚合），但总 token 不会因「同时发」而天然下降；Voting 则用额外采样换取可能的可靠性收益。两者都需并发上限与限流，避免瞬时耗尽下游配额。
 
 **可观测与运维:** 并行链路要记录**每路的耗时、成败、聚合/投票的最终裁决**;尾延迟(P99)由最慢一路决定,要对慢路设超时 + 兜底(超时就用已返回的部分聚合)。聚合/投票逻辑是常被低估的 bug 温床,要单测。
 
 ```python
-# Sectioning:异步并发(并行的是 I/O 等待),带超时兜底
+# Sectioning:异步并发；生产中还应在 llm_async 内或外层加入超时/取消策略
 import asyncio
 async def sectioning(doc):
     tasks = {
@@ -111,12 +148,13 @@ async def sectioning(doc):
 ```
 
 ## 面试高频
+> 面试地图：[[Agent 面试题库]]
 **Q1:Parallelization 的两个变体分别解决什么问题?别答串了。**
 标准答:**Sectioning** 解决**性能与聚焦**——把无依赖子任务并行,省墙钟时间、让每路上下文更干净;**Voting** 解决**可靠性**——同一任务多次采样投票,用多样性压低单次采样的方差。一个主延迟,一个主准确率,动机完全不同。
 - 陷阱:面试官故意问「并行是不是为了省钱」→ 都不是为了省钱。Sectioning 省的是**时间**(token 还略升),Voting 反而**花 N 倍算力**。
 
 **Q2:Voting 和学术里的 self-consistency 什么关系?**
-标准答:Voting 就是 self-consistency(Wang et al. 2023)的工程化——多采样 + 多数表决。适用前提是任务**有明确对错**(答案可比较/可投票);对开放生成(摘要、代码)字符串相等失效,要用 Universal Self-Consistency(让 LLM 自己判哪个输出最好)或排序投票等变体。
+标准答:Voting 是 self-consistency 的常见工程化形态：多采样再聚合。它特别适合最终答案可规范化、可比较的任务；对摘要、代码等开放产物，字符串相等会失效，需采用任务特定的排序、测试或 verifier，且要验证聚合器本身。
 
 **Q3:什么时候 Sectioning 是错的?**
 标准答:子任务**有依赖**时(A 的输入要等 B 的输出)。这时并行会拿到过期/缺失的输入,必须改回 [[04 Prompt Chaining|Prompt Chaining]] 串行。判据:子任务 A 的输入是否需要子任务 B 的输出——需要就不能并行。
@@ -127,7 +165,7 @@ async def sectioning(doc):
 **陷阱题:Voting 跑了 5 路结果 3 比 2,怎么定?** → 看任务的**容错方向**:高风险/宁可错杀(如安全审核)用低阈值(少数报警就拦),要降误报用多数甚至加权投票。没有固定答案,要先问「错哪个方向代价大」。
 
 ## 知识拓展
-- **前沿(2024-2025):** Voting 这条线很活跃——**排序投票自一致性**(Ranked Voting,arXiv 2505.10772,2025,用 Borda/即时决选等)让投票更稳;**DeepConf / Deep Think with Confidence**(2025)用置信度自适应决定采多少路,把 N 倍成本压下来;**Self-Consistency Preference Optimization**(2025)甚至把「偏好一致答案」做成无监督对齐目标。多智能体辩论(multi-agent debate)是 Voting 的升级版——让模型互相质疑再达共识,见 [[22 多智能体系统|多智能体系统]]。
-- **Best-of-N 与 Voting 的区别:** Voting 靠**多数表决**(无需打分器);Best-of-N 靠一个**奖励模型/verifier 选最高分**那条。后者需要一个好的 reward model,质量上限更高但更重,见 [[32 Agentic RL 与训练|Agentic RL 与训练]]。
-- **边界与反模式:** ① 子任务有依赖却强行并行 → 拿到过期输入,经典错误;② 把动态子任务硬塞进静态并行 → 应上 [[07 Orchestrator-Workers|Orchestrator-Workers]];③ 盲目堆高 N → 前几路收益最大,后面边际递减还线性烧钱;④ 聚合/投票逻辑没单测 → 前面并行做得再好,聚合写错全白搭。
+- **证据边界:** Anthropic 将 Parallelization 分成 Sectioning 与 Voting，并将前者用于独立子任务、后者用于多尝试提高置信；这是一种模式选择建议，不是对每个任务的效果承诺。[Anthropic, 2024](https://www.anthropic.com/engineering/building-effective-agents)
+- **Best-of-N 与 Voting 的区别:** Voting 靠**多数表决**（无需额外打分器）；Best-of-N 靠奖励模型或 verifier 选择最高分候选。后者把成败转移到 scorer 质量上，可能更适合可验证任务，但不保证一定优于投票，见 [[32 Agentic RL 与训练|Agentic RL 与训练]]。
+- **边界与反模式:** ① 子任务有依赖却强行并行 → 拿到过期输入；② 把动态子任务硬塞进静态并行 → 应考虑 [[07 Orchestrator-Workers|Orchestrator-Workers]]；③ 未验证独立性便盲目堆高 $N$；④ 聚合/投票逻辑没有针对性测试。
 - **与兄弟模式:** 与 [[05 Routing|Routing]] 一句话区分——Routing 分类后**只走一条**,Parallelization **多条全跑**再聚合;两者常嵌套(先 Routing 选支路,支路内部再 Sectioning)。延迟/成本系统化优化见 [[35 Agent 成本与延迟优化|Agent 成本与延迟优化]]。
