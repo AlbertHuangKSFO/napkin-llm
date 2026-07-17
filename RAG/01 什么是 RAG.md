@@ -1,18 +1,26 @@
 [[01 什么是 RAG|什么是 RAG]](Retrieval-Augmented Generation,检索增强生成)是一种把**外部知识检索**接到**语言模型生成**之前的范式:回答前先从知识库捞出相关片段,拼进上下文,再让 LLM 据此作答。一句话点本质——**让模型在"开卷"状态下答题**,而不是仅凭训练时压进权重里的记忆硬背。它是整个 [[RAG]] 体系的总入口。
 
 ## 本质:parametric 与 non-parametric 记忆的拼接
-LLM 训练时把知识压成权重,这叫 **parametric memory(参数化记忆)**——容量大但模糊、过时、改不动、说不出处。RAG 额外挂一份 **non-parametric memory(非参数化记忆)**:一个可检索的外部知识库(通常是向量库)。生成时两者协作:参数化记忆提供语言能力与常识,非参数化记忆提供**精确、可更新、可溯源**的事实片段。
+Lewis et al.(2020)把预训练 seq2seq 模型称作 **parametric memory(参数化记忆)**,把由神经检索器访问的 Wikipedia 稠密向量索引称作 **non-parametric memory(非参数化记忆)**。后来的工程实践可用文档库、关键词索引或向量索引实现后者；能否更新、控制权限和附上来源，取决于索引、版本与引用链是否被实现，而非这一术语本身自动保证。
 
 这个 parametric/non-parametric 二分正是 RAG 起源论文的核心提法(见[[#来源]])。理解它就能想清楚 RAG 到底解决什么、和微调差在哪。
 
-### RAG 解决的四类问题
-- **知识截止(knowledge cutoff)**:模型训练有时间下限,2023 训练的模型不知道 2025 的事;RAG 把新文档塞进库即可,无需重训。
-- **幻觉(hallucination)**:无据时模型编造;给定检索证据后,生成被"锚"在真实片段上,幻觉率显著下降(但不归零,见 [[02 Naive RAG 与失败模式|Naive RAG 与失败模式]])。
-- **私有 & 实时数据**:企业内网文档、个人笔记、刚发布的数据——这些从不在公开预训练语料里,只能靠检索喂进去。
-- **可更新、可溯源**:库里换一篇文档,知识立刻更新;答案能附上来源片段,做[[11 生成层：引用归因与忠实度|生成层：引用归因与忠实度]]里的引用归因。
+### RAG 能提供什么——先看前提
+- **训练后知识**:若新文档已完成解析、索引，并在该问题中被召回且放入上下文，模型就有机会依据训练截止日之后的内容回答；端到端更新时延由 ingestion、索引和缓存策略决定。
+- **有证据的回答**:把检索片段交给生成器，为逐条核对与引用归因创造条件；是否更少幻觉必须在指定语料、模型、提示词和指标下评估，见 [[02 Naive RAG 与失败模式|Naive RAG 与失败模式]]。
+- **受控访问的数据**:RAG 可把企业文档或个人笔记作为查询时的证据来源；它不是唯一途径，且仍须在检索前后执行 ACL、租户隔离和敏感数据控制。
+- **可更新、可审计的知识面**:保留文档版本、chunk ID 和检索 trace 时，可以追溯某次答案使用的证据；仅替换库中文档不会自动使所有缓存、索引或既有答案同步更新。
 
-### RAG vs 微调:改知识 vs 改权重
-关键对照:**RAG 改的是外部库,微调改的是模型权重**。要让模型"知道一件新事实",RAG 只需往库里加文档(分钟级、可回滚、可溯源);微调要准备数据、跑训练、还可能灾难性遗忘且学到的事实仍不可溯源。经验法则:**注入/更新知识用 RAG,改变行为风格/输出格式/领域语感用微调**,二者常叠加。更深一层的"RAG 还是干脆把全部文档塞进长上下文"的权衡见 [[19 RAG vs 长上下文 vs Agentic Search|RAG vs 长上下文 vs Agentic Search]]。
+### RAG vs 微调:四条轴，而不是二选一
+
+| 轴 | RAG 的典型取舍 | 微调的典型取舍 | 决策时要验证 |
+|---|---|---|---|
+| 能力 | 让模型在回答时读取外部证据；不能替代稳定的任务行为或推理能力 | 可强化指令遵循、格式和领域行为；不保证精确记住每条新事实 | 同一组任务上的正确性、格式合规和拒答行为 |
+| 知识更新 | 改文档、索引和缓存策略即可改变可检索知识面 | 需准备数据并重新训练或适配权重 | 更新 SLA、回滚路径、过期内容是否仍可被召回 |
+| 成本与延迟 | 有解析、embedding、存储和每次检索/上下文 token 的成本 | 有数据标注、训练和模型托管成本；推理成本取决于部署模型 | 用真实流量测 p50/p95 延迟、单位请求成本和质量 |
+| 可审计性 | 若保存 chunk、版本和 trace，可把回答关联到当次证据 | 通常难把某条输出归因到某一训练样本 | 是否满足引用、复现、访问控制和审计要求 |
+
+实践中常把两者叠加：微调负责所需行为，RAG 负责可变的外部证据；是否值得叠加，仍以离线金标集和线上 trace 验证。更深一层的“RAG 还是把全部文档塞进长上下文”的取舍见 [[19 RAG vs 长上下文 vs Agentic Search|RAG vs 长上下文 vs Agentic Search]]。
 
 ## 机制:离线索引 + 在线检索→生成两阶段
 
@@ -31,125 +39,140 @@ LLM 训练时把知识压成权重,这叫 **parametric memory(参数化记忆)**
 2. **拼装上下文**:把检索片段和原始 Query 按模板拼成 Prompt(`已知以下资料:{chunks}\n问题:{query}`)。
 3. **生成**:LLM 据上下文作答,理想情况下**只用给定证据**,并标注来源做引用归因。
 
+### 小数字手算:检索相似度只是排序信号
+设 query 向量 $q=(1,1)$，两个 chunk 向量分别为 $d_1=(1,0)$、$d_2=(1,1)$。用余弦相似度排序：
+
+$$
+\cos(q,d)=\frac{q\cdot d}{\lVert q\rVert\lVert d\rVert}
+$$
+
+$$
+\cos(q,d_1)=\frac{1}{\sqrt2\cdot1}\approx0.707,\qquad
+\cos(q,d_2)=\frac{2}{\sqrt2\cdot\sqrt2}=1
+$$
+
+所以此 toy 例中 $d_2$ 排在前面。相似度高并不证明它足以支持最终回答；仍要检查证据内容和生成忠实度。
+
 三阶段数据流的纵向视角:
 
 ![[什么是 RAG-三阶段.png]]
 
 ## 可跑最小代码
 ```python
-# 极简 RAG:展示离线索引 + 在线检索→生成两阶段的骨架(伪实现)
-from sentence_transformers import SentenceTransformer
-import numpy as np
+# 可直接运行：只用标准库复现「离线建索引 → top-k 检索 → 带证据回答」的骨架。
+# 这不是生产级 embedding；替换为向量模型前，应保留 source_id / version 等元数据。
+from collections import Counter
+from math import sqrt
+import re
 
-embed = SentenceTransformer("all-MiniLM-L6-v2")
-
-# ---- 离线:索引 ----
 docs = [
-    "RAG 由 Lewis 等人在 2020 年 NeurIPS 论文中提出。",
-    "向量数据库存储片段的稠密向量,支持相似度检索。",
-    "微调改的是模型权重,RAG 改的是外部知识库。",
+    {"id": "lewis-2020", "version": "2020-05-22", "acl": "public",
+     "text": "Lewis 等人在 2020 年提出 RAG。"},
+    {"id": "vector-db", "version": "2026-07-17", "acl": "public",
+     "text": "向量索引可按相似度检索文档片段。"},
+    {"id": "audit", "version": "2026-07-17", "acl": "internal",
+     "text": "可审计回答需要保存所用文档版本和检索记录。"},
 ]
-doc_vecs = embed.encode(docs)  # 每个片段 → 向量,实际写入向量库
 
-# ---- 在线:检索 top-k ----
+def terms(text):
+    return Counter(re.findall(r"[A-Za-z]+|[\u4e00-\u9fff]+", text.lower()))
+
+def cosine(a, b):
+    dot = sum(a[t] * b[t] for t in a.keys() & b.keys())
+    norm = sqrt(sum(v*v for v in a.values()) * sum(v*v for v in b.values()))
+    return dot / norm if norm else 0.0
+
+# ---- 离线：保存可检索表示，同时保留证据 ID ----
+index = [(doc, terms(doc["text"])) for doc in docs]
+
 def retrieve(query, k=2):
-    q = embed.encode([query])[0]
-    sims = doc_vecs @ q / (np.linalg.norm(doc_vecs, axis=1) * np.linalg.norm(q))
-    idx = sims.argsort()[::-1][:k]      # 余弦相似度取 top-k
-    return [docs[i] for i in idx]
+    q = terms(query)
+    ranked = sorted(index, key=lambda pair: cosine(q, pair[1]), reverse=True)
+    return [doc for doc, _ in ranked[:k]]
 
-# ---- 在线:拼上下文 → 生成 ----
-def rag_answer(query, llm):
-    ctx = "\n".join(f"- {c}" for c in retrieve(query))
-    prompt = f"仅根据以下资料回答,并标注依据:\n{ctx}\n\n问题:{query}"
-    return llm(prompt)                  # 交给任意 LLM 客户端
+# ❌ 朴素：静态答案既不检查当前证据，也没有来源、版本或访问条件。
+def naive_answer(query):
+    return f"问题：{query}\n回答：RAG 由 Lewis 等人在 2020 年提出。"
 
-# print(rag_answer("RAG 是谁提出的?", my_llm))
+# ✅ 高效：先检索并计算分数，再按访问范围过滤；只从最高正分证据抽取答案。
+def grounded_answer(query, allowed_acls):
+    q = terms(query)
+    scored = sorted(
+        ((doc, cosine(q, vector)) for doc, vector in index if doc["acl"] in allowed_acls),
+        key=lambda pair: pair[1], reverse=True)
+    evidence = [doc for doc, score in scored if score > 0]
+    if not evidence:
+        return f"问题：{query}\n回答：没有足够已授权的证据，需澄清或检索。"
+    answer = evidence[0]["text"]  # toy 例：抽取最匹配证据，不能补写证据外的内容
+    body = "\n".join(f"[{d['id']}@{d['version']}] {d['text']}" for d in evidence)
+    return f"问题：{query}\n回答：{answer}\n依据：\n{body}"
+
+query = "RAG 是谁提出的？"
+print(naive_answer(query))
+grounded = grounded_answer(query, {"public"})
+assert "Lewis" in grounded and "[lewis-2020@2020-05-22]" in grounded
+print(grounded)
+
+unanswerable = grounded_answer("审计性如何实现？", {"public"})
+assert "没有足够已授权的证据，需澄清或检索。" in unanswerable
+print(unanswerable)
 ```
 
 ## 对比表
 | 维度 | parametric(模型权重) | non-parametric(外部库 / RAG) |
 |---|---|---|
 | 知识载体 | 训练压进权重 | 可检索向量库 / 文档 |
-| 更新知识 | 重训 / 微调 | 改库即可,分钟级 |
-| 时效 | 卡在训练截止 | 实时,加文档即更新 |
-| 可溯源 | 几乎不可 | 可附来源片段 |
-| 私有数据 | 需训练时见过 | 检索时喂入即可 |
+| 更新知识 | 通过训练/适配改变，粒度与时延由训练流程决定 | 通过文档、索引和缓存流程改变，时延由该流程决定 |
+| 时效 | 不直接读取请求时的新文档 | 可在请求时读取已索引的较新文档，但需验证更新链路 |
+| 可溯源 | 通常不能把单次输出映射到一个训练样本 | 可保留来源片段；是否可审计取决于版本与 trace 设计 |
+| 受控数据 | 需审慎决定是否进入训练数据 | 可在受控检索与上下文注入下使用，仍须执行访问控制 |
 | 出错样式 | 幻觉、过时 | 检索不准 / 证据未用好 |
 
 ## 何时用 / 坑
-- **该用**:需要私有/实时/可溯源知识,事实易变,答案要附依据。
-- **别迷信**:RAG 不消除幻觉,只是降低;检索捞错或 LLM 不忠实证据照样错——失败模式与各自解法见 [[02 Naive RAG 与失败模式|Naive RAG 与失败模式]]。
-- **全默认就翻车**:固定分块 + 单稠密检索 + 直接塞 + 直接生成的 Naive 配置极易出问题,真实系统几乎都要进阶到 [[13 Modular RAG|Modular RAG]]。
+- **考虑 RAG**:答案需要引用具体文档、知识变化速度快于可接受的训练周期，或访问控制要求把数据留在受管知识库时；先用代表性 query 测召回、答案质量、权限与成本。
+- **别迷信**:RAG 不保证消除幻觉；检索错误、上下文截断或生成器未忠实使用证据都可能答错——失败模式与验证方法见 [[02 Naive RAG 与失败模式|Naive RAG 与失败模式]]。
+- **从基线开始而非从默认结束**:固定分块、单一稠密检索和直接拼接可以作为对照组；是否需要查询改写、混合检索、重排或 [[13 Modular RAG|Modular RAG]]，要由离线评测和 trace 决定。
 - **与 Agent 的关系**:把"要不要检索、检索几次、怎么改写"交给模型自主决策,就升级成 [[36 Agentic RAG|Agentic RAG]];RAG 也常作为一个工具被 [[15 Function Calling 工具调用|Function Calling 工具调用]] / [[09 ReAct|ReAct]] 循环调用。
 
 ## 工业界实践
 
-真实生产里没人写「极简 RAG」那种手搓循环。一条**典型企业 RAG 数据流**长这样:
+生产系统可按下列组件划分职责；具体产品、版本、候选数和部署形态应记录在配置中，并在自己的语料和流量上验证：
 
 ```
 文档源(S3/SharePoint/Confluence/DB)
   → 解析(Unstructured.io / LlamaParse / Azure Doc Intelligence)
   → 分块([[03 分块策略 Chunking|分块]] + 元数据:source/title/page/acl)
-  → embedding(OpenAI v3 / Cohere v3 / bge-m3,批量调用)
+  → embedding(选定且版本固定的模型，批量调用)
   → 写入向量库(Qdrant/Milvus/pgvector/Pinecone)+ 对象存储原文
   ─────────────── 以上离线,定时/事件触发增量 ───────────────
 查询
   → 改写/扩展([[07 查询变换 Query Transformation|Query Transformation]])
-  → 混合召回([[08 混合检索 Hybrid Search|dense+BM25]],各取 top-50)
-  → 重排([[10 重排序 Reranking|Cohere Rerank / bge-reranker]],精排到 top-5)
+  → 混合召回([[08 混合检索 Hybrid Search|dense+BM25]]，候选数由评测选定)
+  → 重排([[10 重排序 Reranking|重排序]]，保留数由延迟、成本和质量约束选定)
   → 拼 prompt(含引用模板)→ LLM 生成 → 引用归因 + 后处理
   → 全链路 trace 落到可观测平台(LangSmith / Langfuse / Arize Phoenix)
 ```
 
-**框架选型**(三大主流,选一个别混搭):
-- **LangChain / LangGraph**:生态最大、集成最全,LangGraph 适合做有环的 [[13 Modular RAG|Modular RAG]] / [[36 Agentic RAG|Agentic RAG]]。缺点是抽象层厚、版本动荡。
-- **LlamaIndex**:专为「数据→索引→查询」而生,`Node`/`Retriever`/`QueryEngine` 抽象贴 RAG,small-to-big、路由、子问题开箱即用。做纯检索问答最顺手。
-- **Haystack**(deepset):Pipeline 显式声明、组件化清晰,偏工程化/企业部署,可观测性好。
-
-**最小生产骨架**(LangChain 风格,展示真实组件而非手搓):
-
-```python
-# 生产 RAG 不手搓:用框架把「检索器 + 重排 + 生成」串成可观测管线
-from langchain_openai import OpenAIEmbeddings, ChatOpenAI
-from langchain_qdrant import QdrantVectorStore
-from langchain.retrievers import ContextualCompressionRetriever
-from langchain_cohere import CohereRerank
-
-emb = OpenAIEmbeddings(model="text-embedding-3-large")
-store = QdrantVectorStore.from_existing_collection(  # 持久化向量库
-    embedding=emb, collection_name="kb", url="http://qdrant:6333")
-
-base = store.as_retriever(search_kwargs={"k": 50})    # 粗召回 top-50
-reranker = CohereRerank(model="rerank-v3.5", top_n=5)  # 交叉编码器精排到 5
-retriever = ContextualCompressionRetriever(            # 召回→重排两段式
-    base_compressor=reranker, base_retriever=base)
-
-PROMPT = "仅根据资料回答,每句话末尾用 [n] 标注来源编号。无法回答就说不知道。\n资料:\n{ctx}\n问题:{q}"
-def answer(q, llm=ChatOpenAI(model="gpt-4o")):
-    docs = retriever.invoke(q)
-    ctx = "\n".join(f"[{i+1}] {d.page_content}" for i, d in enumerate(docs))
-    return llm.invoke(PROMPT.format(ctx=ctx, q=q))      # 全程被 LangSmith 自动 trace
-```
+**框架不是架构结论**:LangChain/LangGraph、LlamaIndex、Haystack 等都能封装部分组件；选择依据应是当前版本的 API 稳定性、团队可观测性接入、部署要求与升级成本。模块是否需要循环、路由或 agent 调度，应在需求和评测证明后再引入，见 [[13 Modular RAG|Modular RAG]] 与 [[36 Agentic RAG|Agentic RAG]]。
 
 **规模化的三角权衡**——召回率 / 延迟 / 成本,无法同时拉满:
 - 召回率↑:候选 k 加大、上混合检索 + 重排、用更强 embedding。但 k 大→重排慢、塞进 prompt 的 token 多→贵且慢。
-- 延迟↓:HNSW 换更激进的 `efSearch`、重排只跑前 N、embedding 缓存、prompt 缓存(Anthropic/OpenAI 都支持)。
-- 成本↓:向量量化(int8 / 二值化,Qdrant/Milvus 支持,内存降 4–32 倍)、用小 embedding 维度(Matryoshka 裁剪)、便宜的生成模型 + 重排兜底质量。
+- 延迟↓:调整索引搜索参数、重排候选数与缓存策略；应同时报告召回质量，避免把“更快”误当成更好。
+- 成本↓:评估量化、向量维度、模型规格和缓存策略；节省幅度依赖数据、硬件、索引和供应商版本，不能从别处的数字直接外推。
 
-**评估与可观测**:上线前用 [[18 RAG 评估|RAG 评估]] 里的 **Ragas**(faithfulness / context precision / context recall / answer relevancy 四件套,见 [[#来源]])在自建测试集上跑分;线上用 **Langfuse / LangSmith / Arize Phoenix** 抓每条 trace 的检索片段、token、延迟、用户反馈,做离线回归。
+**评估与可观测**:上线前在自建测试集上报告 [[18 RAG 评估|RAG 评估]] 指标及其实现版本。Ragas 原论文提出的是无人工金标也可用的评估框架；关键事实正确性和权限合规仍建议抽样人工标注核验。线上可记录每条 trace 的语料/索引版本、检索片段、token、延迟与用户反馈，再做离线回归。
 
 **踩坑速记**(生产高频):
 - **检索片段不进 prompt 也白搭**:k 设太大被截断、lost-in-the-middle,关键证据排中间被忽视。重排把它顶到首尾。
-- **embedding 换版 = 全量重建索引**,且要灰度。线上悄悄换模型会让旧库与新 query 向量不对齐。
+- **embedding 换版通常需要重建或并行索引**:先检查维度、归一化和距离度量兼容性；以版本化的查询/文档向量和灰度评测确认，不要混用不兼容的表示。
 - **元数据过滤先行**:按 `acl`/`tenant`/`时间` 先过滤再向量搜,既对又快又安全(见 [[16 检索安全与访问控制|检索安全与访问控制]])。
-- **prompt 缓存**:把固定的系统提示 + 高频文档前缀缓存,长 RAG prompt 成本可降一大截。
+- **prompt 缓存**:若所用模型与计费版本支持，固定提示和稳定文档前缀可能降低成本或延迟；以供应商当期文档和实际账单验证命中条件与收益。
 
 ## 面试高频
 
 **Q1:RAG 和微调怎么选?能不能都不用,直接长上下文塞进去?**
-标准答:注入/更新**知识**用 RAG(改库分钟级、可溯源、可回滚),改**行为/风格/格式/领域语感**用微调,二者常叠加。长上下文(把全部文档塞进窗口)适合文档量小、一次性、要全局推理的场景,但 token 成本随长度线性涨、有 lost-in-the-middle、且无法溯源到具体片段。详见 [[19 RAG vs 长上下文 vs Agentic Search|RAG vs 长上下文 vs Agentic Search]]。
-*追问「RAG 能消除幻觉吗?」* → 不能,只降低。检索捞错或 LLM 不忠实证据照样错(陷阱:别说「消除」,会被抓)。
+标准答:按四轴回答：能力、知识更新、成本/延迟、可审计性。RAG 让模型在请求时读取已索引证据，适合需要引用、版本和受控访问的知识面；微调更适合强化行为、格式或领域任务表现；两者可以叠加。长上下文适用于文档规模、时延和成本都经评测可接受且需要全局推理的任务。不要承诺固定更新时延或默认质量优势，详见 [[19 RAG vs 长上下文 vs Agentic Search|RAG vs 长上下文 vs Agentic Search]]。
+*追问「RAG 能消除幻觉吗?」* → 不能保证。只有在指定语料、模型、提示与指标的评测中，才能判断它是否降低了无依据回答；检索错误或 LLM 未忠实使用证据仍会出错。
 
 **Q2:画一下 RAG 的完整数据流,离线和在线各做什么?**
 标准答:离线 = 加载清洗 → 分块 → embedding → 入库(向量+原文+元数据);在线 = query 向量化 → ANN 检索 top-k →(可选 改写/混合/重排)→ 拼 prompt → 生成 → 引用归因。能主动补「生产里 query 侧还有改写、混合、重排三道工序」是加分项。
@@ -157,29 +180,29 @@ def answer(q, llm=ChatOpenAI(model="gpt-4o")):
 **Q3:RAG 起源论文提出了什么核心概念?**
 标准答:Lewis et al. 2020(NeurIPS)首创 "RAG" 术语,提出 **parametric memory(权重里的知识)/ non-parametric memory(可检索外部库)** 二分;原始架构 = **DPR 检索器 + BART 生成器** 端到端微调;两种解码变体 **RAG-Sequence**(整段答案用同一篇文档)/ **RAG-Token**(逐 token 可换文档)。
 
-**Q4:为什么 RAG 比单纯把知识微调进模型更适合「实时/私有」场景?**
-标准答:权重更新慢且不可溯源,微调一条新事实要重训、可能灾难性遗忘、还说不出处;RAG 加一篇文档即生效、可回滚、能附来源。
-*陷阱*:面试官常追问「那为什么不全用 RAG?」→ 因为 RAG 救不了「需要内化的能力/风格/推理模式」,这些得靠微调。
+**Q4:为什么 RAG 常被考虑用于更新快或受控的数据?**
+标准答:因为它能把回答关联到请求时检索到的、带版本的证据，而不用把每次文档更新都写进权重。但“更新快”和“可审计”是系统性质：ingestion、索引、缓存、ACL 和 trace 都要实测与实现。微调仍可能更适合所需行为/格式；不要把二者说成互斥。
+*陷阱*:面试官追问“为什么不全用 RAG?” → 检索质量、上下文预算、延迟和成本都有限；需要评估证据覆盖、引用忠实度和任务行为。
 
 **Q5(陷阱题):给你一个 RAG 系统答错了,你怎么定位是检索的锅还是生成的锅?**
-标准答:先用 [[18 RAG 评估|评估]] 拆两侧——看 **context recall/precision**(检索侧:对的片段进 top-k 了吗)和 **faithfulness**(生成侧:答案有没有忠实于检索到的证据)。检索侧低 → 补混合检索/重排/查询改写;生成侧低 → 上引用约束 / [[12 Self-RAG、CRAG 与 Adaptive RAG|Self-RAG/CRAG]]。别一上来就换 embedding 模型——很多失败在「检到了但没用好」的衔接处(见 [[02 Naive RAG 与失败模式|七个失败点]] FP3/FP4)。
+标准答:先用 [[18 RAG 评估|评估]] 形成诊断假设，再查看同一条样本的语料/索引版本、召回列表、上下文拼装和生成引用。context recall/precision、faithfulness 等分数不能直接证明根因；要用人工标注或带 gold evidence 的测试集验证。确认是召回、拼装还是生成问题后，才 A/B 测混合检索、重排、查询改写或引用约束。
 
 ## 知识拓展
 
 - **RAG 的演进谱系**:Naive([[02 Naive RAG 与失败模式|02]])→ Advanced(检索前后打补丁:[[07 查询变换 Query Transformation|查询变换]]、[[10 重排序 Reranking|重排序]])→ [[13 Modular RAG|Modular RAG]](可重排/循环/路由)→ [[36 Agentic RAG|Agentic RAG]](把「要不要检索、检几次」交模型自主)。这是面试讲「RAG 怎么从玩具到生产」的主线。
-- **检索粒度的前沿**:[[05 进阶索引：Contextual Retrieval、RAPTOR、Late Chunking|Contextual Retrieval(Anthropic 2024)]] 给每个 chunk 注入文档级上下文再 embedding,combined Contextual Embeddings + Contextual BM25 把 top-20 检索失败率降 49%(5.7%→2.9%),叠重排降 67%(见 [[#来源]])。RAPTOR(2024)做层次化摘要树。
+- **检索粒度的前沿**:[[05 进阶索引：Contextual Retrieval、RAPTOR、Late Chunking|Contextual Retrieval(Anthropic，2024-09-19)]] 在每个 chunk 前加入文档级上下文，再为 embedding 与 BM25 建索引。Anthropic 在其代码、小说、论文和科学论文等实验中，用 Gemini Text 004、top-20 和 $1-\mathrm{recall@20}$ 报告组合方案 $5.7\%\to2.9\%$（49%）及加入 Cohere 重排后的 $5.7\%\to1.9\%$（67%）；这是该实验条件下的结果，不是固定收益。RAPTOR(2024)做层次化摘要树。
 - **数学根基**:RAG 检索的「语义相近 = 向量相近」依赖余弦/点积度量,几何直觉见 [[深度学习基础/03 点积、范数与相似度|点积、范数与相似度]];embedding 模型本身是 [[LLM/054 词嵌入层与权重绑定|词嵌入]] 思想在句/段级的延伸。
 - **边界与反模式**:① 数据量小、更新少、要全局推理 → 别硬上 RAG,长上下文更简单(见 [[19 RAG vs 长上下文 vs Agentic Search|19]])。② 把 RAG 当万能补丁——知识根本不在库里(FP1 Missing Content)时,再强的检索器也救不了,那是数据治理问题([[17 检索数据治理|17]])。③ 不评估就堆模块,盲目加重排/多跳只增延迟不增准。
 - **前沿方向(带年份)**:**Self-RAG**(Asai et al. 2023)让模型自评要不要检索、证据够不够;**CRAG**(2024)给检索结果打分并触发纠错检索;**GraphRAG**(微软 2024,见 [[14 GraphRAG 知识图谱检索|14]])用知识图谱做全局性问答;**Agentic / 多跳检索**(IRCoT、FLARE,见 [[09 多跳检索：IRCoT、Self-Ask、FLARE|09]])处理需多步推理的复杂问题。
 
 ## 关键事实
-- 术语 "RAG" 由 Lewis et al. 2020(NeurIPS)首创,该文同时提出 parametric/non-parametric 记忆框架。
-- 原始架构 = **DPR 检索器 + BART 生成器**,端到端微调;两种解码变体:**RAG-Sequence**(整段答案用同一篇检索文档)与 **RAG-Token**(逐 token 可换不同文档)。
-- 三段式演进 Naive → Advanced → Modular 由 Gao et al. 2023 综述总结,见 [[02 Naive RAG 与失败模式|Naive RAG 与失败模式]]。
-- 工程化常见失败点的权威清单见 Barnett et al. 2024(七个失败点)。
+- Lewis et al. 的 RAG 论文 arXiv v1 发布于 **2020-05-22**，NeurIPS 2020 接收；其模型把预训练 seq2seq 的参数记忆与由神经检索器访问的 Wikipedia 稠密向量索引结合。
+- 原始架构 = **DPR 检索器 + BART 生成器**，端到端微调；两种解码变体：**RAG-Sequence**（整段答案用同一篇检索文档）与 **RAG-Token**（逐 token 可换不同文档）。
+- Gao et al. 综述 arXiv v1 发布于 **2023-12-18**，以 Naive / Advanced / Modular 组织 RAG 演进；这是综述的分类框架，不是所有系统必须经历的路线。
+- Ragas 论文 arXiv v1 发布于 **2023-09-26**，提出不依赖人工 ground truth 的多维评估框架；使用哪个指标及其含义要以固定的 Ragas 版本为准。
 
 ## 来源
-- Lewis, P., Perez, E., Piktus, A., et al. (2020). **Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks**. NeurIPS 2020. arXiv:2005.11401. — FAIR 出品,提出 RAG 术语、parametric/non-parametric 记忆、DPR+BART、RAG-Sequence / RAG-Token。
-- Gao, Y., Xiong, Y., Gao, X., et al. (2023). **Retrieval-Augmented Generation for Large Language Models: A Survey**. arXiv:2312.10997. — Naive / Advanced / Modular 三范式综述。
-- Es, S., et al. (2023). **RAGAS: Automated Evaluation of Retrieval Augmented Generation**. arXiv:2309.15217. — faithfulness / answer relevancy / context precision / context recall 四件套,无参考评估。
-- Anthropic (2024). **Introducing Contextual Retrieval**. anthropic.com/news/contextual-retrieval. — Contextual Embeddings + Contextual BM25 将 top-20 检索失败率降 49%,叠重排降 67%。
+- Lewis, P., Perez, E., Piktus, A., et al. (2020). **Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks**. NeurIPS 2020. arXiv:2005.11401. <https://arxiv.org/abs/2005.11401> — 原始 RAG 机制与发布日期。
+- Gao, Y., Xiong, Y., Gao, X., et al. (2023). **Retrieval-Augmented Generation for Large Language Models: A Survey**. arXiv:2312.10997. <https://arxiv.org/abs/2312.10997> — Naive / Advanced / Modular 分类。
+- Es, S., et al. (2023). **Ragas: Automated Evaluation of Retrieval Augmented Generation**. arXiv:2309.15217. <https://arxiv.org/abs/2309.15217> — reference-free 多维评估框架。
+- Anthropic (2024-09-19). **Introducing Contextual Retrieval**. <https://www.anthropic.com/engineering/contextual-retrieval> — 给出了模型、top-k、语料和失败率定义的实验条件。
