@@ -60,8 +60,6 @@ $$H\in\mathbb R^{n\times n},\qquad H_{ij}=\frac{\partial^2 f}{\partial x_i\parti
 
 ![[nn-hessian-3临界点.png]]
 
-![[calc-雅可比Hessian形状.png]]
-
 **雅可比行列式 = 体积/密度的缩放因子**。当 $m=n$(方阵雅可比),$|\det J|$ 是该点局部体积的缩放倍数(见 [[08 行列式与空间缩放|行列式]]);概率密度做变量替换时要除以 $|\det J|$。这是归一化流(normalizing flow)的核心——设计 $\det J$ 易算的变换(如三角雅可比),就能精确算变换后的密度。
 
 **为什么深度学习很少直接用 Hessian**:参数 $n\sim10^6\!-\!10^9$,$H$ 是 $n\times n$,存不下也算不动($O(n^2)$ 存储)。所以实践用只需梯度的一阶方法(SGD、[[39 优化器(Momentum、RMSProp、Adam、AdamW)|Adam]]),或用 Hessian-向量积、对角近似等省事手段。Hessian 主要用于理论分析(收敛性、损失曲面几何、condition number 解释为何要归一化/调学习率)。
