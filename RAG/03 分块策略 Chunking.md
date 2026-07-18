@@ -124,6 +124,8 @@ acl: [finance-read]
 
 ## 面试高频
 
+> 面试地图：[[RAG 面试题库]]
+
 **Q1：为什么不能用一个固定 chunk_size 解决所有 RAG？**
 
 A：chunk_size 同时受对象边界、encoder 输入与检索任务约束。256–512 只能是连续文本的试验起点；例如 BGE-M3 论文明确给出 8192-token 能力。先保住 table/figure/code 等对象边界，再用真实 tokenizer 与标注 query 调参。

@@ -297,6 +297,8 @@ query → │ route(分类) │──simple──→ generate(直接答)
 
 ## 面试高频
 
+> 面试地图：[[RAG 面试题库]]
+
 **Q1:Naive / Advanced / Modular RAG 怎么区分?**
 A:Naive=纯 linear(索引→一次检索→拼 prompt→生成);Advanced=在直线两端加料(pre-retrieval 查询变换/路由 + post-retrieval 重排/压缩),**仍是直线**;Modular=打破直线,抽象成「模块 + 可任意编排的 flow(可条件、可并行、可循环)」,Advanced 是它的 linear 特例。追问「Modular 凭什么更强」→ 答:能表达 conditional/branching/loop 这些**直线表达不了的拓扑**,从而收编自纠错、多跳、自适应路由等方法。
 

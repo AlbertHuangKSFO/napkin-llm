@@ -150,6 +150,8 @@ for idea in diagnostic_hypotheses(report, trace, gold_evidence):
 
 ## 面试高频
 
+> 面试地图：[[RAG 面试题库]]
+
 **Q1:Naive RAG 会有哪些失败模式?分别怎么解?**
 标准答:按检索、拼装和生成列出**候选假设**：召回不足可比较混合检索，分块边界可比较 [[03 分块策略 Chunking|分块策略]]，query-doc 表述差异可测试 [[07 查询变换 Query Transformation|查询变换]]；生成侧可评估 [[11 生成层：引用归因与忠实度|引用归因]]、[[10 重排序 Reranking|重排]]和迭代检索。Barnett FP1–FP7 是三领域案例的诊断分类；先看 trace 和标注再选解法才是高分回答。
 

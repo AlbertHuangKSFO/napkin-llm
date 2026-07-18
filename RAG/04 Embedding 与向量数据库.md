@@ -184,6 +184,8 @@ assert [docs[i] for i in top2] == [
 
 ## 面试高频
 
+> 面试地图：[[RAG 面试题库]]
+
 **Q1:RAG 检索为什么用 bi-encoder 而不是 cross-encoder?**
 标准答:bi-encoder(双塔)让 query/doc **各自独立编码**,doc 向量可**离线预建库**,查询时只编码 query 一次再做 ANN,能 scale 到亿级。cross-encoder 把 (query,doc) 拼一起算,精度高得多但**无法预建库**(每对都现算),只能用在召回后对 top-k 精排([[10 重排序 Reranking|重排]])。标准两段式 = **双塔召回 + 交叉精排**。
 

@@ -96,4 +96,4 @@ print(cited_claims())
 - **OpenAI 于 2025-02 发布 Deep Research**，描述其为多步互联网研究并输出带引用报告；产品随后新增可选择来源、审核计划与进度控制等交互。[发布说明，2025](https://openai.com/index/introducing-deep-research/)｜[使用说明，2026](https://help.openai.com/en/articles/10500283-deep-research)
 - **研究输出要验证而非堆链接**：来源质量、主张覆盖、引用忠实度和日期口径是互相独立的质量维度。
 - **预算是定义的一部分**：来源数、抓取字数、模型层级、迭代轮数、并发和最长运行时间应写入 trace；不设上限会让检索与上下文成本失控，见 [[35 Agent 成本与延迟优化|Agent 成本与延迟优化]]。
-- 需要固定私有语料的问答优先考虑 [[36 Agentic RAG|Agentic RAG]]；跨组织委派研究 agent 时才考虑 [[30 A2A 协议|A2A 协议]]。
+- 需要固定私有语料的问答优先考虑 [[36 Agentic RAG|Agentic RAG]]；跨组织委派研究 agent 时才考虑 [[30 A2A 协议|A2A 协议]]。宏观选型边界见 [[RAG/19 RAG vs 长上下文 vs Agentic Search|RAG、长上下文与 Agentic Search]]。

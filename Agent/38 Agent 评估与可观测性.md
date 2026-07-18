@@ -149,4 +149,4 @@ OpenTelemetry GenAI 语义约定可帮助统一 span 字段，但规范会演进
 - OpenAI 的 [Evaluate agent workflows 文档](https://developers.openai.com/api/docs/guides/agent-evals) 明确将 traces、graders、datasets 与 eval runs 作为 agent 质量改进要素（核验：2026-07-17）。本文将它落实为 task、trial、outcome、grader 和 harness 的可复现契约。
 - [OpenTelemetry Generative AI semantic conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/) 提供跨后端语义约定；其状态会变化，因此生产需要固定已验证的规范/SDK 版本并测试导出（核验：2026-07-17）。
 - OpenAI 在 [Learning to reason with LLMs（2024）](https://openai.com/index/learning-to-reason-with-llms/) 说明不向用户展示原始 CoT，并展示模型生成摘要的边界；这支持“可观测不是收集原始 CoT”的安全工程取向。
-- 可靠性、资源和终态的联合门禁，直接约束 [[35 Agent 成本与延迟优化|成本与延迟]]；检索 agent 则应把证据 ID 和停止原因纳入 trajectory，见 [[36 Agentic RAG|Agentic RAG]]。
+- 可靠性、资源和终态的联合门禁，直接约束 [[35 Agent 成本与延迟优化|成本与延迟]]；检索 agent 则应把证据 ID 和停止原因纳入 trajectory，见 [[36 Agentic RAG|Agentic RAG]]；RAG 专项的证据链、归因与终态验证见 [[RAG/24 RAG 评估：证据链、归因与终态验证|RAG 评估]]；通用检索质量指标与数据集评测见 [[RAG/18 RAG 评估|RAG 评估]]。

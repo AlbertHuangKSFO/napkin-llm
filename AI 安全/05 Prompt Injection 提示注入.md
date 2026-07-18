@@ -152,3 +152,5 @@ for call in privileged_llm.plan(user_q):
 - **基准与框架**:**AgentDojo**(注入防御的事实标准基准)、**InjecAgent**(工具调用注入);OWASP **LLM01** 头号风险;**MITRE ATLAS** 收录「LLM Prompt Injection(Direct/Indirect)」技术与案例。
 - **新前线**:多模态注入——指令藏在**图片**(视觉提示注入)、音频里;agentic 场景下注入与 [[14 Excessive Agency 与 Goal Hijack|目标劫持]]、[[17 Memory 与 Context Poisoning|记忆投毒]](注入写进长期记忆 → 跨会话复发)合流,危害远超单轮。
 - **边界与对抗演化**:检测类防御与攻击是军备竞赛(新分隔符伪造、低资源语言、编码绕过层出);唯一不随攻击演化而失效的是**架构层信条「数据无权改变控制流」**——把它当北极星。关联:[[11 向量与嵌入弱点与 RAG 投毒|RAG 投毒]] 为间接注入开后门、[[08 不安全输出处理|不安全输出]] 接二阶载荷、[[21 Guardrails 与输入输出防护|Guardrails]] 提供过滤层、[[24 沙箱、最小权限与人审闸门|沙箱与人审]] 兜底执行端。
+
+跨域桥接：[[16 检索安全与访问控制|检索安全与访问控制]]先裁掉越权文档；[[19 RAG vs 长上下文 vs Agentic Search|RAG、长上下文与 Agentic Search 选型]]中的长上下文和多轮搜索同样要守住这条数据/指令边界。

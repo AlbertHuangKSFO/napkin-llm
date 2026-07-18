@@ -136,4 +136,4 @@ if __name__ == "__main__":
 - [Lewis et al., 2020，RAG，arXiv:2005.11401](https://arxiv.org/abs/2005.11401) 将参数化模型与非参数记忆结合；它不是“必须有 agent loop”的定义。
 - [Self-RAG，2023，arXiv:2310.11511](https://arxiv.org/abs/2310.11511) 研究按需检索与反思 token；[CRAG，2024，arXiv:2401.15884](https://arxiv.org/abs/2401.15884) 用检索评估器触发不同知识获取动作。这些论文支持“反馈回路”的设计动机，不替代本地评测。
 - 框架不定义 Agentic RAG。比如 [LlamaIndex Workflows 文档](https://developers.llamaindex.ai/python/llamaagents/workflows/) 描述事件/步骤式 workflow；用任何运行时都应记录工具选择、证据 ID、停止原因和 terminal verifier（文档核验：2026-07-17）。
-- 成本与延迟的公式、缓存和路由约束见 [[35 Agent 成本与延迟优化|Agent 成本与延迟优化]]；轨迹与证据的安全审计见 [[38 Agent 评估与可观测性|Agent 评估与可观测性]]。
+- 成本与延迟的公式、缓存和路由约束见 [[35 Agent 成本与延迟优化|Agent 成本与延迟优化]]；轨迹与证据的安全审计见 [[38 Agent 评估与可观测性|Agent 评估与可观测性]]。宏观选型见 [[RAG/19 RAG vs 长上下文 vs Agentic Search|RAG、长上下文与 Agentic Search]]；多模态来源的路由、融合与后期交互见 [[RAG/23 多模态检索编排：路由、融合与后期交互|多模态检索编排]]。

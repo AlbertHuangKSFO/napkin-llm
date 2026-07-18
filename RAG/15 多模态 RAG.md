@@ -105,6 +105,8 @@ parents = expand_then_dedup(rrf(rankings), metadata)
 
 ## 面试高频
 
+> 面试地图：[[RAG 面试题库]]
+
 **Q1：多模态 RAG 是两个方案二选一吗？**
 
 A：不是。文本、表格、页图/crop、OCR/caption 是互补表征；应按 query、语料模态、解析质量和成本路由。统一图文 embedding 与页图多向量都是矩阵中的某些检索器。

@@ -205,6 +205,8 @@ $$s(q,D)=\sum_{i=1}^{|q|}\max_{j\in[1,|D|]} q_i^\top d_j$$
 
 ## 面试高频
 
+> 面试地图：[[RAG 面试题库]]
+
 **Q1:bi-encoder 和 cross-encoder 有什么区别?为什么 RAG 要两阶段?**
 标准答:bi-encoder(双塔)把 query 和 doc **各自独立编码**成向量,事后算余弦,doc 向量可离线预算 + 建 ANN 索引,适合大规模候选召回,但编码时 query/doc 互相看不到、丢 token 级交互;cross-encoder 把 `[query|SEP|doc]` **拼成一条**过 Transformer,token 级交叉注意力直接出相关分,但**每对都得现场过模型、无法预存建索引**,不适合扫全库。所以常分两阶段:可索引召回先优化 Recall@N，再由 cross-encoder 精排；N/k 由 nDCG@k、p95、文本长度与硬件确定。
 - 追问"cross-encoder 为什么不能建索引?":它的分依赖 query 和 doc 的**联合表示**,没有"独立的 doc 向量"可预存;换一个 query,所有分都要重算。
