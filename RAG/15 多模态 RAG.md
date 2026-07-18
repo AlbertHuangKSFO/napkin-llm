@@ -1,161 +1,138 @@
-[[15 多模态 RAG|多模态 RAG]] 的本质是:让检索与生成跨越纯文本,能处理**图像、表格、PDF 版面、音视频**——既能用文字 query 召回一张图/一页扫描件,也能让模型读着图作答。它把 [[01 什么是 RAG|什么是 RAG]] 从「文本进、文本出」扩成「多模态进、多模态推理」。
+[[15 多模态 RAG|多模态 RAG]] 是让 RAG 把同一证据保留为文本、结构、视觉和坐标等多种表征，并在命中后回到原文档对象作答；它不是“统一 embedding”与“整页图像”二选一，而是围绕 query 与语料模态建立可追溯的检索矩阵。
 
-难点不在生成(多模态 LLM 已经能读图),而在**检索**:怎么把异构模态放进一个可被同一 query 召回的空间。主流是两条路线——**统一多模态嵌入**(把图文映射进同一向量空间)与**文档转图直接嵌入**(把整页当图片编码,绕过 OCR/版面解析)。
+## 本质：检索到“哪一块证据”，必须可复现
 
-## 本质:瓶颈在检索,不在生成
+一张图、一个表格行组和它所在 PDF 页可以同时表达同一事实。只保留 OCR 文本会丢版面，只保留页图又可能让精确文字检索昂贵。多模态 RAG 的关键因此不只是让模型看图，而是：**按对象保留互补表征，命中子对象后回到同版本的父对象、页或 crop 取证。**
 
-生成侧已经成熟:GPT-4o、Claude、Gemini 这类**多模态 LLM** 能直接读图、读表、读扫描页作答。真正卡脖子的是**检索**——传统 RAG 的索引是文本 embedding,图、复杂表格、扫描 PDF 喂不进去。
-
-传统做法是「**先转文本再走文本 RAG**」:对图做 caption、对 PDF 做 OCR + 版面解析、对表格做序列化。但这条路在解析环节**信息大量流失**:表格的二维结构、PDF 的图表与排版、图里的细节,转成文本时被压扁或丢掉。于是有了两条绕开「转文本损耗」的路线。
+类比档案馆：OCR 是卡片目录，页图是原始档案照片，caption 是人工索引。三者相互校验而非互相取代；卡片命中“总金额”后，答题人仍要打开原页里对应的表格单元格。
 
 ![[多模态 RAG-两路线.png]]
 
-## 机制:两条检索路线
+## 机制：多表征矩阵，不是一条万能索引
 
-### 路线①:统一多模态嵌入(CLIP 式)
+| 证据表征 | 适合的内容 | 常见检索方式 | 命中后的证据回跳 |
+|---|---|---|---|
+| text block | 段落、标题、代码、原生 PDF 文本 | lexical、dense、rerank | parent section / 原始 range |
+| table object | 表头、行组、单元格、公式/显示值 | header+row-group 文本、结构特征 | 整表、表头、对应 rows/range |
+| page image / crop | 扫描件、版面、图表、字体和空间关系 | 视觉单向量或多向量 late interaction | 原 page 或高分 patch 对应 crop |
+| OCR / caption | 扫描文字、图中标签、图题与附近说明 | 文本索引，必要时与视觉并行 | page/figure + bbox；回看原图确认 |
 
-把图和文用**双塔编码器**映射进**同一个向量空间**,使语义相关的图文向量靠近。代表是 **CLIP**(Radford et al. 2021,见来源):用 4 亿(图,文)对做**对比学习**——同一对的图文向量拉近,不同对推远。训完后:
+CLIP 类双塔将图文编码到同一空间，适合图文互检和自然图像；对页面密集的文档，单向量会压缩大量空间结构。ColPali 论文提出把文档页图直接编码为多向量，再以 late interaction 进行细粒度匹配；论文报告其在 ViDoRe 设定中的结果，并不推出“所有企业 PDF 都该改用页图检索”。[Radford et al., 2021](https://arxiv.org/abs/2103.00020) [Faysse et al., arXiv v6 2025；ICLR 2025](https://arxiv.org/abs/2407.01449)
 
-- 用**文本 query 直接召回图像**(反之亦然),因为它们在同一空间可比距离。
-- 可类比 [[04 Embedding 与向量数据库|Embedding 与向量数据库]] 的单向量索引,只是向量来自多模态编码器;检索机制、ANN 索引完全复用。
+### 先定义摄入边界，才谈模型
 
-弱点:CLIP 把整张图压成**一个单向量**,对**版面密集的文档**(复杂 PDF、表格)信息损失大——一页的所有视觉结构挤进一个向量会失真。它更适合「图文互检」与轻量场景(电商图搜、图文匹配)。
+| 输入 | 规范化边界 | 特别需要验证的内容 |
+|---|---|---|
+| PDF | document → page → text/table/figure；扫描页同时保存 page image 与 OCR | 原生文字或 OCR、双栏阅读顺序、页眉脚、图题、跨页表 |
+| DOCX | document → heading/paragraph/list/table/embedded figure；必要时另存渲染页 | XML 逻辑顺序与渲染页不同；图片中的文字不能假定已被正文抽取 |
+| PPTX | deck → slide → title/body/notes/table/chart/media object | slide 编号、对象坐标与层级、讲者备注是否属于可检索范围 |
+| XLSX | workbook → sheet → table/range → row/cell/chart | sheet 名、公式与显示值、冻结表头、合并格、隐藏 sheet 的权限 |
+| HTML | snapshot → DOM semantic object → linked asset | DOM 顺序、动态内容快照、script/style/导航噪声、资源 URL 与 hash |
 
-### 路线②:文档转图直接嵌入(ColPali 式)
+解析器的输出只是候选结构。对 PDF 抽查阅读顺序，对扫描件记录 OCR 置信度和语言；对 Office 文档保留原对象 ID；对 HTML 固化抓取时间与资源 hash。官方解析器支持哪些格式是版本化能力，不等于某一份文档已经被正确理解。[Docling Supported formats，访问于 2026-07-17](https://docling-project.github.io/docling/usage/supported_formats/)
 
-干脆**把整页文档当一张图片**,用视觉语言模型(VLM)直接编码,**完全绕过 OCR 与版面解析**。代表是 **ColPali**(Faysse et al. 2024,见来源):基于 **PaliGemma**(一个 VLM),对文档页图像产生 embedding,关键是用**后期交互(late interaction)**:
+### 证据层级：子对象召回，父对象扩展，父级去重
 
-- 每页文档不是压成一个向量,而是**一组 patch 向量**(每个图像 patch 一个);query 也是**每个 token 一个向量**。
-- 检索时做 **query token × 文档 patch 的逐一相似度**再汇总打分(这正是 ColBERT 后期交互范式在视觉文档上的搬运)——保留了 query 词与文档局部区域的细粒度交互。
-- 由于 patch 向量**离线预算、建索引**,在线只算 query 侧,兼顾精度与效率。
+每个 child hit 都要指向一个 parent（例如 `table-rowgroup-2 → table-4 → page-12`）。检索阶段可召回细粒度 text block、row group、figure crop 或 OCR span；构造答案上下文时沿 `parent_id` 展开表头、caption、邻近说明或父段；最后按 `(doc_id, version, parent_id)` 去重，避免同一表格的数个子块挤满 top-k。这样既不会因只送一个 cell 而失去表头，也不会因整页重复命中而浪费上下文。
 
-收益:**绕过 OCR/版面解析**,扫描件、复杂 PDF、含图表的页面都能被精准召回;在视觉文档检索基准 **ViDoRe** 上胜过传统文本检索管线。代价:每页存一组 patch 向量,**存储与索引开销远大于单向量**。
+应随对象保存：`doc_id`、`doc_version`、`content_hash`、`parent_id`、`block_id/type`、`page/slide/sheet`、`bbox/range`、`parser_version`、`ocr_model`、`embedding_model` 与 `acl`。命中后以这些字段回原 page/crop 或结构范围；若 hash/version 不匹配，应重新定位而非引用旧证据。
 
-**类比**:CLIP 单向量像把一整页缩成一张**缩略图**——一眼能认出「这页大概讲发票」,但想看清右下角那一格金额就糊了;ColPali 多向量像把页面切成**网格逐格存清晰小图**,query 的每个词去挨格比对,「总金额」能精准对上那一格。缩略图省地但糊,网格清楚但占地——这正是单向量 vs 多向量的取舍。
+### 路由与融合必须看 query 和语料
 
-### 表格与 PDF 解析的难点
-即便走「转文本」路线,**表格**(二维关系、合并单元格、跨页)和 **PDF**(图文混排、多栏、嵌入图表)的解析本身就是硬骨头,直接影响 [[03 分块策略 Chunking|分块策略 Chunking]] 的质量——切错地方,表格被拦腰截断、图与说明文字分家。这也是路线②(直接嵌图)在视觉密集文档上更香的原因:把解析难题整个绕过去。
+先判断 query 需要的证据：精确名称、公式或代码通常优先 text/table；“图中箭头”“扫描发票金额”“本页布局”需要 page image/crop；不确定时并行发往多个可用表征。路由也受语料覆盖率、权限和解析质量影响——没有可靠 OCR 的扫描件不能假装是纯文本语料。
 
-### 生成层
-检索到的图/表/页图像,连同文字一起喂给**多模态 LLM**(GPT-4o / Claude / Gemini)读图作答。这一步天然支持引用归因(指出答案来自哪张图哪一页),与 [[08 混合检索 Hybrid Search|混合检索 Hybrid Search]] 也可组合——文本走 BM25+向量,图走 CLIP/ColPali,多路召回再合并重排。
+不同路由的原始分数尺度不可直接平均。若只有排序，Reciprocal Rank Fusion (RRF) 可免去直接比较原始分数：
 
-## 可跑最小代码
+$$
+s_{\mathrm{RRF}}(d)=\sum_{r\in R}\frac{1}{k+\operatorname{rank}_r(d)}.
+$$
 
-两条路线的检索骨架对照:
+例如取 $k=60$，某 page 在视觉路由第 1、OCR 路由第 3，则得 $1/61+1/63$；只在视觉路由第 2 的 page 得 $1/62$。前者因两路一致而更高。$k$、路由配额和 top-k 都要在版本化验证集调节。若有标注数据，可先按路由校准分数，或用带 query 模态、对象类型、解析置信度、ACL 等特征的 learned ranker；不要把未校准分数做裸均分。[Cormack, Clarke & Buettcher, SIGIR 2009](https://dl.acm.org/doi/10.1145/1571941.1572114)
+
+## 可运行代码：父级去重 + RRF（不是裸均分）
 
 ```python
-# 路线①:CLIP 统一嵌入 —— 文本 query 召回图像
-import torch, clip
-model, preprocess = clip.load("ViT-B/32")
-# 离线:把图库每张图编码成单向量入库
-img_vecs = {p: model.encode_image(preprocess(load(p)).unsqueeze(0)) for p in image_paths}
-# 在线:文本 query 编码到同一空间,取余弦最近邻
-q = model.encode_text(clip.tokenize(["发票上的总金额表格"]))
-hits = topk_cosine(q, img_vecs, k=5)          # 图文同空间,直接可比
+from collections import defaultdict
 
-# 路线②:ColPali 后期交互 —— 整页当图,patch 级打分
-from colpali_engine import ColPali, ColPaliProcessor
-m = ColPali.from_pretrained("vidore/colpali"); proc = ColPaliProcessor(...)
-# 离线:每页 -> 一组 patch 向量(多向量),入库
-page_multi = {pg: m(proc.process_images([render(pg)])) for pg in pdf_pages}
-# 在线:query -> 每 token 一向量;late interaction 逐 token×patch 打分
-q_multi = m(proc.process_queries(["总金额是多少?"]))
-scores = {pg: late_interaction(q_multi, v) for pg, v in page_multi.items()}  # MaxSim 求和
-# 召回的页图像 -> 喂多模态 LLM 读图作答
+def rrf(rankings: dict[str, list[str]], k: int = 60) -> dict[str, float]:
+    """rankings 的 value 按相关性从高到低排列，返回 object_id 的融合分。"""
+    score = defaultdict(float)
+    for route, object_ids in rankings.items():
+        for rank, object_id in enumerate(object_ids, start=1):
+            score[object_id] += 1 / (k + rank)
+    return dict(score)
+
+def expand_then_dedup(object_scores, metadata, limit=5):
+    """child 命中后扩到 parent，并按同一文档版本的父对象去重。"""
+    parents = {}
+    for child_id, score in object_scores.items():
+        m = metadata[child_id]
+        key = (m["doc_id"], m["doc_version"], m["parent_id"])
+        parents[key] = max(parents.get(key, 0.0), score)
+    return sorted(parents, key=parents.get, reverse=True)[:limit]
+
+# ❌ 不同模型的余弦/MaxSim/OCR 分数尺度不同，直接平均没有语义
+# final = (text_score + page_score + ocr_score) / 3
+# ✅ 每路先给排名，再 RRF；命中子对象后只保留一个父对象进入上下文
+rankings = {
+    "text": ["caption-7", "table-4-rowgroup-2"],
+    "page_image": ["figure-7-crop-2", "table-4-rowgroup-2"],
+    "ocr": ["table-4-rowgroup-2"],
+}
+metadata = {
+    "caption-7": {"doc_id": "r1", "doc_version": "v3", "parent_id": "figure-7"},
+    "figure-7-crop-2": {"doc_id": "r1", "doc_version": "v3", "parent_id": "figure-7"},
+    "table-4-rowgroup-2": {"doc_id": "r1", "doc_version": "v3", "parent_id": "table-4"},
+}
+parents = expand_then_dedup(rrf(rankings), metadata)
 ```
 
-要点:① 路线①是**单向量**、复用普通向量库,图文可互查但版面损失大;② 路线②是**多向量 + late interaction**,绕过 OCR、保住版面,代价是存储膨胀。
+## 评估：分开测解析、检索、定位、答案与权限
 
-## 对比表
+端到端回答好坏不能掩盖上游错误。每次 parser、OCR、embedding、ACL 或文档版本变更都应跑同一批带版本和权限标签的样本。
 
-| 维度 | 路线① 统一嵌入(CLIP) | 路线② 文档转图(ColPali) | 传统「转文本」 |
-|---|---|---|---|
-| 是否要 OCR/解析 | 图无需,文档要 | **完全不要** | 重度依赖,易丢信息 |
-| 向量形态 | 单向量 | 多向量(patch)+ 后期交互 | 单向量(文本) |
-| 强项 | 图文互检、轻量 | **视觉密集文档**(扫描件、复杂 PDF) | 纯文本/简单文档 |
-| 版面/表格保真 | 弱(压成一向量) | 强 | 取决于解析器,常弱 |
-| 存储/索引开销 | 低 | **高**(每页多向量) | 低 |
+| 层 | 要回答的问题 | 例子 |
+|---|---|---|
+| 解析 | 对象、阅读顺序、表头与 OCR 是否正确？ | 双栏顺序、跨页表、caption-figure 绑定、OCR 错词 |
+| 检索 | 正确 child/parent 是否进入候选？ | text、table、page image、crop 各路的证据覆盖 |
+| 定位 | 是否回到了正确页/slide/sheet 与 bbox/range？ | 引用框是否落在真实表格行或图题 |
+| 答案 | 答案是否正确、可由回跳证据支持、引用是否可打开？ | 人工或任务标注的正确性/忠实度检查 |
+| ACL / 撤权 | 无权或已撤销版本会不会被检索、缓存或引用？ | 拒绝案例为 0、旧 hash 不可再返回、撤权传播时间 |
 
-## 何时用 / 坑
+⚠️ **“页图检索绕过 OCR” vs “不需要解析”**：视觉检索可减少对 OCR 的依赖，但 citation、crop、权限和回答时的可读上下文仍需要对象与定位链。
 
-**该上多模态 RAG**:语料含大量图、表、扫描件、图文混排 PDF,且这些视觉信息是答案所在。视觉密集文档优先**路线②(ColPali)**;以图搜图/图文互检场景用**路线①(CLIP)**。
-
-**不该上**:纯文本语料(老老实实文本 RAG 更快更便宜),或图像只是装饰、不承载答案。
-
-**坑**:
-- **解析损耗**:走「转文本」路线时,表格/版面在 OCR+解析阶段丢信息,是质量天花板——这也是路线②存在的理由。
-- **存储爆炸**:ColPali 每页存一组 patch 向量,语料大时索引体积与检索开销显著上升,要算清成本。
-- **模态对齐弱**:CLIP 这类通用模型在专业领域(医学影像、工程图)上对齐差,可能要领域微调。
-- **威胁面扩大**(必读):多模态打开新攻击面——**对抗图像**(肉眼正常但被加扰动以误导召回或生成)、**跨模态注入**(把恶意指令藏进图片文字/元数据,被多模态 LLM 当指令执行)。这是 [[16 检索安全与访问控制|检索安全与访问控制]] 里间接 prompt injection 的多模态版,防线同样是来源验证与输入消毒。
-- **多模态 LLM 读图幻觉**:模型可能「看见」图里不存在的东西,生成层仍需 [[11 生成层：引用归因与忠实度|生成层：引用归因与忠实度]] 的约束。
-
-## 关键事实
-
-- 多模态 RAG 的瓶颈在**检索**(怎么把异构模态放进可召回空间),不在生成(多模态 LLM 已能读图)。
-- **路线①统一嵌入**:CLIP 把图文映射进**同一向量空间**(对比学习,4 亿图文对),支持文图互检;弱点是单向量,版面密集文档损失大。
-- **路线②文档转图**:ColPali 把**整页当图片**用 VLM 编码,**后期交互(late interaction)+ 多向量**,绕过 OCR/版面解析,视觉文档检索(ViDoRe)胜过文本管线;代价是存储膨胀。
-- 表格/PDF **解析**本身是难点,直接影响 [[03 分块策略 Chunking|分块策略 Chunking]];路线②的价值就在绕开它。
-- 生成交给**多模态 LLM**(GPT-4o / Claude / Gemini)读图作答。
-- **威胁面扩大**:对抗图像、跨模态注入——属 [[16 检索安全与访问控制|检索安全与访问控制]] 范畴。
-- CLIP:Radford et al. 2021,arXiv:2103.00020;ColPali:Faysse et al. 2024,arXiv:2407.01449(基于 PaliGemma)。
-
-## 工业界实践
-
-多模态 RAG 在 2025 的生产主线是**「文档转图直接嵌入」(ColPali 范式)吃掉了企业 PDF/扫描件检索**,因为它绕开了 OCR/版面解析这个最脆的环节。CLIP 范式则守住「图文互检」的轻量场景。
-
-### 主流工具与定位
-
-- **ColPali / ColQwen2**(`vidore` 系列,illuin-tech):视觉文档检索的事实标准。**ColQwen2** 基于 **Qwen2-VL 2B**,用与 ColPali 同样的数据和训练策略,**nDCG@5 比 ColPali 高约 +5.3**——生产里 ColQwen2/ColQwen2.5 已基本取代初代 ColPali。**定位:扫描件、复杂 PDF、图表密集页的高精度检索,绕过 OCR**。
-- **ViDoRe 基准**:ColPali 论文提出的视觉文档检索评测。2025 已演进到 **ViDoRe V2**(arXiv:2505.17166,更难、更贴近真实企业文档)乃至 **V3**(企业级多模态检索金标准)。面试/选型时提 V2/V3 显示跟进了进展。
-- **CLIP / SigLIP / OpenCLIP**:统一图文嵌入,单向量、复用普通向量库。**定位:以图搜图、图文互检、电商图搜等轻量场景**;SigLIP(用 sigmoid loss)在很多检索任务上优于原版 CLIP。
-- **多向量索引基础设施**:ColPali 每页存一组 patch 向量,**存储/检索开销远大于单向量**。生产用 **PLAID / Vespa / Qdrant 多向量 / Weaviate** 等支持 late-interaction 或多向量的引擎,配合**二值化/池化压缩 patch 向量**降本。
-- **解析栈(走转文本路线时)**:`unstructured`、LayoutLMv3、Azure Document Intelligence、`docling`、表格抽取(Table Transformer)——但这条路在解析环节信息易流失,是路线②存在的理由。
-- **生成侧**:GPT-4o / Claude / Gemini 等多模态 LLM 直接读召回的页图像作答,天然支持「答案来自哪页哪图」的引用归因。
-
-### 典型生产架构:混合多路召回
-
-```
-                    ┌─ 文本块 ─→ BM25 + 向量(文本)──┐
-query(文本)─┬──────┼─ 图/页图像 ─→ ColQwen2 多向量 ──┼─→ 融合/重排 → 多模态 LLM 读图作答
-            │      └─ 自然图像 ─→ CLIP/SigLIP 单向量 ─┘        (引用归因到页/图)
-            └─(可选)query 也可是图 → 以图搜图
-```
-
-要点:**别一刀切**——纯文本块走 [[08 混合检索 Hybrid Search|混合检索 Hybrid Search]](BM25+向量),视觉密集页走 ColQwen2,自然图走 CLIP,多路召回后统一重排([[10 重排序 Reranking|重排序 Reranking]])再喂多模态 LLM。
-
-### 规模化与踩坑
-
-- **存储是头号成本**:ColPali 每页~1000 个 patch 向量,百万页语料索引体积惊人。生产做法:**池化/降维/二值化 patch 向量**、对低价值页降采样、用支持磁盘的多向量引擎(避免全量进内存)。
-- **延迟**:late interaction 在线要算 query token × 文档 patch 的 MaxSim,候选多时慢。常用**两段式**:先用单向量(CLIP/池化后的 ColPali)粗召,再对 top-N 做完整 late-interaction 精排。
-- **领域对齐**:CLIP/ColPali 在专业域(医学影像、工程图、金融报表)对齐差,**需领域微调**;ColPali 端到端可训,微调比 OCR 管线更直接。
-- **评估**:用 ViDoRe V2/V3 等视觉检索基准 + 端到端答案质量;别只看文本检索指标。
-- **安全(必读)**:多模态打开新攻击面——**对抗图像**(肉眼正常、被加扰动以误导召回或生成)、**跨模态注入**(把恶意指令藏进图片里的文字/EXIF 元数据,被多模态 LLM 当指令执行)。这是 [[16 检索安全与访问控制|检索安全与访问控制]] 间接 prompt injection 的多模态版,传统文本注入检测覆盖不到,详见 [[AI 安全/11 向量与嵌入弱点与 RAG 投毒]]。
+⚠️ **“统一向量空间” vs “统一分数尺度”**：前者让某模型内的图文可比较；跨模型、跨路由分数仍要 RRF、校准或 learned fusion。
 
 ## 面试高频
 
-**Q1:多模态 RAG 的真正瓶颈在哪?**
-A:在**检索**,不在生成。生成侧多模态 LLM(GPT-4o/Claude/Gemini)早就能读图读表读扫描页;卡脖子的是怎么把图、复杂表、扫描 PDF 这些异构模态放进一个**能被同一 query 召回的空间**。传统「先转文本再走文本 RAG」在 OCR/版面解析环节**信息大量流失**(表格二维结构被压扁、图表与排版丢失),才催生了绕开转文本的两条路线。
+**Q1：多模态 RAG 是两个方案二选一吗？**
 
-**Q2:统一嵌入(CLIP)和文档转图(ColPali)两条路线的核心区别?**
-A:**CLIP**用双塔 + 对比学习把图文映射进**同一向量空间**(4 亿图文对),**单向量**,复用普通向量库,图文可互检;弱点是整图压成一向量,**版面密集文档损失大**。**ColPali**把**整页当图片**用 VLM 编码,产出**一组 patch 向量**,query 每 token 一向量,用 **late interaction(MaxSim 求和)**做 patch 级细粒度匹配,**绕过 OCR/版面解析**,视觉文档检索胜过文本管线;代价是**存储膨胀**(每页多向量)。一句话:CLIP 轻量但糙,ColPali 精准但重。
+A：不是。文本、表格、页图/crop、OCR/caption 是互补表征；应按 query、语料模态、解析质量和成本路由。统一图文 embedding 与页图多向量都是矩阵中的某些检索器。
 
-**Q3:什么是 late interaction?为什么 ColPali 要用它?**
-A:**后期交互**源自 ColBERT——不把 query 和文档各压成一个向量算余弦(early/单向量),而是**保留 query 每个 token、文档每个 patch 的向量,在线逐一算相似度再 MaxSim 求和**。好处:保住 query 词与文档**局部区域**的细粒度交互(「总金额」这个词能精准对上表格里那一格),又因 patch 向量可离线预算、在线只算 query 侧,兼顾精度和效率。代价是多向量存储和在线匹配开销大。
+**Q2：为什么 child hit 后还要 parent 扩展和去重？**
 
-**Q4:为什么 ColPali 能绕过 OCR 还更准?**
-A:OCR + 版面解析是**有损中间步**——切错地方表格被截断、图与说明文字分家(直接拖垮 [[03 分块策略 Chunking|分块策略 Chunking]])。ColPali 把「整页视觉信息」整个交给 VLM,**把解析难题绕过去**,版面、表格、图表的视觉结构原样进编码器,所以在 ViDoRe 上胜过传统文本管线。
+A：child 提供精确召回，parent 恢复表头、caption 或父段；按同文档版本的 parent 去重，避免同一对象的多条子块占满上下文。所有证据再按 page/slide/sheet 与 bbox/range 回原始对象。
 
-**Q5(陷阱):多模态 RAG 引入了哪些新安全风险?**
-A:**威胁面扩大**——① 对抗图像(扰动误导召回/生成);② 跨模态注入(指令藏图片文字/元数据,被多模态 LLM 当指令执行);③ 多模态 LLM 读图幻觉(「看见」图里没有的东西)。前两者是 RAG 间接注入的多模态版,传统文本检测覆盖不到;第三者仍需 [[11 生成层：引用归因与忠实度|生成层：引用归因与忠实度]] 的约束。陷阱:很多人只想到「召回更全」的好处,忽略攻击面同步扩大。
+**Q3：为什么不能把各路分数直接平均？**
 
-## 知识拓展
+A：余弦、late-interaction 和 OCR/解析置信度的尺度含义不同。可先融合排名（RRF），或在版本化标注集上校准/学习融合；路由和权重同样应由 query、对象类型及语料验证决定。
 
-- **路线选择决策**:视觉密集文档(扫描件、复杂 PDF、图表页)→ **ColQwen2**(ColPali 升级版);以图搜图/图文互检/电商 → **CLIP/SigLIP**;纯文本或图仅装饰 → **别上多模态**,老实文本 RAG 更快更便宜。生产常**两者并存**,按模态分流。
-- **前沿(带年份)**:**ColQwen2**(2024,基于 Qwen2-VL,+5.3 nDCG@5)→ **ColQwen2.5 / ColModernVBERT** 等后续视觉检索器;**ViDoRe V2**(2025,arXiv:2505.17166)与 **V3** 抬高评测门槛;**SigLIP / SigLIP2**(Google)在图文对齐上超越原版 CLIP。趋势:视觉检索器越来越像「生成 VLM 的检索孪生」——生成基准强,检索指标也强。
-- **反模式**:① 「无脑 ColPali 全量」——纯文本也走多向量,存储白白爆炸;② 「只评文本指标」——用召回@k 评视觉检索,看不出版面保真度;③ 「忽视跨模态注入」——只对文本块做注入检测,图片里藏的指令直接漏过。
-- **与其他笔记的连接**:多模态把 [[01 什么是 RAG|什么是 RAG]] 从「文本进文本出」扩成「多模态进、多模态推理」;检索机制复用 [[04 Embedding 与向量数据库|Embedding 与向量数据库]] 的 ANN(只是向量来自多模态编码器或多向量);可与 [[08 混合检索 Hybrid Search|混合检索 Hybrid Search]] 组合多路召回;安全面归 [[16 检索安全与访问控制|检索安全与访问控制]]。
+**Q4：多模态 RAG 的安全评估为什么要有撤权？**
+
+A：索引、父对象缓存、页图和 crop 可能各自保留证据。ACL 过滤只在答案端做不够；必须验证无权对象与旧版本不会在任一路由被召回或被引用。
+
+## 关键事实
+
+- 多模态 RAG 的单位应是可回跳的证据对象，而不是把所有文件压成同一种文本或图像。
+- PDF、DOCX、PPTX、XLSX、HTML 的摄入边界不同；PDF 的阅读顺序和扫描 OCR 必须在切块前抽样验证。
+- 至少保留 text、table、page image/crop、OCR/caption 等互补表征，并用统一 parent/版本/坐标链关联。
+- 命中 child 后扩展 parent，再按 `(doc_id, version, parent_id)` 去重；回答必须回原 page/crop 或结构 range。
+- 融合按 query/语料模态路由；RRF、校准或 learned fusion 比未校准的裸均分更稳妥。
+- 评估至少区分解析、检索、定位、答案、ACL 与撤权；模型或解析版本变化应触发回归测试。
 
 ## 来源
 
-- Alec Radford, Jong Wook Kim, Chris Hallacy, et al. 《Learning Transferable Visual Models From Natural Language Supervision》(CLIP). arXiv:2103.00020 (2021). 对比学习对齐图文到同一空间,零样本迁移,多模态嵌入奠基。
-- Manuel Faysse, Hugues Sibille, Tony Wu, et al. 《ColPali: Efficient Document Retrieval with Vision Language Models》. arXiv:2407.01449 (2024). 基于 PaliGemma 的视觉文档检索,后期交互 + 多向量,绕过 OCR,提出 ViDoRe 基准。
+- Alec Radford et al. [《Learning Transferable Visual Models From Natural Language Supervision》](https://arxiv.org/abs/2103.00020), 2021。CLIP 的图文对比学习与共享表示空间。
+- Manuel Faysse et al. [《ColPali: Efficient Document Retrieval with Vision Language Models》](https://arxiv.org/abs/2407.01449), arXiv v6，2025-02-28；ICLR 2025。页图多向量、late interaction 与 ViDoRe。
+- [Docling Supported formats](https://docling-project.github.io/docling/usage/supported_formats/)，官方文档，访问于 2026-07-17。格式能力是版本化信息；应单独验收解析结果。
+- Gordon V. Cormack、Charles L. A. Clarke、Stefan Buettcher, [《Reciprocal Rank Fusion Outperforms Condorcet and Individual Rank Learning Methods》](https://cormack.uwaterloo.ca/cormacksigir09-rrf.pdf), SIGIR 2009。RRF 融合公式。

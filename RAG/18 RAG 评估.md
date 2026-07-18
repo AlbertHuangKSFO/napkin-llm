@@ -1,186 +1,229 @@
-[[18 RAG 评估|RAG 评估]]是给一个 [[01 什么是 RAG|RAG]] 系统打分的方法学,难点在于它**两段串联**(检索→生成)且**常无标准答案**:错了到底是检索捞错了片段、还是 LLM 拿到对片段却乱编?评估的第一要务就是**把这两段拆开各自归因**,而不是只看一个端到端的"答对没"。它是 [[20 RAG 开源生态全景|生态]]里最容易被跳过、却最该先建的一层。
+[[18 RAG 评估|RAG 评估]]是给一个 [[01 什么是 RAG|RAG]] 系统建立**可归因、可复现、可追责**标尺的方法：同一条答复既可能是没捞到证据，也可能是拿到证据后仍答错，还可能是引用、工具执行或业务状态出了问题。只报一个“回答正确率”会把这些故障揉成黑盒；评估应把它拆成五条独立证据线，并把每次判定可回放地记录下来。
 
-## 本质:两段串联,必须分段归因
-一次 RAG 回答的质量是两个独立子系统的乘积:**检索质量** × **生成质量**。只看最终答案对错,无法区分两类完全不同的病:
-- **检索病**:相关片段根本没被捞回来(召回低),或捞回一堆噪声(精度低)。这时再强的 LLM 也巧妇难为无米之炊。
-- **生成病**:片段明明捞对了,LLM 却没用好——要么忽略证据靠 [[01 什么是 RAG|参数记忆]]蒙、要么在证据外**编造**(忠实度低)、要么答非所问。
+## 本质：从两段归因升级为五条证据线
 
-把这两轴画成二维平面,任何 RAG 系统都落在某个象限,对应不同的修法:
+一次普通问答至少有检索→生成两段；一旦答案带引用、会调工具或会改变业务状态，端到端质量还取决于“引用是否真的支撑 claim”与“动作是否真的达成”。因此评估顺序不是只看一个总分，而是以下五线并排：
+
+| 证据线 | 固定输入 | 核心问题 | 典型指标 | 不可替代的原因 |
+|---|---|---|---|---|
+| ① gold-evidence retrieval | query + 人工 gold 文档/段落 ID | 该捞回的证据是否在 top-k？ | Recall@k、MRR、nDCG、ID precision | 不让生成器替检索器背锅 |
+| ② oracle-context generation | query + **gold evidence** + reference | 若证据完美，生成器能否正确、完整地使用它？ | correctness、faithfulness、拒答正确率 | 隔离生成能力上限 |
+| ③ retrieved-context generation | query + **真实召回上下文** + reference | 真实管线最后答得怎样？ | faithfulness、response relevancy、correctness | 衡量用户真正看到的体验 |
+| ④ citation attribution | answer claims + citation + 对应文档版本 | 每个 claim 的引文是否存在、可定位、可蕴含？ | citation precision / recall、claim entailment | “有链接”不等于“被链接支撑” |
+| ⑤ tool / business terminal state | 多步 trace + 预期终态/receipt | 工具、授权和最终业务结果是否正确？ | ToolCallAccuracy/F1、终态成功率、补偿率 | 文本答对不代表订单、审批或退款已正确完成 |
 
 ![[RAG 评估-二维.png]]
 
-诊断逻辑:**先看检索指标**,检索不达标就别看生成(脏输入进、脏输出出);检索达标后生成仍差,才去查忠实度/相关性。这套"分段归因"正是 [[12 Self-RAG、CRAG 与 Adaptive RAG|Self-RAG、CRAG 与 Adaptive RAG]] 里 critic / 评分器在线上做的同一件事,只是评估是离线批量、Self-RAG 是在线单条。
+前两线给出“检索器”和“生成器”的单独诊断，第三线是端到端现实；后两线把 [[11 生成层：引用归因与忠实度|引用归因与忠实度]] 与 [[38 Agent 评估与可观测性|Agent 轨迹评估]] 接回同一个验收面。[[12 Self-RAG、CRAG 与 Adaptive RAG|Self-RAG、CRAG 与 Adaptive RAG]] 的在线 critic 也可消费这些信号，但离线基准不能被在线自评取代。
+
+**生活类比。**像医院接诊：先核验化验单是否拿对（gold retrieval），再看医生拿到正确化验单时能否做对判断（oracle generation），最后核对真实材料、病历引用和处方是否实际执行。只看“病人好没好”无法告诉你该修取样、诊断、归档还是执行环节。
 
 ## 机制
 
-### 检索指标(retrieval metrics):有 ground truth 时
-当你有"哪些文档/片段是该被检索的"标注(gold passages),用经典 IR 指标:
-- **Hit Rate / Recall@k**:top-k 里是否命中至少一个(或全部)相关片段。RAG 最该盯的是 **recall**——漏掉证据是不可逆的,后面再强也救不回。
-- **MRR(Mean Reciprocal Rank)**:第一个正确片段排名的倒数均值,在意"对的有没有排前面"。
-- **nDCG(normalized Discounted Cumulative Gain)**:对排序位置加权打折,既看相关性分级又看位置,是排序质量的金标准。和 [[10 重排序 Reranking|重排序 Reranking]] 强相关——重排的收益主要体现在 nDCG/MRR 上。
-- **Context Precision / Context Recall**:Ragas 把它们做成无需逐文档标注的版本(见下)。
+### 检索与生成各量什么
 
-### 生成指标(generation metrics)
-- **Faithfulness(忠实度/groundedness)**:答案的每个论断是否都被检索上下文支撑——这是 RAG **最核心**的安全指标,直接对应 [[11 生成层：引用归因与忠实度|生成层：引用归因与忠实度]] 里"不许在证据外编"。
-- **Answer Relevancy(答案相关性)**:答案是否切题(不跑题、不啰嗦冗余),与 ground truth 无关,只看答案 vs 问题。
-- **Answer Correctness / Accuracy**:答案与标准答案的事实一致度,**需要 ground truth**,接近传统 QA 的 EM/F1 但用语义判定。
+- **gold retrieval**：`Recall@k = 命中的 gold evidence 数 / gold evidence 总数`；MRR 看第一个正确证据是否靠前，nDCG 对分级相关性和位置同时打折。它只依赖 query 与 gold evidence，**不依赖 response/reference**。
+- **oracle generation**：把 gold evidence 而非召回结果喂给同一生成器。若此线仍低，先修 prompt、模型、拒答策略或上下文压缩；不要先调 embedding。
+- **real retrieved generation**：对真实 `retrieved_contexts` 打 groundedness / faithfulness、response relevancy 和 reference correctness。它依赖的字段随指标不同，不能把“所有指标都 reference-free”当作事实。
+- **Context Precision 与 Context Utilization 不可混写**：v0.4 collections `ContextPrecision` 将每个 retrieved context 同 **reference** 比较，是 reference-based 的“片段是否有用且靠前”；没有 reference 时可用 `ContextUtilization`，它同 **response** 比较上下文的使用情况，是 response-based 的代理指标，不能证明外部真值或 gold evidence。
 
-### Ragas:四指标如何无标注地算
-[[20 RAG 开源生态全景|Ragas]](`explodinggradients/ragas`)的卖点是**reference-free**——多数指标不需要人写标准答案,靠 LLM 拆解+判定:
-- **Faithfulness**:LLM 把答案拆成一组**原子论断(claims)**,逐条问"检索上下文支持/矛盾/沉默?",得分 = 被支持论断的比例。
+**Faithfulness 不等于 Correctness。**faithfulness 问“答案中的 claim 能否由**当前上下文**推出”；correctness 问“答案是否符合**外部真值/reference**”。上下文本身过期时，回答“严格引用了过期文档”可以 faithful 却 incorrect；模型凭参数记忆答对却未被上下文支撑，可以 correct 却 unfaithful。二者必须同时报，且 oracle / retrieved 两个生成条件都要分别报。
 
-**Faithfulness 手算**。答案「RAG 由 Lewis 等人 2020 年提出,**首次发表在 ICML**」,检索上下文只说「RAG 由 Lewis et al. 2020 NeurIPS 论文提出」。LLM 拆出 2 条原子 claim:① 「Lewis 等人 2020 年提出 RAG」——上下文**支持**(✓);② 「首次发表在 ICML」——上下文说的是 NeurIPS,**矛盾**(✗)。于是
-> $$\text{Faithfulness} = \frac{\text{被支持的 claim 数}}{\text{总 claim 数}} = \frac{1}{2} = 0.5$$
-读法:0.5 意味着**一半内容在证据外编造**(这里把 NeurIPS 错写成 ICML)。把答案拆到原子粒度,正是为了让「编了一句」也能被定位扣分,而不是整段一个模糊的「对/错」。
-- **Answer Relevancy(新版文档称 Response Relevancy)**:让 LLM 由答案**反推可能的问题**,与原问题算嵌入相似度——答案越切题,反推出的问题越像原问题。
-- **Context Precision**:检索回来的片段里,相关片段是否排在前面(信噪+排序)。
-- **Context Recall**:把标准答案拆成句子,看每句能否从检索上下文推出——衡量证据**够不够全**(这一项需要 reference)。
+**小手算。**reference 有 4 个关键 claim，真实召回上下文只支持其中 3 个；答案有 3 个 claim，其中 2 个被其引用上下文支持，另一个错误地把 NeurIPS 写成 ICML：
 
-> 核验提示:Ragas 官方近版(0.2+)对指标做了**重命名与扩充**——"answer relevancy"在文档里多写作 **Response Relevancy**,"context relevance"拆成了 `LLMContextPrecisionWithoutReference` 等带/不带 reference 的变体,并新增 Noise Sensitivity、Context Entities Recall、Response Groundedness、多模态忠实度等。落地时**以你装的版本文档为准**,别照搬旧四指标名。
+$$
+\text{Context Recall}=\frac{3}{4}=0.75,\qquad
+\text{Faithfulness}=\frac{2}{3}\approx0.67
+$$
 
-### LLM-as-judge:机制与坑
-上面几乎所有"语义级"判定底层都是 **LLM-as-judge**:用一个强 LLM 当裁判给答案打分/打标签。它便宜、可扩展、能处理开放式答案,但坑很密:
-- **位置偏置 / 冗长偏置**:裁判偏爱排前面的、更长的答案。
-- **自我偏好(self-preference)**:裁判倾向给"和自己风格像"的答案高分,用同一个模型既生成又当裁判会系统性虚高。
-- **不稳定 / 不可复现**:同一输入多次打分会飘,temperature 要压到 0 并多次取众数。
-- **分数无校准**:LLM 给的 1–5 分不是线性的,跨数据集不可比;最好转成二元判定 + 人工抽样核对。
-- **必须有人工锚点**:任何 LLM-judge 流水线都要留一小撮人工标注做校准(ARES 的 PPI 就是为此),否则你在用一个没刻度的尺子。这与 [[38 Agent 评估与可观测性|Agent 评估与可观测性]] 里对 agent 轨迹做 LLM 评判面临的是同一组陷阱。
+它说明既有“证据漏召回”，也有“生成越过证据”；不能只用 0.67 断言检索无罪。
 
-### 评估框架生态
-- **Ragas**(`explodinggradients/ragas`)——RAG 评估事实标准,reference-free 指标 + 合成测试集生成,集成 LlamaIndex/LangChain。
-- **TruLens**(`truera/trulens`)——提出 **RAG Triad**(context relevance / groundedness / answer relevance)三角,反馈函数 + 追踪;TruEra 2024 年 5 月被 Snowflake 收购。
-- **DeepEval**(`confident-ai/deepeval`)——pytest 原生、最适合塞进 CI 的评估框架,指标库最广(含 G-Eval 自定义),延伸到 agent/chatbot/多模态。
-- **ARES**(`stanford-futuredata/ARES`,Saad-Falcon et al. 2023,arXiv:2311.09476)——用合成数据微调**轻量 LM 裁判** + 少量人工标注做 **PPI(预测驱动推断)**纠偏,跨域仍稳。
-- **Phoenix**(`Arize-ai/phoenix`)——基于 OpenTelemetry 的开源追踪+评估,偏线上可观测性,与 [[38 Agent 评估与可观测性|Agent 评估与可观测性]] 的 tracing 同源。
+### 指标的字段依赖（先问数据够不够）
 
-## 可跑最小代码
-```python
-# 用 Ragas 评估一条 RAG 样本:检索+生成四指标一把抓
-from ragas import evaluate
-from ragas.metrics import (
-    faithfulness,          # 生成侧:答案是否被上下文支撑(忠实度)
-    answer_relevancy,      # 生成侧:答案是否切题(新版叫 ResponseRelevancy)
-    context_precision,     # 检索侧:相关片段是否排在前面
-    context_recall,        # 检索侧:证据是否够全(需 ground_truth)
-)
-from datasets import Dataset
+| 指标 | 依赖 response | 依赖 reference / gold | 依赖 retrieved contexts | 读法 |
+|---|---:|---:|---:|---|
+| Recall@k、MRR、nDCG | 否 | gold evidence | 召回 ID / 排名 | 纯检索线 |
+| Context Precision | 否 | 是（reference） | 是 | 召回片段是否有用且靠前 |
+| Context Utilization | 是 | 否 | 是 | response 用到了多少真实召回上下文；无 reference 的代理 |
+| Context Recall | 否 | 是（reference） | 是 | reference 的 claim 是否被上下文覆盖 |
+| Faithfulness | 是 | 否 | 是 | response claim 是否被上下文支持 |
+| Response Relevancy | 是 | 否 | 否 | 是否对准用户问题，**不评事实真伪** |
+| Correctness / Factual correctness | 是 | 是 | 视实现而定 | response 与外部 reference 是否一致 |
+| Citation precision / recall | 是（claim） | 覆盖率需 gold claim | 是（被引文档版本） | 引得对不对、该引的有没有引 |
+| Tool / terminal-state metric | 可选 | 预期调用或终态 | trace / receipt | 以结构化执行与业务结果为准 |
 
-# 评估数据:每条含问题、答案、检索到的上下文、标准答案
-data = Dataset.from_dict({
-    "question":     ["RAG 是谁提出的?"],
-    "answer":       ["RAG 由 Lewis 等人在 2020 年提出。"],
-    "contexts":     [["RAG 由 Lewis et al. 2020 NeurIPS 论文提出。", "向量库存稠密向量。"]],
-    "ground_truth": ["Lewis 等人 2020 年提出 RAG。"],
-})
+Ragas 的 Faithfulness 会将 response 拆成 claim，再检验每条是否可从 `retrieved_contexts` 推出；官方定义正是“被支持 claim 数 / 全部 claim 数”。Response Relevancy 则从 response 反推问题并算嵌入余弦相似度，因此它不应被当作正确率。
 
-result = evaluate(
-    data,
-    metrics=[faithfulness, answer_relevancy, context_precision, context_recall],
-)
-print(result)   # {'faithfulness': 1.0, 'answer_relevancy': 0.94,
-                #  'context_precision': 1.0, 'context_recall': 1.0}
-# 读法:先看 context_* 两项(检索),都达标后再信 faithfulness/relevancy(生成)
+### 裁判、人审与一致性
+
+LLM-as-judge 有位置、冗长与 self-preference 偏置，并且服务端模型别名、隐藏 prompt 与采样都可能变化。每次 run 都写入不可变 `run_manifest.json`：
+
+```json
+{
+  "dataset_revision": "gold-rag-2026-07-17",
+  "ragas": "0.4.3",
+  "judge": {"provider": "…", "model": "…", "model_revision": "…", "temperature": 0, "seed": null},
+  "embedding": {"model": "…", "revision": "…"},
+  "metric_prompt": {"name": "Faithfulness", "source_or_hash": "…"},
+  "retriever": {"index_revision": "…", "top_k": 8},
+  "git_commit": "…"
+}
 ```
 
-## 对比表
-| 指标 | 归属轴 | 要不要 ground truth | 在意什么 |
-|---|---|---|---|
-| Hit Rate / Recall@k | 检索 | 要 gold passages | 该捞的捞回来没 |
-| MRR / nDCG | 检索 | 要 gold + 排序 | 对的有没有排前面 |
-| Context Precision | 检索 | 否(Ragas) | 相关片段是否靠前、信噪 |
-| Context Recall | 检索 | 要 reference | 证据够不够全 |
-| Faithfulness | 生成 | 否 | 有没有在证据外编造 |
-| Answer Relevancy | 生成 | 否 | 答案切不切题 |
-| Answer Correctness | 生成 | 要 | 与标准答案的事实一致度 |
+`seed` 只有在供应商实际接受且回显时才记录数值；否则明确写 `null`，不能伪装成可复现。对每个裁判版本保留双人独立人审样本，分歧交由第三人裁决；同时在固定样本上重复 judge，报一致率/方差，并将 judge 与人审的一致性作为校准门槛。[[38 Agent 评估与可观测性|Agent 评估与可观测性]] 中的轨迹裁判需要同样的审计。
 
-## 何时用 / 坑
-- **先建小金标集**:哪怕 50 条人工标注的 (问题, gold 片段, 标准答案),也比纯 reference-free 自评可信得多——它是你所有 LLM-judge 的校准锚。
-- **别只看端到端分**:端到端答对率掩盖归因。检索 recall 不达标时,任何生成层优化都是浮沙建塔。
-- **裁判别用同一个模型**:生成和评判用同一模型会 self-preference 虚高;裁判尽量换更强的独立模型,并人工抽检。
-- **分数会随评估模型版本漂**:Ragas/裁判模型升级后历史分数不可直接比,固定评估模型版本并记录。
-- **指标名随版本变**:Ragas 0.2+ 改了命名(见上),拿旧博客的四指标名直接 import 会报错。
-- **评估也要进 CI**:把 Ragas/DeepEval 跑进回归测试,改了分块/embedding/prompt 后能看见分数升降,否则优化全凭感觉——这与 [[13 Modular RAG|Modular RAG]] 的"可插拔即可度量"是配套的。
+### 必须可回放的 trace
+
+一条 trace 至少保存：`query` 与 locale、检索 `doc_id/chunk_id/doc_version`、response 的 `claim → citation_id → span` 映射、每次工具的请求/响应摘要、授权/拒绝决策及 policy revision、幂等键、最终 **receipt**（例如订单 ID、审批事件 ID 或只读查询快照）。敏感原文、PII 和工具密钥依 [[17 检索数据治理|数据驻留]] 做最小化与访问控制；“留 trace”不是无限制留数据。
+
+## 可运行的最小代码：锁定 Ragas 0.4.3 collections API
+
+下面是**执行日（2026-07-17）官方 release 线 `ragas==0.4.3`** 的 collections API。v0.4 仍保留 `from ragas import evaluate` 与 legacy `ragas.metrics` import 作为**已弃用**的兼容入口，但新项目不应再以它们为模板；实际风险是把 pre-v0.4 示例的已改名字段、已移除 API 或不匹配的安装版本混入当前代码，而不是旧 import 必然失败。先把直接依赖固定，再用 lock 文件固定完整解析结果与哈希：
+
+```bash
+# requirements.in：只放人工维护的直接依赖
+echo 'ragas==0.4.3' > requirements.in
+
+# 每次升级时在干净、受控的 Python 3.11 环境重新解析；提交 requirements.lock
+uv pip compile requirements.in --generate-hashes -o requirements.lock
+uv pip sync requirements.lock
+
+# 运行前必须由调用者提供真实 API key、judge 的版本化模型名与记录值
+export OPENAI_API_KEY='…'
+export RAGAS_JUDGE_MODEL='你的版本化 judge model'
+export RAGAS_EMBEDDING_MODEL='你的版本化 embedding model'
+python eval_one.py
+```
+
+```python
+# eval_one.py  —— 未安装依赖、未提供 key/模型时会失败；本库没有声称已实跑。
+import asyncio, json, os
+from openai import AsyncOpenAI
+from ragas.llms import llm_factory
+from ragas.embeddings.base import embedding_factory
+from ragas.metrics.collections import (
+    AnswerRelevancy, ContextPrecision, ContextRecall, ContextUtilization, Faithfulness,
+)
+
+JUDGE_MODEL = os.environ["RAGAS_JUDGE_MODEL"]
+EMBEDDING_MODEL = os.environ["RAGAS_EMBEDDING_MODEL"]
+
+async def main() -> None:
+    client = AsyncOpenAI()
+    judge = llm_factory(JUDGE_MODEL, client=client)
+    embeddings = embedding_factory("openai", model=EMBEDDING_MODEL, client=client)
+    row = {
+        "user_input": "RAG 最初由谁在何年提出？",
+        "response": "Lewis 等人在 2020 年提出了 RAG。",
+        "retrieved_contexts": [
+            "Lewis et al. 在 2020 年的 NeurIPS 论文提出 Retrieval-Augmented Generation。"
+        ],
+        "reference": "Lewis 等人在 2020 年提出 Retrieval-Augmented Generation（RAG）。",
+    }
+    results = {
+        "faithfulness": await Faithfulness(llm=judge).ascore(
+            user_input=row["user_input"], response=row["response"],
+            retrieved_contexts=row["retrieved_contexts"],
+        ),
+        "response_relevancy": await AnswerRelevancy(llm=judge, embeddings=embeddings).ascore(
+            user_input=row["user_input"], response=row["response"],
+        ),
+        "context_precision": await ContextPrecision(llm=judge).ascore(
+            user_input=row["user_input"], reference=row["reference"],
+            retrieved_contexts=row["retrieved_contexts"],
+        ),
+        "context_utilization": await ContextUtilization(llm=judge).ascore(
+            user_input=row["user_input"], response=row["response"],
+            retrieved_contexts=row["retrieved_contexts"],
+        ),
+        "context_recall": await ContextRecall(llm=judge).ascore(
+            user_input=row["user_input"], reference=row["reference"],
+            retrieved_contexts=row["retrieved_contexts"],
+        ),
+    }
+    print(json.dumps({name: result.value for name, result in results.items()}, ensure_ascii=False))
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+❌ 直接照抄 pre-v0.4 示例中的 `ground_truths`：文档化的字段迁移是 `ground_truths → reference`（单字符串）。`evaluate()` 与 legacy `ragas.metrics` import 在 v0.4 仍受支持但已弃用；真正会报错的是旧字段、已移除 API 或与安装版本不匹配，而不是“旧 import 必然失败”。
+✅ 新项目从 `ragas.metrics.collections` 导入，以 `ascore(**metric_fields)` 传字段，并从 `MetricResult.value` 取分。本例故意让每个 metric 只接收其所需字段：`ContextPrecision` 接 `reference + retrieved_contexts`，`ContextUtilization` 接 `response + retrieved_contexts`；不要把二者都叫作 reference-free precision。
+
+若要将一条记录作为样本保存，v0.4 仍可使用 `SingleTurnSample`；但 collections metric 接收的是关键字字段，而不是 `single_turn_ascore(sample)`：
+
+```python
+from ragas.dataset_schema import SingleTurnSample
+
+sample = SingleTurnSample(
+    user_input="RAG 最初由谁在何年提出？",
+    response="Lewis 等人在 2020 年提出了 RAG。",
+    retrieved_contexts=["Lewis et al. 在 2020 年的 NeurIPS 论文提出 RAG。"],
+    reference="Lewis 等人在 2020 年提出 Retrieval-Augmented Generation。",
+)
+row = sample.model_dump(exclude_none=True)
+faithfulness_fields = {
+    "user_input": row["user_input"],
+    "response": row["response"],
+    "retrieved_contexts": row["retrieved_contexts"],
+}
+# await Faithfulness(llm=judge).ascore(**faithfulness_fields)  # collections API，不传 sample 对象
+```
+
+代码的依赖、模型、密钥和网络均不在本知识库中，因而这里只做 API/语法级示例，**不把它写成已执行的分数**。Ragas 0.4 的迁移还将 `ground_truths: list[str]` 改为 `reference: str`；若需要多 reference，应拆成独立评估记录而不是沿用旧字段。
+
+## 选型卡：基准、采样与 CI
+
+| 需要回答的问题 | 选择 | 应报告什么 | 约束 / 不能替代什么 |
+|---|---|---|---|
+| 多语言、长文档检索是否退化？ | **MLDR（Multilingual Long-Document Retrieval）** | language 分组的 Recall@k、nDCG@10、query/doc 长度桶 | 检验 retriever，不等于业务 QA 或引用质量 |
+| 财报、10-K/10-Q 证据链是否可靠？ | **FinanceBench** | 答案正确性、evidence/citation 归因、拒答 | 金融域与其数据许可；不能外推到通用客服 |
+| 动态、长尾事实及 web/KG API 的端到端表现？ | **CRAG（Comprehensive RAG Benchmark）** | correct / missing / incorrect，按动态性与实体热度分组 | **不是** Corrective RAG；后者是 Yan et al. 的检索纠错方法 |
+| 自有高风险动作会不会误执行？ | 自有 trace + receipt gold set | tool 参数、授权决策、终态、补偿 | 公共 QA 基准没有你的 ACL 与业务副作用 |
+
+公共集用于发现能力边界；发布门禁仍以自己的 versioned gold set 为准。风险分层采样至少交叉以下维度：影响（只读/可逆/资金或权限）、证据难度（单跳/多跳/表格或图像）、时效（静态/高变）、用户与语言、ACL 边界（可见/越权诱导）、行为（回答/拒答/工具动作）。每个高风险桶保留人工判定和 replay trace；不要让高频、低风险 query 稀释总分。
+
+CI 做两层：每个 PR 跑小而稳定的 gold 子集，任何关键桶检索、citation、终态回退即阻断；定时任务跑完整集、重复 judge 和人工抽检。门槛以“相对已批准基线 + 最低绝对下限 + 置信区间”表达，并固定数据、索引、judge、prompt 与代码 revision，避免把版本漂移误报成模型进步。
 
 ## 关键事实
-- Ragas 论文:Es et al. 2023,**RAGAS: Automated Evaluation of Retrieval Augmented Generation**,arXiv:2309.15217,首倡 reference-free 的 faithfulness / answer relevance / context relevance 三维。
-- ARES 用 **PPI**(prediction-powered inference)以少量人工标注纠正 LLM 裁判的系统偏差,是"LLM-judge 必须有人工锚点"的工程化范本。
-- TruLens 的 **RAG Triad** = context relevance + groundedness + answer relevance,是同一"分段归因"思想的另一套命名。
-- RAG 评估与 [[38 Agent 评估与可观测性|Agent 评估与可观测性]] 共享 LLM-as-judge 的全部坑(位置/冗长/自我偏好/不可复现),区别只在评估对象是"单条问答"还是"多步轨迹"。
+
+- RAGAS：Es et al.（2023），*RAGAS: Automated Evaluation of Retrieval Augmented Generation*，arXiv:2309.15217，提出以 faithfulness、answer relevance、context relevance 做 reference-free / 弱 reference 诊断的早期框架。
+- Ragas 官方 v0.4 迁移文档：metrics 移入 `ragas.metrics.collections`，新 API 用 `ascore(**kwargs)` 返回 `MetricResult`；`evaluate()` 与 legacy `ragas.metrics` import 仍受支持但已弃用，新工作流应使用 collections API。
+- ARES：Saad-Falcon et al.（2023），arXiv:2311.09476，以少量人工标注和 prediction-powered inference 校准裁判偏差；它支持“judge 必须有人审锚点”，而非替代人审。
+- ALCE：Gao et al.（2023），arXiv:2305.14627，以 citation precision / recall 区分“引文支持该句”和“该引的句子都有引文”。
+- FinanceBench：Islam et al.（2023），arXiv:2311.11944；CRAG（Comprehensive RAG Benchmark）：Yang et al.（2024），arXiv:2406.04744。缩写 **CRAG** 在论文语境中有歧义，首次出现必须写全称。
 
 ## 工业界实践
 
-评估在工业界的核心命题是:**把「凭感觉调参」变成「有标尺的回归测试」**。下面是真实落地的关键决策。
-
-**1)金标集(golden set)怎么建——一切的地基**
-- 哪怕只有 **50~200 条**人工标注的 `(query, gold_chunks, reference_answer)`,也比纯 reference-free 自评可信得多——它是所有 LLM-judge 的**校准锚**。
-- 来源:① 从生产日志里**采样真实 query**(覆盖头部高频 + 长尾难例);② 用 **Ragas / DeepEval 的合成测试集生成器**(从你的文档反向造问答对)冷启动,再人工筛。
-- **分层标注**:简单事实题、多跳题、「库里没有答案」的拒答题(测幻觉)、对抗题(诱导编造)。拒答题极重要——很多系统在「该说不知道」时会硬编。
-
-**2)分段归因的工程流水线**
-```
-检索层先过 → recall@k / nDCG 不达标就停,先修检索(别动生成)
-        ↓ 达标
-生成层再查 → faithfulness(有没有编)+ answer relevancy(切不切题)+ correctness(对不对)
-```
-**先看检索、再看生成**是铁律:脏输入进、脏输出出,检索不达标时任何生成层优化都是浮沙建塔。
-
-**3)主流框架的工业定位**
-- **Ragas**(`explodinggradients/ragas`)——事实标准,reference-free 四指标 + 合成集;注意 **0.2+ 改了命名**(answer relevancy → Response Relevancy,context precision 拆出带/不带 reference 的变体,新增 Noise Sensitivity、Context Entities Recall、多模态忠实度),**以装机版本文档为准**。
-- **DeepEval**(`confident-ai/deepeval`)——**pytest 原生**,最适合塞进 CI/CD;**G-Eval**(LLM-as-judge + CoT 自定义任意标准)和 **DAG metric**(决策树式确定性评分,要可复现时用)是它区别于 Ragas 的杀手锏;背后是 Confident AI 云平台。
-- **TruLens**(`truera/trulens`)——**RAG Triad**(context relevance / groundedness / answer relevance)+ 反馈函数;TruEra 2024-05 被 Snowflake 收购,现深度绑 Snowflake 生态。
-- **ARES**(`stanford-futuredata/ARES`)——合成数据微调**轻量 LM 裁判** + 少量人工标注做 **PPI** 纠偏,跨域稳;是「LLM-judge 必须有人工锚点」的工程范本。
-- **RAGChecker**(`amazon-science/RAGChecker`,NeurIPS 2024,arXiv:2408.08067)——**claim-level entailment**:把答案和 reference 都拆成原子 claim,逐条做蕴含判定,给出 **overall + retriever + generator** 三组细粒度诊断指标(claim precision/recall、context utilization、noise sensitivity、hallucination 等),与人工判断相关性显著高于旧指标。要**精细定位「检索的锅还是生成的锅」**时上它。
-- **Phoenix**(`Arize-ai/phoenix`)/ **Langfuse** / **LangSmith**——偏**线上**追踪 + 评估,基于 OpenTelemetry,把离线指标搬到生产做持续监控(在线抽样跑 faithfulness,掉了就告警)。
-
-**4)引用归因的评估**(与 [[11 生成层：引用归因与忠实度|生成层：引用归因与忠实度]] 配套)
-- **ALCE**(`princeton-nlp/ALCE`,EMNLP 2023,arXiv:2305.14627)——首个自动评 LLM 带引用生成的基准,三维:**fluency / correctness / citation quality**(citation precision = 引的来源是否真支持该句,citation recall = 该支持的句子是否都引了)。生产里「引用是否名副其实」就用这套思路:逐句做 NLI 蕴含判定。
-
-**5)离线 + 在线双轨**
-- **离线**:每次改分块/embedding/rerank/prompt,在金标集上跑全套指标,进 CI(分数回退则 block 合并)。
-- **在线**:生产流量抽样(如 1%)跑 faithfulness/relevancy,监控漂移;真实点击/点赞/人工反馈回流补充金标集。
-
-**6)最佳实践 / 踩坑**
-- **裁判别用同生成模型**——self-preference 会系统性虚高;裁判换更强的独立模型并人工抽检。
-- **temperature=0 + 多次取众数**压 LLM-judge 的不稳定;**二元判定优于 1–5 打分**(LLM 的分数无校准、跨集不可比)。
-- **固定评估模型版本**:Ragas/裁判模型升级后历史分数不可直接比,记录版本。
-- **位置/冗长偏置**:裁判偏爱靠前、更长的答案,成对比较时**交换顺序各跑一次**消偏。
-- **指标名随版本漂**:照旧博客 import 旧四指标名会报错。
+1. **数据资产**：版本化保存 query、gold evidence ID、reference、预期拒答或终态；文档更新时让 `doc_version` 触发样本复审，而不是悄悄沿用旧金标。
+2. **先做三次生成**：同一 query 先跑 gold retrieval，再用 oracle context 生成，最后用真实 retrieved context 生成。只在第三次低分就改 prompt，很容易掩盖召回问题。
+3. **引用与动作单列验收**：claim 先拆分，再做 claim→citation span 蕴含；工具调用以结构化 request/response、授权和 receipt 判定，不接受模型文本中的“已完成”。
+4. **人审闭环**：高风险桶全审，其他桶按风险抽检；记录标注指南版本、标注者和分歧。把人审纠错回灌到 gold set 和 judge 校准集。
+5. **线上与离线分工**：离线集用于可重复的回归，线上按风险抽样抓新 query、漂移和失败 receipt。线上样本经脱敏、去重和人审后才进入金标，不能让模型自己的评分直接变成真值。
 
 ## 面试高频
 
-**Q1:RAG 答错了,你怎么定位是检索的锅还是生成的锅?**
-标准答:**分段归因**。先看检索指标(recall@k / nDCG / context recall),检索没捞回证据 = 检索病,LLM 巧妇难为无米之炊;检索达标但答案仍错,再看生成指标(faithfulness 看有没有编、answer relevancy 看切不切题)。把检索/生成画成二维平面,落在哪个象限决定修哪段。
-- 追问「检索达标怎么定义?」→ gold passage 的 recall@k 达阈值,或 Ragas 的 context recall/precision 达标。
-- 陷阱:只看端到端答对率——它掩盖归因,无法指导优化。
+**Q1：RAG 答错，怎样知道是检索还是生成？**
+先用 gold evidence 跑 Recall@k/nDCG；再把 gold evidence 喂给生成器（oracle-context generation）；最后跑真实 retrieved-context generation。oracle 都错是生成问题，oracle 对而真实错通常是检索/上下文构造问题；还要单验 citation 与业务终态。
 
-**Q2:没有标准答案(reference),怎么评 RAG?**
-标准答:用 **reference-free** 指标。**Faithfulness**(把答案拆成原子 claim,逐条问检索上下文是否支持,得分=被支持比例)和 **Answer/Response Relevancy**(让 LLM 由答案反推问题,与原问题算嵌入相似度)都不需要 reference。只有 **context recall / answer correctness** 需要 reference。底层都是 **LLM-as-judge**。
+**Q2：Faithfulness 高是否说明答案正确？**
+不说明。它只说明答案可由当前上下文推出；上下文错或过期时可 faithful 但 incorrect。correctness 需要 reference/外部真值，二者在 oracle 与真实上下文条件下都要报。
 
-**Q3:LLM-as-judge 有哪些坑?怎么缓解?**
-标准答:位置偏置、冗长偏置、**self-preference**(同模型既生成又评会虚高)、不可复现、分数无校准。缓解:裁判换独立强模型、temperature=0 多次取众数、成对比较交换顺序、二元判定代替打分、**留人工锚点校准**(ARES 的 PPI)。
-- 追问「为什么二元比 1–5 分好?」→ LLM 的 1–5 分非线性、跨数据集不可比,二元判定更稳更可比。
+**Q3：Ragas 0.4 怎么避免照抄旧博客？**
+锁 `ragas==0.4.3` 与完整 `requirements.lock`，新代码用 `ragas.metrics.collections`、`ascore(**kwargs)`、`MetricResult.value`，字段用 `reference` 而非 `ground_truths`。模型、prompt、seed 和数据/索引 revision 一起写进 run manifest。
 
-**Q4:Faithfulness 和 Answer Correctness 有什么区别?**
-标准答:**Faithfulness** 看答案是否被**检索上下文**支撑(不需 reference,防的是「在证据外编造」);**Answer Correctness** 看答案与**标准答案**的事实一致度(需 reference,防的是「答错」)。一个对齐上下文,一个对齐真值——RAG 可以 faithful 但 incorrect(上下文本身就错),所以两者都要看。
-
-**Q5:Ragas 的四个指标分别评什么?哪些要 reference?**
-标准答:Context Precision(相关片段是否靠前,不需 ref)、Context Recall(证据够不够全,**需 ref**)、Faithfulness(有没有编,不需 ref)、Answer Relevancy(切不切题,不需 ref)。前两个检索轴、后两个生成轴。
-- 追问注意 **0.2+ 命名变了**(Response Relevancy 等),别照搬旧名。
-
-**Q6:评估怎么进 CI/CD?**
-标准答:用 **DeepEval**(pytest 原生)或 Ragas 把金标集跑成回归测试,设阈值断言,改了分块/embedding/prompt 后分数回退就 block 合并。配合在线抽样监控漂移。这与 [[13 Modular RAG|Modular RAG]] 的「可插拔即可度量」配套。
+**Q4：为什么还要评 citation 和工具终态？**
+答案文字即使正确，也可能错引、漏引、调用了未经授权的工具，或生成成功却未产生业务 receipt。claim→citation 蕴含与 trace→terminal state 是两条独立验收线。
 
 ## 知识拓展
 
-- **指标和困惑度的关系**:传统语言模型评估(困惑度 / bits-per-byte,见 [[LLM/109 语言模型评估：困惑度与 bits-per-byte|语言模型评估：困惑度与 bits-per-byte]])评的是「模型对下一个 token 的预测分布」,**不评事实正确性**;RAG 评估恰恰要评「答案是否被证据支撑、是否对」,所以困惑度低 ≠ RAG 好,这是两套正交的尺子。RAG 评估更接近下游基准(MMLU/QA 的 EM/F1)而非内在指标。
-- **Answer Relevancy 的相似度底层**:Ragas 的 answer relevancy 用「答案反推问题 → 与原问题算嵌入相似度」,相似度就是 [[深度学习基础/03 点积、范数与相似度|点积、范数与相似度]] 里的余弦——评估和检索共用同一套向量相似度数学。
-- **前沿**:**RAGChecker**(2024)的 claim-level entailment 把忠实度从「整答案一个分」细化到「每条 claim 一个判定」,诊断粒度更细;**RAGAS 多模态忠实度**扩展到图文 RAG([[15 多模态 RAG|多模态 RAG]]);**FActScore / SAFE**(原子事实分解评分)是另一支「拆 claim 再逐条验证」的路线,常被借来评长文忠实度。
-- **边界与反模式**:① 只信 reference-free 自评、不留人工金标集(尺子没刻度);② 裁判用同一模型(self-preference 虚高);③ 只看端到端分不分段归因;④ 评估不进 CI(优化全凭感觉);⑤ 拿对话/创意类任务套 faithfulness(无证据可对齐,指标失效)。
-- **与在线评判同源**:[[12 Self-RAG、CRAG 与 Adaptive RAG|Self-RAG、CRAG 与 Adaptive RAG]] 里的 critic/评分器在**线上单条**做的判定,和离线评估在**批量**做的是同一件事——评估是 Self-RAG 的离线版,Self-RAG 是评估的在线内嵌版。RAG 评估的全部 LLM-judge 坑,[[38 Agent 评估与可观测性|Agent 评估与可观测性]] 评多步轨迹时一个不少。
+- `Response Relevancy` 通过“由 response 反推问题”与原问题的嵌入余弦来近似切题度，底层数学见 [[深度学习基础/03 点积、范数与相似度|点积、范数与相似度]]；它不检查外部事实。
+- 评估不是只给离线报表用。[[13 Modular RAG|Modular RAG]] 的可插拔模块要配合按线分解的回归门禁，才能判断替换 chunker、embedding 或 reranker 的实际影响。
+- 多模态输入要把图页、表格和文本的 evidence version 一起写入 trace；只留 OCR 文本会让后续 citation 无法解释原图表为何被支持，详见 [[15 多模态 RAG|多模态 RAG]]。
 
 ## 来源
-- Es, S., James, J., Espinosa-Anke, L., Schockaert, S. (2023). **RAGAS: Automated Evaluation of Retrieval Augmented Generation**. arXiv:2309.15217. — reference-free RAG 评估,faithfulness/answer relevance/context relevance。
-- Saad-Falcon et al. 同 ARES;另见 RAGChecker(Ru et al., 2024, NeurIPS,arXiv:2408.08067,`amazon-science/RAGChecker`)claim-level entailment 细粒度诊断;ALCE(Gao et al., EMNLP 2023,arXiv:2305.14627,`princeton-nlp/ALCE`)citation precision/recall 引用归因评估。
-- Saad-Falcon, J., Khattab, O., Potts, C., Zaharia, M. (2023). **ARES: An Automated Evaluation Framework for Retrieval-Augmented Generation Systems**. arXiv:2311.09476. — 合成数据微调轻量裁判 + PPI 纠偏,`stanford-futuredata/ARES`。
-- Ragas 官方文档(docs.ragas.io,2026)——当前指标集已重命名/扩充(Response Relevancy、Noise Sensitivity、带/不带 reference 的 context precision 变体等),以装机版本为准。
-- TruLens 文档(trulens.org)——RAG Triad 三角;TruEra 2024-05 被 Snowflake 收购,`truera/trulens`。
+
+- [Ragas v0.4 migration guide](https://docs.ragas.io/en/stable/howtos/migrations/migrate_from_v03_to_v04/) 与 [Faithfulness collections API](https://docs.ragas.io/en/stable/concepts/metrics/available_metrics/faithfulness/)（核验日：2026-07-17）。官方示例说明 `ascore(**kwargs)`、`MetricResult.value`、`reference` 字段和旧 API 的迁移状态。
+- [Ragas releases](https://github.com/vibrantlabsai/ragas/releases)（核验日：2026-07-17）：v0.4.3 为本篇锁定的稳定 release；[Context Precision](https://docs.ragas.io/en/stable/concepts/metrics/available_metrics/context_precision/)、[Context Recall](https://docs.ragas.io/en/stable/concepts/metrics/available_metrics/context_recall/)、[Response Relevancy](https://docs.ragas.io/en/stable/concepts/metrics/available_metrics/answer_relevance/) 的字段依赖以官方文档为准。
+- [M3-Embedding（含 MLDR benchmark）](https://aclanthology.org/2024.findings-acl.137/)、[FinanceBench 官方仓库](https://github.com/patronus-ai/financebench)、[CRAG（Comprehensive RAG Benchmark）官方仓库](https://github.com/facebookresearch/CRAG)；[Corrective Retrieval-Augmented Generation](https://arxiv.org/abs/2401.15884) 是不同方法。
+- Es et al.（2023）arXiv:2309.15217；Saad-Falcon et al.（2023）arXiv:2311.09476；Gao et al.（2023）arXiv:2305.14627。

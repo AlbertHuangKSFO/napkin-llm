@@ -1,171 +1,193 @@
-[[20 RAG 开源生态全景|RAG 开源生态全景]]不是一份"框架排行榜",而是一张**按职责分层的地图**:一个 [[01 什么是 RAG|RAG]] 管线 = 文档解析 → 索引/Embedding → 向量库 → 检索 → 重排 → 生成 → 评估,外加一层**横跨全栈的框架/编排**把它们黏起来。地图的价值在于:告诉你某个需求该去哪层找轮子、同层有哪些互斥竞品、**owner 又改名搬到哪了**(这事在 RAG 圈一样频繁)。它与 [[13 Modular RAG|Modular RAG]] 是一体两面——模块化让每层可插拔,生态就是每层的候选池。
+[[20 RAG 开源生态全景|RAG 开源生态全景]]是一张按职责分层、按约束选型的地图，而不是排行榜。一个 [[01 什么是 RAG|RAG]] 系统通常由文档解析 → 表示/索引 → 检索与重排 → 生成与引用 → 评估/可观测组成，框架/编排横跨其间。选型应从文档类型、语言、ACL、是否多模态和实测 SLO 出发；仓库热度、单点宣传数字和默认 branch 都不是生产证据。
 
-## 本质:层稳定,库流动
-和 [[39 Agent 开源生态全景|Agent 开源生态全景]] 同一个心智:**碎**(一个 RAG 被拆成七八层正交职责,每层三五个竞品)且**快**(库每周一版,org 还改名搬家)。所以"罗列一百个库"三个月就过期;有用的是把库**摁进固定的层**——层是稳定的(职责不变),库是流动的(谁火换谁)。记住"文档解析这层 2026 主流是 Docling/unstructured",比记某个版本号有用得多。
+## 本质：层稳定，源码与版本流动
 
-读图三句话:**同层多个库 ≈ 互斥竞品**(选一个就够);**跨层多个库 ≈ 互补可叠**;**框架/编排横跨各层**把它们串成管道。
+生态的层职责相对稳定，具体仓库、owner、许可证、维护状态和 API 却会变。因此每次采用一个项目都要同时记录**官方 source manifest**与本地 benchmark：
+
+- source manifest 回答“谁维护、从哪里取源码、锁到哪个 tag/commit、何时核验、它的许可/托管/数据约束是什么”；
+- local benchmark 回答“在**我们的**文档、语言、ACL、硬件和 SLO 下，质量、P95、索引体积与成本是否达标”。
+
+同层可以互换，跨层可以叠加；但不能把“README 能跑”推成“适合受限数据或低延迟服务”。这与 [[13 Modular RAG|Modular RAG]] 的可插拔思想配套：模块可换，评价标准也必须可换且可复现。
 
 ![[RAG 开源生态全景.png]]
 
-## 分层拆解(逐一核验 owner / 2026 活跃度)
+## 直觉与手算：先翻目录卡，再用放大镜看候选页
 
-### ① 框架 / 编排——把各层串成管道(横跨全栈)
-**定位**:提供 RAG 的高层抽象(loader→splitter→index→retriever→synthesizer 一条龙),让你不必手搓每层。锁定最深、选错重写成本最高。
-- **`run-llama/llama_index`**(`llama-index`,核心 `llama-index-core`)——RAG 出身的事实标杆,数据连接器/索引/查询引擎最全,如今 Workflows 1.0 是事件驱动编排。文档密集、要 [[36 Agentic RAG|Agentic RAG]] 时首选。
-- **`langchain-ai/langchain` + `langchain-ai/langgraph`**——LangChain 是组件胶水(retriever/向量库/LLM 适配最广),LangGraph 把流程建成有状态图;要可控分支、Human-in-the-Loop、[[12 Self-RAG、CRAG 与 Adaptive RAG|自适应路由]]时上 LangGraph,2026 已到 1.x。
-- **`deepset-ai/haystack`**(`haystack-ai`)——管线式(Pipeline + Component),生产派偏爱其显式 DAG 与可观测性,deepset 商业支撑。
-- **`infiniflow/ragflow`**(`ragflow`)——**深度文档理解**起家的开箱即用 RAG 引擎(自带解析+切块+检索+UI),2026 融合 Agent 能力、加 Browser 组件、RAPTOR 引入数据集级 AHC(Ψ-RAG)。要"装上就能用"的一体机时选它。
-- **`neuml/txtai`**(`txtai`)——embeddings-first 的语义搜索框架,多模态(文本/音频/视频)、轻量 RAG 管线一把梭,单文件可跑。
-- **`weaviate/Verba`**(无独立 pip,应用形态)——Weaviate 官方出品的开箱即用 RAG 聊天 UI,社区驱动,适合快速起一个带界面的 demo。
-- **`truefoundry/cognita`**——模块化**生产级** RAG 框架,带 UI、增量索引、企业合规,TrueFoundry 出品,主打"从原型到生产"。
-- **`IntelLabs/fastRAG`**(`fastrag`)——Intel Labs 的**高效** RAG 研究框架,主攻在 Intel 硬件上做优化检索+生成管线,建在 Haystack 之上。
-- **`stanfordnlp/dspy`**(`dspy`)——不是检索器,而是把 RAG/检索管线**当可优化程序**:你写 signature,DSPy 自动编译出 prompt/权重(见 [[31 Agent 提示词优化(DSPy)|Agent 提示词优化(DSPy)]])。要让 RAG 各模块"自动调参"而非手写 prompt 时上它。
+把页面图像 late interaction 想成图书馆查一份合同：先用**目录卡**（metadata、OCR 文本的精确词、稀疏/单向量检索）从全馆找出可能的 20 页，再用**放大镜**逐页看印章、表格单元和布局。若一开始就对全馆每个图像 patch 用放大镜，细节虽然保留，时间、显存和索引空间都会失控；若只看目录卡，又可能漏掉表格位置和图示语义。序列号、金额和条款原文这类逐字问题，应优先在 OCR/text 中 exact match，并保留页面回跳作为核对证据。
 
-**这一层选型逻辑**:文档密集/Agentic → LlamaIndex;要可控图编排 → LangGraph;要显式管线+生产可观测 → Haystack;要开箱一体机 → RAGFlow;要自动优化 → DSPy。
+令 query 有 $m$ 个归一化 token 向量 $q_i$，页面有 $n$ 个归一化 patch 向量 $p_j$。late interaction 对每个 query token 选择最匹配的 page patch：
 
-### ② 文档解析(parsing/loading)——脏文档变干净文本
-**定位**:把 PDF/网页/扫描件/表格变成 LLM 能吃的结构化文本,**这层质量直接决定下游一切**(解析烂 = 分块烂 = 检索烂)。
-- **`Unstructured-IO/unstructured`**(`unstructured`)——老牌万能预处理库,支持几十种格式,基础场景广覆盖;复杂表格抽取精度近年被 Docling 超过。
-- **LlamaParse**(LlamaIndex 旗下托管服务,`llama-cloud-services`)——擅长复杂版式/表格的托管解析,准但收费。
-- **`docling-project/docling`**(`docling`,**原 `DS4SD/docling`,IBM Research 出品,已捐给 Linux Foundation / LF AI & Data**)——2026 文档解析黑马,Granite-Docling 模型表格抽取约 97.9% 精度,3.7 万+ star,推 agentic AI 方向。复杂表格/版式优先它。
+$$
+\begin{aligned}
+s_{ij} &= q_i^\top p_j && \text{（归一化后为 cosine similarity）}\\
+a_i &= \max_{1\le j\le n} s_{ij} && \text{（第 }i\text{ 个 query token 的最佳 patch）}\\
+S(q,d) &= \sum_{i=1}^{m} a_i && \text{（页面的 MaxSim 分数）}\\
+-m &\le S(q,d) \le m && \text{（因为 }-1\le s_{ij}\le1\text{）}
+\end{aligned}
+$$
 
-### ③ Embedding / Rerank——把文本变向量、把候选排序
-**定位**:索引侧的语义引擎,详见 [[04 Embedding 与向量数据库|Embedding 与向量数据库]] 与 [[10 重排序 Reranking|重排序 Reranking]]。
-- **`UKPLab/sentence-transformers`**(`sentence-transformers`,**org 已迁到 `huggingface/sentence-transformers`,旧址 301 跳转,pip 名不变**)——本地跑 embedding/rerank 的事实标准库,封装 SBERT/BGE/cross-encoder。
-- **`FlagOpen/FlagEmbedding`**(`FlagEmbedding`,北京智源 BAAI 出品)——**bge** 系列(bge-m3 多语言/多粒度、bge-reranker)的官方仓库,开源 embedding/rerank 第一梯队。
-- **Cohere**(闭源 API)——Embed v3 与 **Rerank** 托管服务,Rerank 是工业界重排的常用即插即用选项。
+**小数字手算。**若 $m=2,n=3$，归一化点积矩阵为
 
-### ④ 向量库(vector store)——存向量、做相似度检索
-**定位**:non-parametric 记忆的物理载体,选型详见 [[04 Embedding 与向量数据库|Embedding 与向量数据库]]。
-- **`facebookresearch/faiss`**(`faiss-cpu`/`faiss-gpu`)——Meta 出品的 ANN 算法库(非数据库),嵌入式、极快,做原型/库内检索的底座。
-- **`milvus-io/milvus`**(`pymilvus`)——开源向量库里 star 最多,十亿级分布式,Zilliz 背书。
-- **`qdrant/qdrant`**(`qdrant-client`)——Rust 写的向量库,过滤检索性能一流,可自托管/云。
-- **`weaviate/weaviate`**(`weaviate-client`)——对象+向量一体,原生混合检索与模块化,见 [[08 混合检索 Hybrid Search|混合检索 Hybrid Search]]。
-- **`chroma-core/chroma`**(`chromadb`)——最易上手,原型/小规模生产首选,与 LangChain/LlamaIndex 深度集成。
-- **`pgvector/pgvector`**(Postgres 扩展)——给 Postgres 加向量列,**复用现有 PG 运维**;HNSW 索引后 100 万级可比肩专用库。
-- **Pinecone**(闭源托管)——全托管、自动扩缩、亚 100ms 延迟,免运维的生产首选(收费)。
+$$
+\begin{bmatrix}
+0.9 & 0.2 & 0.1\\
+0.3 & 0.8 & 0.4
+\end{bmatrix}
+$$
 
-### ⑤ 评估(evaluation)——贯穿全链给系统打分
-**定位**:详见 [[18 RAG 评估|RAG 评估]];这层不进管线但贯穿全链,改了任一层都靠它度量升降。
-- **`explodinggradients/ragas`**(`ragas`)——RAG 评估事实标准,reference-free 指标 + 合成测试集。
-- **`truera/trulens`**(`trulens`)——RAG Triad 三角 + 反馈函数;TruEra 2024-05 被 Snowflake 收购。
-- **`confident-ai/deepeval`**(`deepeval`)——pytest 原生、最适合塞进 CI,指标库最广。
-- **`stanford-futuredata/ARES`**(`ares-ai`)——微调轻量裁判 + PPI 纠偏(Saad-Falcon et al. 2023)。
-- **`Arize-ai/phoenix`**(`arize-phoenix`)——OpenTelemetry 追踪+评估,偏线上可观测,与 [[38 Agent 评估与可观测性|Agent 评估与可观测性]] 同源。
+则 $a_1=\max(0.9,0.2,0.1)=0.9$，$a_2=\max(0.3,0.8,0.4)=0.8$，所以 $S(q,d)=0.9+0.8=1.7$。对 $|C|$ 个候选页，patch 比较量近似为
 
-## 可跑最小代码
+$$
+C_{\text{late}}=|C|\cdot m\cdot n.
+$$
+
+若先从 1,000 页粗召回到 20 页，同样的 $m=2,n=3$ 下，比较量由 $1000\times2\times3=6000$ 降为 $20\times2\times3=120$，是 $50\times$ 的缩减；真实系统仍须实测编码、传输、索引、缓存与 P95，不能把这笔算术当成延迟承诺。
+
+## 机制：先按约束切层，再做本地基准
+
+### ① 框架 / 编排
+
+- **LlamaIndex**：数据连接、索引、query engine 等 RAG 原语较集中；适合希望显式组织文档/索引/检索边界的团队。
+- **LangChain + LangGraph**：前者偏组件适配，后者偏有状态图与人工介入；适合有分支、重试、授权和 [[12 Self-RAG、CRAG 与 Adaptive RAG|自适应路由]] 的流程。
+- **Haystack**：组件和 pipeline 明确，适合希望将检索与生成链路以显式图配置、单测和观测管理的团队。
+- **RAGFlow**：一体化文档处理与检索应用，适合优先验证端到端文档体验、能接受其部署边界的场景。
+- **DSPy**：不是向量库或 retriever，而是将模块签名、示例与指标联动优化；适合已有可评估任务、要系统化调 prompt/模块行为时使用，见 [[31 Agent 提示词优化(DSPy)|Agent 提示词优化(DSPy)]]。
+
+### ② 文档解析与表示
+
+- **unstructured**：多格式接入与内容分区；先用自己的 PDF、网页、扫描件和表格样本检查结构丢失、OCR、语言覆盖和数据出境路径。
+- **Docling**：本地文档转换与结构化输出选项；不要把单论文或厂商 benchmark 的表格数字搬成通用结论。应在相同文档类型、标注规则、硬件和版本条件下复现，或只写“论文在其条件下报告的结果”。
+- **sentence-transformers / FlagEmbedding（BGE）**：本地 embedding、cross-encoder rerank 与多语模型的常用接口/模型来源。模型语言与 query 语言必须一致或明确采用多语模型，不能用英文 embedding 却拿中文 query 作“最小示例”。
+
+### ③ 索引、检索与重排
+
+- **FAISS**：近邻检索算法库，不是带 ACL、持久化、备份和租户隔离的完整数据库。
+- **Qdrant / Milvus / Weaviate / pgvector**：选择前先验证 metadata filter、命名空间/租户隔离、备份恢复、混合检索、客户端与服务端兼容性，以及 ACL 过滤是否发生在召回之前。[[08 混合检索 Hybrid Search|混合检索]] 与 [[10 重排序 Reranking|重排序]] 是质量/延迟权衡中的独立阶段。
+- 重排以 cross-encoder 或模型 API 为独立步骤，必须按候选量、批量、设备和 query 长度报告本地 P50/P95，不能从别人演示的单次时延推导 SLO。
+
+### ④ 评估与可观测
+
+- **Ragas / DeepEval**：离线集、回归门禁与 judge 校准，字段与版本细节见 [[18 RAG 评估|RAG 评估]]。
+- **Phoenix**：以 trace、span 与评估结果关联线上观测；线上 trace 仍需要脱敏、留存期限、访问控制和采样策略。
+
+## 可运行的最小代码：语言匹配的 embedding 检查
+
+❌ 反例：选择英文单语 embedding，却把“中文问题”作为示例 query；即使代码运行，语言失配也会污染演示结论。
+
+✅ 下例选择多语的 `BAAI/bge-m3`，对中文文档和中文 query 做可执行的余弦召回。首次运行会下载模型；需在受控 Python 环境安装 `sentence-transformers`、`torch`，并按模型许可证/网络策略处理缓存。本文未在当前工作区安装依赖或下载模型，故不宣称已实跑。
+
 ```python
-# 一条最小 RAG 管线"贴标签"地展示各层用了谁
-# ① 解析   → docling / unstructured
-from docling.document_converter import DocumentConverter
-text = DocumentConverter().convert("doc.pdf").document.export_to_markdown()
-
-# ② Embedding → sentence-transformers(底层可换 bge)
+# embed_zh.py
+# pip install "sentence-transformers" "torch"
 from sentence_transformers import SentenceTransformer
-embed = SentenceTransformer("BAAI/bge-small-en-v1.5")     # FlagOpen 的 bge
+import numpy as np
 
-# ③ 向量库 → chroma(原型);生产可换 milvus/qdrant/pgvector
-import chromadb
-col = chromadb.Client().create_collection("docs")
-col.add(documents=[text], embeddings=[embed.encode(text).tolist()], ids=["d1"])
+documents = [
+    "检索增强生成先从知识库召回证据，再由模型基于证据回答。",
+    "向量索引需要结合元数据过滤和访问控制，避免越权召回。",
+]
+query = "如何防止检索到没有权限看的文档？"
 
-# ④ 检索 → 向量库自带;⑤ 重排 → cross-encoder/cohere(此处略)
-hits = col.query(query_embeddings=[embed.encode("问题").tolist()], n_results=3)
-
-# ⑥ 生成 → 任意 LLM;⑦ 评估 → ragas/deepeval(离线批量跑)
-# 框架层(llama-index/langchain)会把 ①~⑥ 这串胶水替你写好
+model = SentenceTransformer("BAAI/bge-m3")  # 多语模型；模型 revision 应写入 run manifest
+vectors = model.encode(documents + [query], normalize_embeddings=True)
+scores = vectors[:-1] @ vectors[-1]          # 已归一化，点积即 cosine similarity
+best = int(np.argmax(scores))
+print({"doc": documents[best], "score": float(scores[best])})
 ```
 
-## 对比表(每层一句话定位 + 当前 owner)
-| 层 | 代表库 · owner | 一句话 |
-|---|---|---|
-| 框架/编排 | LlamaIndex(`run-llama`)/LangGraph(`langchain-ai`)/Haystack(`deepset-ai`)/RAGFlow(`infiniflow`)/DSPy(`stanfordnlp`) | 串起全栈;选错重写最贵 |
-| 文档解析 | unstructured(`Unstructured-IO`)/LlamaParse/Docling(`docling-project`,IBM→LF) | 决定下游上限 |
-| Embedding/Rerank | sentence-transformers(`huggingface`,原 UKPLab)/bge(`FlagOpen`)/Cohere | 语义引擎 |
-| 向量库 | FAISS(`facebookresearch`)/Milvus(`milvus-io`)/Qdrant/Weaviate/Chroma/pgvector/Pinecone | non-parametric 记忆载体 |
-| 评估 | Ragas/TruLens(`truera`)/DeepEval(`confident-ai`)/ARES(`stanford-futuredata`)/Phoenix(`Arize-ai`) | 贯穿全链打分 |
+这段代码只验证“表示空间和语言样本是否能被调用”，不验证 ACL 正确性、长文召回、P95 或业务效果。将它替换成真实语料、加上 `doc_version`、ACL filter、gold evidence 和 [[18 RAG 评估|五条评估线]]，才是可比较的系统基准。
 
-## 何时用 / 坑
-- **先选框架还是先攒组件?** 要快出原型用框架(LlamaIndex/LangChain 全包);要极致可控就直接拼 retriever+向量库+LLM,别让框架黑盒挡视线。
-- **owner 会搬家**:`sentence-transformers` 已从 UKPLab 迁到 huggingface、`docling` 从 DS4SD 迁到 docling-project 并入 LF;照旧 URL star 可能 301。认 **org 现名**别认旧链接。
-- **托管 vs 自托管**:Pinecone/LlamaParse/Cohere/Phoenix Cloud 省运维但收费且锁定;Milvus/Qdrant/Chroma/Ragas 自托管可控但要自己背运维。
-- **别每层都装满**:一个真实 RAG 通常横跨 3~5 层(如 Docling + bge + Qdrant + Cohere Rerank + LlamaIndex + Ragas),不是把某层所有库都用上。
-- **评估这层最常被跳过却最该先建**:没有 [[18 RAG 评估|RAG 评估]] 当标尺,换库换参全凭感觉。
-- **与 Agent 生态重叠**:LangGraph/LlamaIndex/DSPy/Phoenix 同时出现在 [[39 Agent 开源生态全景|Agent 开源生态全景]]——RAG 进化到 [[36 Agentic RAG|Agentic RAG]] 时,两张生态图在编排/评估层合流。
+## 选型卡：用输入约束而非库名决策
+
+| 输入约束 | 优先验证的层与能力 | 基准样本 / 指标 | 典型风险 |
+|---|---|---|---|
+| 文本 PDF、网页、办公文档 | parser 的结构、标题、表格、页码 | 结构 F1、evidence 可定位率、失败率 | 将解析文本当原文，引用不能回页 |
+| 扫描件、图表、复杂布局 | OCR/版面或视觉检索 | 图表问题 Recall@k、人工 claim→证据审查 | OCR 丢表格关系、图页无可追溯版本 |
+| 中文/多语 query 与语料 | 多语 embedding、语言分桶 rerank | 按语言的 nDCG、Recall@k、拒答率 | 英文模型+中文 query 的假阳性演示 |
+| 每用户/部门不同权限 | 预过滤 ACL、审计 trace、租户隔离 | 越权召回率必须为 0、授权回放 | 先召回再过滤导致泄露 |
+| 图片/页面级文档检索 | multi-vector / late interaction | page Recall@k、索引体积、端到端 P95 | 把多向量成本当成普通单向量成本 |
+| 明确 SLO（例如查询 P95、预算） | 召回、重排、缓存、索引参数 | 冷/热 P50/P95、QPS、GPU/CPU、每 query 成本 | 只报平均或单 query demo |
+
+### 视觉 multi-vector：需要版本门槛与两阶段基准
+
+ColPali / ColQwen2 一类视觉 late interaction 会为一页产生多个向量，以 query 与 patch 向量的 MaxSim 做匹配；它能保留图表与布局信号，但不等于“免费免 OCR”。部署前应满足三个门槛：
+
+1. **版本门槛**：锁定视觉模型 revision、tokenizer、向量库**服务端与 client** release tag/commit；用同一容器实际写入并查询 multi-vector，不能仅根据 README 的“support”字样判定可用。
+2. **两阶段检索**：先用单向量/BM25/metadata 做粗召回（降低候选页数），只对候选页做 late interaction 精排；全库逐 patch MaxSim 通常不满足可控 SLO。
+3. **成本门槛**：在同一语料、页分辨率、chunk/page 策略与硬件下，记录索引构建耗时、向量数/磁盘、query P50/**P95**、候选数、显存/CPU 和每 query 成本；质量同时以 page Recall@k 与 citation 可回溯率验证。
+
+**资源与回退 caveat（有来源）**：ColPali 官方实现以页面 patch 的 multi-vector 表示和 CUDA/Apple Silicon 的 MaxSim kernel 评分；Qdrant 官方文档明确指出一个逻辑文档的 token-level vectors 可达数百，逐向量建索引会造成高 RAM 与慢写入，因此将它作为 first-pass 之后的 rerank。由此，页面图像 late interaction 应当是一条**两阶段支路**：先用 metadata、文本/OCR 稀疏精确匹配或单向量粗召回缩小候选，再对候选页做多向量精排；同时保留可检索的文本/OCR 与页图映射。对序列号、条款原文、金额等要求 exact-string 的问题，先走文本/OCR 的精确查找，失败或版面语义关键时再回退到页面图像检索/人工核对，不能把视觉向量结果伪装成逐字证据。
+
+视觉路线与 [[15 多模态 RAG|多模态 RAG]] 互补：文本/OCR 流程仍可能更适合需要精确文字 span、低资源或严控索引成本的场景。
+
+## source manifest（官方来源，而非热度榜）
+
+下表覆盖本篇实际提到的项目。`tag / pin` 不以会变化的“最新”冒充固定版本：采用时应把官方 release tag **及其 commit SHA** 写入 `uv.lock`、容器 digest 或部署 manifest；没有 release 的项目固定审计过的 commit。核验日均为 2026-07-17。
+
+| 项目 | 官方 URL | owner / repo | tag / pin | 核验日 | 维护状态 | 约束（必须另验） |
+|---|---|---|---|---|---|---|
+| LlamaIndex | [GitHub](https://github.com/run-llama/llama_index) | `run-llama/llama_index` | release tag + SHA | 2026-07-17 | 活跃；发布前复核 | connector 依赖、模型/数据出境 |
+| LangChain | [GitHub](https://github.com/langchain-ai/langchain) | `langchain-ai/langchain` | release tag + SHA | 2026-07-17 | 活跃；发布前复核 | 集成包版本组合、provider 数据路径 |
+| LangGraph | [GitHub](https://github.com/langchain-ai/langgraph) | `langchain-ai/langgraph` | release tag + SHA | 2026-07-17 | 活跃；发布前复核 | 状态持久化、人审与授权边界 |
+| Haystack | [GitHub](https://github.com/deepset-ai/haystack) | `deepset-ai/haystack` | release tag + SHA | 2026-07-17 | 活跃；发布前复核 | pipeline 组件/许可/遥测 |
+| RAGFlow | [GitHub](https://github.com/infiniflow/ragflow) | `infiniflow/ragflow` | release tag + SHA | 2026-07-17 | 活跃；发布前复核 | 部署面、模型与存储依赖 |
+| DSPy | [GitHub](https://github.com/stanfordnlp/dspy) | `stanfordnlp/dspy` | release tag + SHA | 2026-07-17 | 活跃；发布前复核 | 优化集泄漏、评估过拟合 |
+| unstructured | [GitHub](https://github.com/Unstructured-IO/unstructured) | `Unstructured-IO/unstructured` | release tag + SHA | 2026-07-17 | 活跃；发布前复核 | 文档上传、OCR/格式额外依赖 |
+| Docling | [GitHub](https://github.com/docling-project/docling) | `docling-project/docling` | release tag + SHA | 2026-07-17 | 活跃；发布前复核 | 模型下载、硬件、论文条件不可外推 |
+| sentence-transformers | [GitHub](https://github.com/huggingface/sentence-transformers) | `huggingface/sentence-transformers` | release tag + SHA | 2026-07-17 | 活跃；发布前复核 | 模型 revision、语言与许可证 |
+| FlagEmbedding / BGE | [GitHub](https://github.com/FlagOpen/FlagEmbedding) | `FlagOpen/FlagEmbedding` | release tag + SHA | 2026-07-17 | 活跃；发布前复核 | 模型 revision、语言/长文本设置 |
+| FAISS | [GitHub](https://github.com/facebookresearch/faiss) | `facebookresearch/faiss` | release tag + SHA | 2026-07-17 | 活跃；发布前复核 | 非数据库；ACL/持久化由上层负责 |
+| Qdrant | [GitHub](https://github.com/qdrant/qdrant) | `qdrant/qdrant` | server/client 同时 pin | 2026-07-17 | 活跃；发布前复核 | filter、备份、multi-vector 的实际版本能力 |
+| Milvus | [GitHub](https://github.com/milvus-io/milvus) | `milvus-io/milvus` | server/client 同时 pin | 2026-07-17 | 活跃；发布前复核 | 运维、索引参数、隔离与恢复 |
+| Weaviate | [GitHub](https://github.com/weaviate/weaviate) | `weaviate/weaviate` | server/client 同时 pin | 2026-07-17 | 活跃；发布前复核 | 模块、向量化路径、multi-vector 版本门槛 |
+| pgvector | [GitHub](https://github.com/pgvector/pgvector) | `pgvector/pgvector` | extension + PG version pin | 2026-07-17 | 活跃；发布前复核 | 数据库升级、HNSW/过滤基准 |
+| Ragas | [releases](https://github.com/vibrantlabsai/ragas/releases) | `vibrantlabsai/ragas` | release tag + lock hash | 2026-07-17 | 活跃；发布前复核 | judge/model/prompt 漂移，见 [[18 RAG 评估\|RAG 评估]] |
+| DeepEval | [GitHub](https://github.com/confident-ai/deepeval) | `confident-ai/deepeval` | release tag + SHA | 2026-07-17 | 活跃；发布前复核 | judge 费用、数据发送与 CI 稳定性 |
+| Phoenix | [GitHub](https://github.com/Arize-ai/phoenix) | `Arize-ai/phoenix` | release tag + SHA | 2026-07-17 | 活跃；发布前复核 | trace 脱敏、留存和访问控制 |
+| ColPali | [GitHub](https://github.com/illuin-tech/colpali) | `illuin-tech/colpali` | model/repo revision + SHA | 2026-07-17 | 活跃；发布前复核 | VLM 许可、页图像成本、patch 索引 |
+| ColQwen2 | [GitHub](https://github.com/vidore/colqwen2) | `vidore/colqwen2` | model/repo revision + SHA | 2026-07-17 | 活跃；发布前复核 | 同上；tokenizer/图像预处理也要锁 |
+| Cognita（历史归档） | [GitHub](https://github.com/truefoundry/cognita) | `truefoundry/cognita` | 仅历史 commit | 2026-07-17 | **2026-07-17 核验：2026-03-13 已归档** | 只作迁移/历史参考，不作新项目候选 |
+| fastRAG（历史） | [GitHub](https://github.com/IntelLabs/fastRAG) | `IntelLabs/fastRAG` | 仅历史 commit | 2026-07-17 | **2026-01-12 已归档** | 官方声明不再维护/接受补丁；不作新项目候选 |
 
 ## 关键事实
-- **Docling** 原 `DS4SD/docling`(IBM Research),现 `docling-project/docling`,已捐给 Linux Foundation(LF AI & Data),2026 表格抽取约 97.9%、3.7 万+ star。
-- **sentence-transformers** org 从 `UKPLab` 迁到 `huggingface`(旧址 301,pip 名 `sentence-transformers` 不变)。
-- **bge** 系列出自 `FlagOpen/FlagEmbedding`(BAAI 智源),非个人项目。
-- **TruLens** 母公司 TruEra 2024-05 被 Snowflake 收购;**Phoenix** 属 `Arize-ai`,基于 OpenTelemetry。
-- **Milvus** 由 Zilliz 背书;**FAISS** 是算法库不是数据库,常作其他库的底座。
+
+- `Cognita` 与 `fastRAG` 的官方 GitHub 仓库均显示 archived/read-only；前者归档日为 2026-03-13，后者为 2026-01-12。它们仍可解释历史架构，不能被描述为当前活跃推荐。
+- Docling 的项目归属、实现和 benchmark 会更新；若引用任何精度数值，必须同时给出论文/报告、数据集、任务定义、版本、硬件和评测日期。没有这些条件时不报数字。
+- multi-vector / late interaction 的“支持”是具体 server、client、模型与索引配置的组合能力，不是产品名级承诺。升级任何一项都要重跑质量和 P95 基准。
+- source manifest 与 benchmark 互补：前者防止拿错来源/版本，后者防止把别人的 workload 结论移植到自己的 ACL、语言和 SLO。
 
 ## 工业界实践
 
-生态图的工业价值在于:**真实 RAG 横跨 3~5 层**,你要会按需求在每层挑一个、把它们黏起来,而不是把某层装满。
+**1) 先定义验收集，再挑组件。** 将真实文档按类型、语言、权限和难度分桶，每题存 gold evidence、文档 revision、预期拒答和（如有）业务 receipt。选 parser、embedding、向量库或 reranker 时都跑同一份冻结集，见 [[18 RAG 评估|RAG 评估]]。
 
-**1)一套典型生产选型(参考组合)**
-```
-解析   Docling(复杂表格/版式) 或 unstructured(格式广)
-Embed  bge-m3 / sentence-transformers(自托管) 或 OpenAI/Cohere(托管)
-向量库  Qdrant / Milvus(规模化) | pgvector(复用 PG 运维) | Pinecone(免运维托管)
-重排   Cohere Rerank v3 或 bge-reranker(自托管 cross-encoder)
-编排   LlamaIndex(文档密集/Agentic) 或 LangGraph(可控图编排) 或 Haystack(生产显式 DAG)
-评估   Ragas + DeepEval(进 CI) | Phoenix/Langfuse(线上追踪)
-```
-不是把每层所有库都用上;一个真实管线挑一条路径即可。
+**2) ACL 进入检索路径。** 用户/租户过滤条件应在候选生成阶段就生效，并把授权 policy revision、filter、命中文档和拒绝原因留进 trace。仅在生成前隐藏一部分文字，不能证明没有越权召回。
 
-**2)规模化:召回质量 × 延迟 × 成本的三角**
-- **召回**:单路向量召回不够,叠 [[08 混合检索 Hybrid Search|混合检索]](BM25 稀疏 + 稠密)兜底关键词,再 [[10 重排序 Reranking|重排序]] 精排——这是生产标配,不是可选项。
-- **延迟**:ANN 索引选 **HNSW**(查询快、内存大)或 **IVF-PQ**(省内存、略损精度);rerank 是延迟大头(cross-encoder 逐对打分),只对 top-50~100 候选 rerank,别对全量。Embedding 和 rerank 都要**批处理 + GPU**。
-- **成本**:embedding 缓存(同文本不重复 embed)、向量量化(PQ/SQ 压显存)、rerank 用小模型 + 只精排头部。pgvector 复用现有 Postgres 运维能省一套独立向量库的成本。
+**3) SLO 必须在本地 workload 测。** 对每个候选组合记录数据量、chunk/page 策略、索引参数、机器/加速器、并发、冷/热缓存、P50/P95、失败率和每 query 成本。平均延迟、单次 notebook 或供应商宣传都不是承诺。
 
-**3)多模态 RAG 的生态(2024–2026 新增重点)**
-传统多模态 RAG 要 OCR + 版面分析 + 分块,管线长且易丢图表信息。新范式**直接把文档页当图片检索**(见 [[15 多模态 RAG|多模态 RAG]]):
-- **ColPali**(arXiv:2407.01449)/ **ColQwen2**——**视觉 late interaction** 检索:用 VLM(PaliGemma / Qwen2-VL)对**文档页图像**生成多向量,query 与每个 patch 做 ColBERT 式 MaxSim 匹配,**免 OCR、免复杂分块**,对表格/图表/扫描件鲁棒。`vidore/colpali` 是参考实现,**vidore benchmark** 是视觉文档检索的事实标准。
-- 配套向量库:多向量 late interaction 需要支持 multi-vector 的库——**Vespa、Qdrant(multivector)、Weaviate** 已原生支持。
-- 多模态 embedding:**CLIP / SigLIP / Cohere multimodal embed / Voyage multimodal** 做图文同空间检索。
-
-**4)框架锁定与「先框架还是先组件」**
-- 要快出原型 → 框架全包(LlamaIndex/LangChain);要极致可控 → 直接拼 retriever + 向量库 + LLM,别让框架黑盒挡视线。
-- **编排层锁定最深、选错重写最贵**,优先稳定;向量库/embedding 层相对易换。
-
-**5)owner 会搬家(认 org 现名别认旧链接)**
-- `sentence-transformers`:UKPLab → **huggingface**(旧址 301,pip 名不变)。
-- `docling`:DS4SD(IBM)→ **docling-project**,已捐 **Linux Foundation / LF AI & Data**。
-- TruLens 母公司 TruEra 2024-05 被 **Snowflake** 收购。
-
-**6)托管 vs 自托管权衡**
-Pinecone / LlamaParse / Cohere / Phoenix Cloud 省运维但**收费 + 锁定 + 数据出境**(注意 [[17 检索数据治理|数据驻留]] 合规);Milvus / Qdrant / Chroma / Ragas 自托管可控但自背运维。
+**4) 发布配置而不是“库名”。** 发布的最小单元是 `parser revision + model revision + index build revision + vector server/client + prompt + ACL policy + evaluation manifest`。这样 rollback 时能回到可重建状态，而不是只说“我们用了某框架”。
 
 ## 面试高频
 
-**Q1:画一个 RAG 管线,每层用什么开源工具?**
-标准答:**解析**(Docling/unstructured)→ **Embedding/Rerank**(sentence-transformers/bge/Cohere)→ **向量库**(Qdrant/Milvus/pgvector/Chroma/Pinecone)→ **检索**(向量库自带 + 混合检索)→ **重排**(cross-encoder/Cohere Rerank)→ **生成**(任意 LLM)→ **评估**(Ragas/DeepEval/Phoenix),外加**框架/编排**(LlamaIndex/LangGraph/Haystack)横跨全栈黏起来。强调**层稳定、库流动**:记「这层主流是谁」比记版本号有用。
+**Q1：RAG 生态怎么选？**
+先按层定位：解析、表示/索引、召回/重排、生成/引用、评估/可观测、编排。再用文档类型、语言、ACL、多模态和 SLO 把候选缩小，最后在冻结的本地集上比较 Recall@k、citation、终态、P95 与成本；不按仓库热度或功能堆叠选。
 
-**Q2:LlamaIndex 和 LangChain/LangGraph 怎么选?**
-标准答:**LlamaIndex** RAG 出身,数据连接器/索引/查询引擎最全,文档密集和 Agentic RAG 首选;**LangChain** 是组件胶水(适配最广),**LangGraph** 把流程建成有状态图,要可控分支、Human-in-the-Loop、自适应路由时上 LangGraph。要显式 DAG + 生产可观测则 Haystack。
+**Q2：为什么 embedding 示例不能用英文模型配中文问题？**
+模型训练语言/分词与 query 语言会直接影响表示空间。应使用经验证的多语模型或语言一致模型，并按语言分桶报告检索指标；能输出一个向量不等于检索质量合格。
 
-**Q3:向量库怎么选?FAISS、pgvector、Milvus、Pinecone 区别?**
-标准答:**FAISS** 是算法库(非数据库),嵌入式极快,做原型/底座;**pgvector** 给 Postgres 加向量列,复用现有 PG 运维,百万级够用;**Milvus/Qdrant** 分布式十亿级、过滤检索强,要规模化自托管选它;**Pinecone** 全托管免运维但收费锁定。选型看规模、是否复用现有栈、托管 vs 自托管(见 [[04 Embedding 与向量数据库|Embedding 与向量数据库]])。
+**Q3：视觉 late interaction 如何兼顾质量和延迟？**
+锁模型、tokenizer、client/server 版本后，先用廉价粗召回收窄候选，再对候选页做 patch 级 MaxSim 精排；同时记录索引向量数/磁盘、构建时间和 query P95。只跑全库多向量精排无法证明可控的 SLO。
 
-**Q4:复杂 PDF(表格、扫描件)解析,2026 用什么?**
-标准答:**Docling**(IBM→LF,Granite-Docling 表格抽取约 97.9%)是黑马,复杂表格/版式优先;**unstructured** 格式覆盖广做基础场景;要极致复杂版式可用托管的 **LlamaParse**。或直接走视觉检索 **ColPali/ColQwen2** 免 OCR。解析这层质量直接决定下游上限。
-
-**Q5:这么多评估框架怎么选?**
-标准答:**Ragas** 事实标准(reference-free + 合成集);**DeepEval** pytest 原生最适合进 CI(G-Eval/DAG);**TruLens** RAG Triad;**ARES** 微调裁判 + PPI;**Phoenix/Langfuse** 偏线上追踪。评估这层最常被跳过却最该先建——没标尺换库换参全凭感觉(见 [[18 RAG 评估|RAG 评估]])。
+**Q4：为什么 source manifest 和 benchmark 都需要？**
+manifest 解决来源、owner、tag/commit、维护与约束；benchmark 解决自己的文档、权限、硬件和流量下的质量/成本。只做其中一个，要么不可复现，要么无法证明适用。
 
 ## 知识拓展
 
-- **「层稳定、库流动」是核心方法论**:RAG 被拆成七八层正交职责(解析/embed/向量库/检索/重排/生成/评估 + 编排),每层三五个竞品、每周一版还改名。罗列一百个库三个月就过期;把库**摁进固定的层**才耐用。这与 [[39 Agent 开源生态全景|Agent 开源生态全景]] 同一心智。
-- **与 Agent 生态合流**:LangGraph / LlamaIndex / DSPy / Phoenix 同时出现在两张生态图——RAG 进化到 [[36 Agentic RAG|Agentic RAG]] 时,**编排层和评估层合流**(检索变多轮自主、评估变多步轨迹)。
-- **DSPy 这条特殊路线**:不是检索器,而是把 RAG 管线**当可优化程序**(写 signature,自动编译 prompt/权重,见 [[31 Agent 提示词优化(DSPy)|Agent 提示词优化(DSPy)]]),让各模块「自动调参」而非手搓 prompt——和「手拼组件」是正交的两种构建哲学。
-- **前沿(2024–2026)**:① **视觉 late interaction**(ColPali/ColQwen2)把多模态 RAG 从「OCR + 分块」简化为「页面当图检索」,vidore 成新基准;② **late interaction / multi-vector** 检索(ColBERT 系)在 Vespa/Qdrant 等库原生化;③ 文档解析向 **agentic** 方向走(Docling 路线图);④ RAGFlow 把 RAPTOR/AHC、Browser 组件、Agent 能力打进开箱一体机。
-- **反模式**:① 每层都装满(真实管线只横跨 3~5 层);② 认旧 GitHub 链接(owner 搬家导致 301);③ 跳过评估层(没标尺优化全凭感觉);④ 盲目托管图省事却踩数据驻留合规(见 [[17 检索数据治理|检索数据治理]])。本篇与 [[13 Modular RAG|Modular RAG]] 是一体两面:模块化让每层可插拔,生态就是每层的候选池。
+- 解析质量会沿链路放大：标题/表格/页码丢失会破坏分块、召回和 citation 回链，因此 parser 也要以 evidence 可定位率验收，而不只看文本是否“读出来”。
+- 多语言长文检索可用 MLDR 一类基准暴露长度和语言差异，但上线仍要加入自己的术语、混合语言、权限拒答与版本更新样本。
+- RAG 与 [[36 Agentic RAG|Agentic RAG]] 相遇后，框架选型还要评价工具 schema、授权、幂等和 receipt；答案看似正确仍不足以证明任务完成。
 
 ## 来源
-- 各仓库官方 GitHub(2026 核验):`run-llama/llama_index`、`langchain-ai/langgraph`、`deepset-ai/haystack`、`infiniflow/ragflow`、`neuml/txtai`、`weaviate/Verba`、`truefoundry/cognita`、`IntelLabs/fastRAG`、`stanfordnlp/dspy`。
-- 多模态/视觉检索:Faysse et al. (2024). **ColPali: Efficient Document Retrieval with Vision Language Models**. arXiv:2407.01449;`vidore/colpali`、ColQwen2、vidore benchmark;multi-vector late interaction 支持见 Vespa/Qdrant/Weaviate 官方文档(2026)。
-- 文档解析:`Unstructured-IO/unstructured`、`docling-project/docling`(IBM,donated to Linux Foundation)、LlamaParse(LlamaCloud)。
-- Embedding/向量库:`huggingface/sentence-transformers`(原 UKPLab)、`FlagOpen/FlagEmbedding`(bge)、`facebookresearch/faiss`、`milvus-io/milvus`、`qdrant/qdrant`、`weaviate/weaviate`、`chroma-core/chroma`、`pgvector/pgvector`、Pinecone。
-- 评估:`explodinggradients/ragas`、`truera/trulens`、`confident-ai/deepeval`、`stanford-futuredata/ARES`、`Arize-ai/phoenix`。
+
+- 本篇项目的官方 URL、owner/repo、pin 规则、核验日、维护状态与约束见上方 source manifest。维护状态以官方仓库页面为准，采用前需再次核验。
+- [Cognita archive](https://github.com/truefoundry/cognita)（2026-03-13）与 [fastRAG archive](https://github.com/IntelLabs/fastRAG)（2026-01-12）：均为历史条目，不作为新项目推荐。
+- [ColPali 官方实现](https://github.com/illuin-tech/colpali)（页面 patch multi-vector、MaxSim 与设备/内存相关实现）及 [Qdrant 官方 multivector / late-interaction 文档](https://qdrant.tech/documentation/tutorials-search-engineering/using-multivector-representations/)（多向量的 RAM/写入成本与 dense-first、late-rerank 两阶段模式）；[ColPali 论文](https://arxiv.org/abs/2407.01449)、[MLDR / M3-Embedding 论文](https://aclanthology.org/2024.findings-acl.137/)。
