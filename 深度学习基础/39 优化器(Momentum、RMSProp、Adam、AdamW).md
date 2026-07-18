@@ -7,8 +7,8 @@
 三个升级思路:
 - **动量(Momentum)**:像下坡的球带惯性。把历史梯度做指数平均,**同向梯度累积加速、反向震荡相互抵消**——横跳被抚平,沿谷底方向越滚越快。
 - **自适应步长(RMSProp)**:给每个参数**单独**调步长。梯度一直很大的参数(陡)自动缩小步长,梯度很小的参数(平)自动放大步长——用"梯度平方的滑动平均"做分母归一化。
-- **Adam = 动量 + RMSProp**:一阶矩给方向惯性,二阶矩给逐参数自适应,再加"偏差修正"。**深度学习的默认优化器**。
-- **AdamW**:修正 Adam 里 weight decay 的实现 bug——把权重衰减**从梯度里解耦出来**,直接作用在参数上,正则更干净、泛化更好([[LLM/061 优化器与超参(AdamW)|LLM 预训练]] 的标配优化器)。
+- **Adam = 动量 + RMSProp**:一阶矩给方向惯性,二阶矩给逐参数自适应,再加"偏差修正"。它是一个常用起点,不是所有任务的默认最优。
+- **AdamW**:把权重衰减**从梯度里解耦出来**,直接作用在参数上;对使用自适应优化器的训练,这让正则强度更可解释([[LLM/061 优化器与超参(AdamW)|LLM 预训练]] 常见)。
 
 一句话:**动量管方向,RMSProp 管步长,Adam 两者兼得,AdamW 把正则修对**。
 
@@ -69,9 +69,17 @@ $$\theta_t=\theta_{t-1}-\eta\Big(\frac{\hat m_t}{\sqrt{\hat v_t}+\epsilon}+\lamb
 
 **⑥ Lion(EvoLved Sign Momentum,Chen et al. 2023)**。用符号搜索发现的新优化器:只维护**一个动量**、更新方向取**符号**(类似 sign-SGD + 动量),不存二阶矩 → 显存约为 Adam 的一半。
 $$c_t=\beta_1 m_{t-1}+(1-\beta_1)g_t,\quad \theta_t=\theta_{t-1}-\eta\big(\text{sign}(c_t)+\lambda\theta_{t-1}\big),\quad m_t=\beta_2 m_{t-1}+(1-\beta_2)g_t$$
-因更新幅度恒为 1(符号),**学习率要比 AdamW 小约 10 倍**。在 ViT/扩散等上与 AdamW 相当或更省算力,是"省显存"方向的代表。
+因更新方向取符号,学习率、batch size 与 weight decay 必须重新搜索;Lion 论文在其配方中使用比 AdamW 更小的学习率,不能把“约 10 倍”当作通用换算。它少维护二阶矩,因而可减少优化器状态内存,但质量—成本取舍仍须在目标任务上复测。
 
-**怎么选**(面试速记):CV 里调好的 **SGD+Momentum** 常拿到最好泛化;NLP/Transformer、稀疏特征、想"开箱即用快收敛"用 **AdamW**;显存吃紧、想省一半优化器状态可试 **Lion**。Adam 收敛快但有时泛化略逊纯 SGD;AdamW 缓解了这点。
+**怎么选(条件化选型卡)**:
+
+| 起点条件 | 可先试 | 必须同时核验 |
+|---|---|---|
+| 已有成熟 CV 配方、追求最终验证泛化 | SGD + Momentum | 学习率/调度、数据增强、训练步数相同后再比较 |
+| Transformer 或稀疏/异尺度梯度、需要稳定基线 | AdamW | 学习率、weight decay、warmup 与裁剪共同调参 |
+| 优化器状态显存是瓶颈 | Lion 或其他低状态优化器 | 重搜学习率/weight decay,以验证质量和总成本而非显存单项决策 |
+
+这张表是实验起点,不构成跨任务排名;优化器、调度、batch 和正则是耦合的。
 
 **Adam 的有效学习率直觉**。更新 $\frac{\hat m}{\sqrt{\hat v}}$ 大致是"梯度的信噪比":分子是平均方向、分母是波动幅度。梯度稳定一致(信号强)→ 接近 $\pm1$ 步长大;梯度乱抖(噪声大)→ 被压小。所以 Adam 的每参数有效步长被**归一化到 $\sim\eta$ 量级**,这也是它对学习率不那么敏感、好调的原因。
 
@@ -123,18 +131,18 @@ for kind in ["sgd", "momentum", "rmsprop", "adam", "adamw"]:
 - **"Momentum 解决什么?$\beta$ 的物理意义?"** 抚平狭长谷里的横向震荡、沿谷底加速;$\beta$ 是历史的保留比例,稳态有效步长放大 $\frac{1}{1-\beta}$($\beta=0.9$ → ×10)。
 - **"RMSProp / Adam 为什么要除以梯度平方的均方根?"** 实现**逐参数自适应学习率**:陡参数(梯度大)步长自动变小防震荡,平参数(梯度小)步长自动变大加速。
 - **"Adam 的偏差修正为什么必要?"** $m,v$ 初始化为 0,前几步严重偏向 0,导致有效步长偏小、起步慢;除以 $1-\beta^t$ 抵消这个偏差。
-- **"AdamW 和 Adam 的区别?为什么 AdamW 更好?"** AdamW 把 weight decay 从梯度中**解耦**,直接作用于参数;Adam 的 L2 正则被自适应步长 $\sqrt{\hat v}$ 扭曲、对不同参数衰减不均。解耦后正则更干净、泛化更好,是 Transformer/LLM 标配。
-- **"Adam 和 SGD+Momentum 怎么选?"** Adam/AdamW 收敛快、对学习率不敏感、开箱即用(NLP/Transformer 首选);精调过的 SGD+Momentum 在 CV 上常有更好泛化。Adam 有时泛化略逊,AdamW 缩小了差距。
+- **"AdamW 和 Adam 的区别?何时优先试 AdamW?"** AdamW 把 weight decay 从梯度中**解耦**,直接作用于参数;在自适应优化器中这避免正则项随 $\sqrt{\hat v}$ 被逐参数缩放。它常是 Transformer 的合理基线，但泛化是否改善仍需以目标验证集比较。
+- **"Adam 和 SGD+Momentum 怎么选?"** 先固定模型、总训练 token/epoch、调度和增强。Transformer 可从 AdamW 基线开始;成熟 CV 配方可把 SGD+Momentum 与 AdamW 在相同预算下比验证集。没有脱离任务的“首选”。
 - **"AdaGrad 的问题是什么?RMSProp 怎么修?"** AdaGrad 无遗忘地累加历史梯度平方,分母只增不减,学习率单调趋 0、后期学不动;RMSProp 改成指数移动平均(有遗忘),分母不爆。
 - **"Nesterov 和普通动量区别?"** NAG 在"前瞻点"算梯度(先按惯性走再看坡),带预判刹车、过冲更小;凸情形把 $O(1/t)$ 提到 $O(1/t^2)$。
-- **"Lion 优化器了解吗?"** 2023 符号搜索发现,只用一个动量 + 符号更新,省一半显存;因步长恒为 1,学习率要比 AdamW 小约 10 倍。
+- **"Lion 优化器了解吗?"** 2023 的符号搜索优化器,只维护一阶动量并取符号更新,可减少优化器状态;迁移时必须重搜学习率、weight decay 与 batch,不能套用固定倍数。
 - **"为什么 Adam 对学习率不敏感?"** 更新 $\hat m/\sqrt{\hat v}$ 是逐参数信噪比、被归一化到 $\sim\eta$ 量级,各参数有效步长接近,好调。
-- **默认超参** $\beta_1{=}0.9,\beta_2{=}0.999,\epsilon{=}10^{-8}$ 要能脱口而出。Adam 几乎总要配 [[40 学习率调度与 warmup、cosine|warmup + 衰减]];常和 [[44 梯度消失、爆炸与梯度裁剪|梯度裁剪]] 一起用防爆。
+- **常见起始超参** $\beta_1{=}0.9,\beta_2{=}0.999,\epsilon{=}10^{-8}$ 可作为 Adam 原论文的起点。是否配 [[40 学习率调度与 warmup、cosine|warmup + 衰减]] 或 [[44 梯度消失、爆炸与梯度裁剪|梯度裁剪]]，取决于模型、batch 与训练曲线。
 
 ## 关键事实
 
 - **Adam**:Kingma & Ba, *Adam: A Method for Stochastic Optimization*(ICLR 2015,arXiv:1412.6980),默认 $\beta_1=0.9,\beta_2=0.999,\epsilon=10^{-8}$,含偏差修正。
 - **AdamW / 解耦权重衰减**:Loshchilov & Hutter, *Decoupled Weight Decay Regularization*(arXiv:1711.05101,2017;ICLR 2019)——指出 Adam 中 L2 正则 ≠ 权重衰减,提出把衰减解耦。
 - **RMSProp**:Tieleman & Hinton, Coursera《Neural Networks for ML》讲义(2012,未正式发表);**AdaGrad**:Duchi, Hazan & Singer(JMLR 2011);**Momentum**:Polyak(1964)的 heavy-ball 法,Nesterov 加速(1983)。
-- **Lion**:Chen et al., *Symbolic Discovery of Optimization Algorithms*(arXiv:2302.06675,ICLR 2023),EvoLved Sign Momentum,只用动量 + 符号更新,显存约为 Adam 一半,学习率需小约 10 倍。
+- **Lion**:Chen et al., *Symbolic Discovery of Optimization Algorithms*(arXiv:2302.06675,ICLR 2023),EvoLved Sign Momentum,只维护一阶动量。其论文中的学习率设置属于该实验配方,迁移到新模型须重新调参。
 - 自适应优化器综述与权衡,见 Goodfellow, Bengio & Courville《Deep Learning》(2016)第 8.5 节。

@@ -87,11 +87,11 @@ $$\hat x_i=\frac{x_i-\mu}{\sqrt{\sigma^2+\epsilon}},\qquad y_i=\gamma\,\hat x_i+
 
 $$\text{RMS}(x)=\sqrt{\frac{1}{d}\sum_{i=1}^d x_i^2},\qquad y_i=\frac{x_i}{\text{RMS}(x)+\epsilon}\cdot g_i$$
 
-注意分母里**没有 $\mu$、也没有方差**(方差需要先算均值),省掉了"求均值 + 减均值"这一遍遍历,反向传播也更省。论文报告比 LN 提速 7%–64%、效果相当 —— 这正是 LLaMA、T5、Gemma 等现代大模型普遍改用 RMSNorm 的原因。它只有缩放参数 $g$,无偏移 $\beta$。
+注意分母里**没有 $\mu$、也没有方差**(方差需要先算均值),省掉了"求均值 + 减均值"这一遍遍历。RMSNorm 论文在特定机器翻译实验报告了速度/质量结果,不能外推为所有硬件或模型的固定收益。**LLaMA 与 Gemma 的公开实现直接采用 RMSNorm**;**T5 的 `T5LayerNorm` 是只重缩放、不减均值的 LayerNorm 变体**,与 RMSNorm 形式接近但应按各自实现命名。它通常只含缩放参数 $g$,无偏移 $\beta$。
 
 **Pre-LN vs Post-LN(Transformer 必考)**。归一化放在残差块的哪里,直接影响深层 Transformer 能否稳定训练(Transformer 里 [[LLM/010 层归一化：Pre-LN 与 Post-LN|Pre-LN 与 Post-LN]] 的完整对比):
-- **Post-LN**(原版 Transformer):$x\to \text{LN}(x+\text{Sublayer}(x))$,归一化在残差**相加之后**。深层时梯度容易在底层变大,需要 warmup 才训得稳。
-- **Pre-LN**(GPT-2 之后主流):$x\to x+\text{Sublayer}(\text{LN}(x))$,归一化在子层**输入处**,残差主干是干净的恒等通路,梯度更稳、可去掉或减轻 warmup,能堆更深。代价是表达力略有损失,常在最后再补一个 LN。
+- **Post-LN**(原版 Transformer):$x\to \text{LN}(x+\text{Sublayer}(x))$,归一化在残差**相加之后**。深层训练时常需要结合 warmup、初始化和残差缩放来稳定。
+- **Pre-LN**(常见变体):$x\to x+\text{Sublayer}(\text{LN}(x))$,归一化在子层**输入处**,残差主干更接近恒等通路。它常改善优化稳定性，但是否可减轻 warmup、是否牺牲最终质量都依赖具体深度与配方。
 - 现代大模型(LLaMA 等)= **Pre-LN + RMSNorm** 的组合。
 
 ![[nn-PreLN与PostLN.png]]
@@ -133,12 +133,13 @@ print("RMSNorm:\n", rmsn)
 ```
 
 ```python
-# PyTorch:序列/Transformer 里正确的归一化层
+# PyTorch:序列/Transformer 里可选的归一化层
 import torch, torch.nn as nn
 
 D = 512
 ln  = nn.LayerNorm(D)                 # 沿最后一维(特征)归一,batch 无关
-rms = nn.RMSNorm(D)                   # PyTorch 2.4+ 内置;省去减均值
+# `nn.RMSNorm` 是否可用取决于安装版本;不可用时使用项目内实现或升级环境
+rms = nn.RMSNorm(D)                   # RMSNorm:省去减均值
 gn  = nn.GroupNorm(num_groups=8, num_channels=64)  # 小 batch CNN 替代 BN
 
 x = torch.randn(2, 10, D)             # (batch, seq_len, dim)
@@ -180,8 +181,8 @@ print("推理输出(用移动平均,不看 batch):\n", bn(xb[:1], train=False).r
   A:训练用当前 batch 的 μ、σ;推理 batch 可能为 1,改用训练期累积的**移动平均** μ、σ(固定值)。忘了切 eval 模式 / 移动平均没更新好是常见 bug。
 - **Q:小 batch 下 BN 为什么差,该换什么?**
   A:小 batch 的 μ、σ 估计噪声大。换 **GroupNorm**(batch 无关,Wu & He 2018 在 batch=2 时比 BN 误差低 10.6%)或 LN。
-- **Q:Pre-LN 和 Post-LN 区别?为什么现代大模型用 Pre-LN?**
-  A:Post-LN 把 LN 放残差相加后($\text{LN}(x+\text{Sublayer})$),深层梯度不稳、依赖 warmup;Pre-LN 放子层输入前($x+\text{Sublayer}(\text{LN}(x))$),残差主干是干净恒等通路,梯度稳、可堆更深。LLaMA = Pre-LN + RMSNorm。
+- **Q:Pre-LN 和 Post-LN 区别?为什么不少大模型用 Pre-LN?**
+  A:Post-LN 把 LN 放残差相加后($\text{LN}(x+\text{Sublayer})$);Pre-LN 放子层输入前($x+\text{Sublayer}(\text{LN}(x))$),残差主干更接近恒等通路。深层稳定性、warmup 与最终质量仍受初始化、深度和训练配方影响;LLaMA 是 Pre-Norm + RMSNorm 的实例。
 - **Q:归一化里那个 ε 是干嘛的?**
   A:防止方差为 0 时除零,并限制极小方差被放大。典型 $10^{-5}$~$10^{-6}$。
 - **Q:BN 自带正则效应从哪来?**
@@ -197,5 +198,5 @@ print("推理输出(用移动平均,不看 batch):\n", bn(xb[:1], train=False).r
 - Santurkar 等(2018,"How Does Batch Normalization Help Optimization?",NeurIPS)用实验质疑"协变量偏移"解释,主张 BN 实为平滑损失曲面。
 - Pre-LN vs Post-LN 的稳定性分析:Xiong et al., *On Layer Normalization in the Transformer Architecture*(ICML 2020)——证明 Pre-LN 梯度更稳、可去 warmup;Post-LN 需 warmup。
 - InstanceNorm:Ulyanov et al.(2016,风格迁移);WeightNorm:Salimans & Kingma(NeurIPS 2016);BatchRenorm:Ioffe(NeurIPS 2017,修正小 batch)。
-- 现代大模型 Pre-LN + RMSNorm 的实践:LLaMA(Touvron et al., 2023)、T5(Raffel et al., 2020)、Gemma 等。
+- RMSNorm:Zhang & Sennrich(2019,arXiv:1910.07467);LLaMA(Touvron et al., 2023)与 Gemma 技术报告的公开实现采用 RMSNorm。T5(Raffel et al., 2020; 官方实现 `T5LayerNorm`)使用仅重缩放、无均值中心化的 LayerNorm 变体,不应笼统写成“所有模型都改用 RMSNorm”。
 - 关联:归一化常配 [[41 权重初始化(Xavier、He、正交)|权重初始化]] 与 [[42 正则化(L2、Dropout、早停、标签平滑)|正则化]] 一起稳训练;γ、β 的更新依赖 [[20 反向传播的数学推导|反向传播]]。后续 Transformer 系列全靠 LayerNorm / RMSNorm。

@@ -7,7 +7,7 @@
 1. **会不会饱和?** Sigmoid / Tanh 在 $|z|$ 大时曲线压平,导数趋 0 → 反传时梯度被反复乘以接近 0 的数 → 深层学不动(梯度消失)。ReLU 在正半轴导数恒为 1,不饱和,所以能训很深的网。
 2. **负半轴怎么处理?** ReLU 把负数直接砍成 0,简单但有"死亡神经元"风险(一旦落进负区永远输出 0、梯度 0、再也激活不了)。GELU 给负半轴留一点平滑的负值,信息不全丢。
 
-演化主线:**Sigmoid/Tanh(会饱和、慢)→ ReLU(不饱和、快,但会死)→ GELU(平滑版 ReLU,Transformer 标配)→ SwiGLU(门控,现代 LLM 的 FFN)**。
+演化主线:**Sigmoid/Tanh(会饱和、慢)→ ReLU(不饱和、快,但会死)→ GELU(平滑门控,早期 Transformer 常见)→ SwiGLU/GEGLU(门控 FFN,部分近代 LLM 采用)**。这不是按年份替换的硬规则:激活要随模型族、参数预算和复现实验选。
 
 ![[nn-激活函数族.png]]
 
@@ -64,13 +64,13 @@ $$\mathrm{GELU}(z)=z\,\Phi(z),\qquad \Phi(z)=\Pr[Z\le z],\ Z\sim\mathcal N(0,1)$
 
 $$\mathrm{GELU}(z)\approx 0.5\,z\Bigl(1+\tanh\bigl[\sqrt{\tfrac{2}{\pi}}(z+0.044715z^3)\bigr]\Bigr)$$
 
-是 BERT、GPT 系列的默认激活。
+这是 **BERT 与 GPT-2** 等架构使用的激活;不能由此推到所有名为“GPT”的模型。现代 Transformer 的 FFN 也可能使用 SiLU、GEGLU 或 SwiGLU,应以该模型的实现/论文为准。
 
 **SwiGLU:** 不是单输入函数,而是一个**门控单元**。先定义 Swish(SiLU)$\mathrm{Swish}(z)=z\cdot\sigma(\beta z)$;SwiGLU 把 FFN 的输入投影成两路,一路当"门":
 
 $$\mathrm{SwiGLU}(x)=\mathrm{Swish}(xW)\odot(xV)$$
 
-$\odot$ 是逐元素乘。一路经 Swish 当 0~1 的"阀门",控制另一路线性投影通过多少。Shazeer(2020)发现 GEGLU/SwiGLU 在 Transformer 的 [[LLM/008 前馈网络 FFN(为何 4 倍、为何两层)|FFN]] 上困惑度更低,**LLaMA、PaLM 等现代 LLM 采用**。代价:门控多一组投影矩阵(从 2 个变 3 个权重矩阵),通常把 FFN 隐藏维按 $\tfrac23$ 缩回去补偿参数量(LLaMA 即用 $\tfrac{8}{3}d$ 而非 $4d$)。
+$\odot$ 是逐元素乘。一路经 Swish 当“软阀门”,控制另一路线性投影通过多少。Shazeer(2020)在其 Transformer 实验中报告 GLU 变体优于同预算的 ReLU FFN;这是一项**受架构、训练配方和预算约束的实验结论**,不是每个任务的必胜规则。PaLM 与 LLaMA 的公开架构采用 SwiGLU;若用三组投影保持参数预算可比,常把中间宽度从约 $4d$ 缩到约 $\tfrac{8}{3}d$。
 
 ![[nn-SwiGLU门控.png]]
 
@@ -131,7 +131,7 @@ nn.Sigmoid(); nn.Tanh(); nn.ReLU(); nn.GELU(); nn.SiLU()   # SiLU = Swish(β=1)
 - **"为什么深网络隐藏层不用 Sigmoid?"** $\sigma'\le 0.25$,多层连乘 → 梯度消失;且非零中心拖慢收敛。ReLU 正区导数恒 1,不饱和,能训很深。
 - **"什么是死亡 ReLU?怎么救?"** 神经元落进 $z<0$ 后输出/梯度恒 0、永不更新;用 Leaky ReLU / PReLU / ELU 给负区留小斜率,或更小学习率 / 更好初始化。
 - **"GELU 比 ReLU 好在哪?"** 处处平滑可导、负区不硬砍(保留少量负信息)、按输入大小概率性门控,Transformer 上效果更稳。
-- **"现代 LLM 的 FFN 用什么激活,为什么?"** SwiGLU(门控,LLaMA/PaLM);Shazeer 2020 实验显示困惑度更低;门控让网络能自适应地选择信息通路。
+- **"现代 LLM 的 FFN 用什么激活,为什么?"** 先按模型族回答:PaLM/LLaMA 公开采用 SwiGLU,BERT/GPT-2 用 GELU。门控可按内容选择信息通路,但是否优于 GELU 要在相同参数、数据与训练配方下比较。
 - **"Tanh 比 Sigmoid 好在哪?"** 零中心(输出 $\in(-1,1)$),梯度更对称、收敛更快;但仍会饱和。
 - **"ReLU 变体都有哪些,各解决什么?"** Leaky/PReLU(负区小斜率,救死亡);ELU(负区平滑饱和、近零中心);Softplus(光滑可导);Swish/Mish(平滑非单调,有时更好)。
 - **"GLU 家族是什么?SwiGLU 为什么占 3 个矩阵?"** $\text{act}(xW)\odot(xV)$,一路当门;SwiGLU 用 Swish 当门,比普通 FFN 多一个投影矩阵,故隐藏维缩到 $\tfrac23$ 补参数。
@@ -143,5 +143,5 @@ nn.Sigmoid(); nn.Tanh(); nn.ReLU(); nn.GELU(); nn.SiLU()   # SiLU = Swish(β=1)
 
 - Sigmoid 导数 $\sigma'=\sigma(1-\sigma)\le 0.25$,是其在深层引发梯度消失的根因(Goodfellow《Deep Learning》2016,第 6.3 节)。
 - ReLU 由 Nair & Hinton 2010 推广,缓解梯度消失、训练更快,成为长期默认隐藏层激活。
-- GELU $=x\Phi(x)$,Hendrycks & Gimpel 2016(《Gaussian Error Linear Units》,arXiv:1606.08415);BERT/GPT 默认采用。
-- SwiGLU 由 Shazeer 2020(《GLU Variants Improve Transformer》,arXiv:2002.05202)提出,GEGLU/SwiGLU 困惑度最优;LLaMA、PaLM 等现代 LLM 的 FFN 采用。
+- GELU $=x\Phi(x)$,Hendrycks & Gimpel 2016(《Gaussian Error Linear Units》,arXiv:1606.08415);BERT(Devlin et al., 2019)与 GPT-2(Radford et al., 2019)的公开架构使用 GELU。
+- SwiGLU/GEGLU:Shazeer 2020(《GLU Variants Improve Transformer》,arXiv:2002.05202)在其控制实验中比较 GLU 变体;PaLM(Chowdhery et al., 2022)与 LLaMA(Touvron et al., 2023)架构说明采用 SwiGLU。结论的核验单位应是模型、配方、数据和日期,而非“现代 LLM”这一标签。

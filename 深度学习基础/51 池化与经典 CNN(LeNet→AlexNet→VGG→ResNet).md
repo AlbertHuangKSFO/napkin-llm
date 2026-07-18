@@ -1,4 +1,4 @@
-[[51 池化与经典 CNN(LeNet→AlexNet→VGG→ResNet)|池化]]把特征图的每个不重叠小块压成一个数(取 max 或平均),实现**无参数下采样**+局部平移鲁棒;沿着「conv→池化→全连接」这条范式,经典 CNN 一路从 **LeNet(1998)→ AlexNet(2012)→ VGG(2014)→ ResNet(2015)** 越堆越深,把 ImageNet 错误率从两位数压到 3.57%。
+[[51 池化与经典 CNN(LeNet→AlexNet→VGG→ResNet)|池化]]把特征图的每个局部窗口压成一个数(取 max 或平均),实现**固定规则的下采样**与局部平移鲁棒。本篇只讲经典 CNN 的主线：**LeNet(1998)→AlexNet(2012)→VGG(2014)→ResNet(2015)**，以及池化和 GAP 在这条主线中的作用；后来的视觉架构只作为通往相关原子笔记的桥接，不在此做选型或排行榜式综述。
 
 ## 直觉
 
@@ -44,24 +44,19 @@ $$\text{MaxPool}=\begin{bmatrix}4&5\\7&8\end{bmatrix},\qquad
 
 **最大池化的反向传播。** 前向 $y=\max(x_1,\dots,x_n)$。梯度只回传给「取到最大的那个位置」,其余为 0(类似 [[35 激活函数(Sigmoid、Tanh、ReLU、GELU、SwiGLU)|ReLU]] 的稀疏梯度);需缓存 argmax 索引。**平均池化**则把上游梯度均分给窗口内每个元素($\frac1n$)。
 
-**经典 CNN 演进(均为 ImageNet/ILSVRC 关键节点)。**
+**经典 CNN 主线。** LeNet 是手写数字任务的早期卷积网络；AlexNet、VGG 和 ResNet 才是 ImageNet/ILSVRC 语境下连续可比较的关键节点。因此，下面的具体 ImageNet 数字只用于说明后三者各自论文报告的实验，不把 LeNet 与它们混作同一基准上的排行榜。
 
-- **LeNet-5(LeCun, 1998)**:第一套现代 CNN。约 7 层「卷积+下采样(子采样)+全连接」,~6 万参数,做 MNIST 手写数字。奠定了「conv→pool→FC」范式,但受限于算力与数据,沉寂多年。
+- **LeNet-5(LeCun, 1998)**:早期现代 CNN 代表。约 7 层「卷积+下采样(子采样)+全连接」、约 6 万参数，面向 MNIST 手写数字；它确立了「conv→下采样→分类」的基本范式。
 
 - **AlexNet(Krizhevsky, 2012)**:**深度学习引爆点**。8 层(5 conv + 3 FC)、~6000 万参数,ILSVRC-2012 top-5 错误从上一年的 ~26% 砍到 ~16%,震动全场。关键工程:**[[35 激活函数(Sigmoid、Tanh、ReLU、GELU、SwiGLU)|ReLU]]**(替代 sigmoid,训练快几倍)、**[[42 正则化(L2、Dropout、早停、标签平滑)|Dropout]]**、数据增强、双 GPU 训练。
 
-- **VGG-16/19(Simonyan & Zisserman, 2014)**:把网络做**规整且更深**(16~19 层),核心信条:**全部用 3×3 卷积堆叠**。两层 3×3 = 一层 5×5 的 [[50 特征图、步幅、填充与感受野|感受野]],但参数更少、非线性更多。代价是参数巨大(~1.38 亿,主要在末端全连接),top-5 错误 ~7%。证明了「深度本身」是涨点的关键变量。
+- **VGG-16/19(Simonyan & Zisserman, 2014)**:把网络做**规整且更深**(16~19 层),核心信条:**全部用 3×3 卷积堆叠**。两层 3×3 = 一层 5×5 的 [[50 特征图、步幅、填充与感受野|感受野]],但参数更少、非线性更多。代价是参数巨大(~1.38 亿,主要在末端全连接),论文在其训练设置下报告 top-5 错误约 7%。它说明「在规整的小核设计、数据和训练配方配合时，增加深度可以有效」，并不单独证明深度必然带来收益。
 
-- **ResNet(He et al., 2015)**:深度跨越式突破。直接堆到 **152 层**(也有 18/34/50/101 版),ILSVRC-2015 冠军,集成 top-5 错误 **3.57%**(超过人类 ~5%),而 152 层的 FLOPs **还低于 VGG**。破局点是 **[[52 残差连接与深度可训练性|残差连接]]** $y=F(x)+x$,解决了「网络一深反而变差」的退化问题(下一篇详述)。
+- **ResNet(He et al., 2015)**:把残差块扩展到 **152 层**（亦有 18/34/50/101 层配置）；论文报告其 ILSVRC-2015 集成 top-5 错误为 **3.57%**，并指出 152 层配置的计算量低于 VGG-19。破局点是 **[[52 残差连接与深度可训练性|残差连接]]** $y=F(x)+x$，用恒等路径缓解「网络加深但训练误差反而变差」的退化问题。
 
-**继续往后的演进(补全脉络)**:
-- **Inception / GoogLeNet(Szegedy, 2014)**:同层并联多种核大小($1{\times}1,3{\times}3,5{\times}5$)+ $1{\times}1$ 降维,用 GAP 替代全连接,22 层却比 AlexNet 参数少 12 倍,top-5 ~6.7%。提出「多尺度 + 瓶颈」思路。
-- **BatchNorm(Ioffe, 2015)**:不是网络而是组件,但它让深网训练大幅提速、可用更大学习率,是 ResNet 能稳训上百层的关键拼图(见 [[43 归一化(BatchNorm、LayerNorm、RMSNorm、GroupNorm)|BatchNorm]])。
-- **DenseNet(Huang, 2017)**:每层都连到后面所有层(密集跳连),特征复用、参数更省。
-- **MobileNet / EfficientNet(2017–2019)**:用深度可分离卷积(见 [[49 卷积运算与卷积核|卷积]])和复合缩放,在移动端/有限算力下取得最优精度-效率折中。
-- **ConvNeXt(2022)**:用 Transformer 时代的训练技巧重新武装纯 CNN,证明 CNN 仍可与 ViT 抗衡;同时 **Vision Transformer(ViT, 2020)** 把注意力搬进视觉,开启 CNN 之外的新路线(见 [[60 注意力机制的起源(Bahdanau、Luong)|注意力起源]] → Transformer)。
+**向后只作桥接，不扩展成架构大全。** 深网训练中的归一化见 [[43 归一化(BatchNorm、LayerNorm、RMSNorm、GroupNorm)|归一化]]；可分离卷积等效率算子回到 [[49 卷积运算与卷积核|卷积]]；残差及其可训练性回到 [[52 残差连接与深度可训练性|残差连接]]；视觉 Transformer 的注意力谱系从 [[60 注意力机制的起源(Bahdanau、Luong)|注意力起源]] 进入。DenseNet、MobileNet、EfficientNet、ConvNeXt、ViT 分别解决特征复用、算力约束或视觉建模范式问题，但不宜仅凭年份或单一基准分数给出全局优劣结论。
 
-**纵向规律(见时间线图):** 层数 $7\to8\to19\to152$,错误率 $26\%\to16\%\to7\%\to3.57\%$。趋势是「更深 + 更小核 + 更聪明的连接(残差)」。现代趋势进一步用 **GAP 替代末端全连接**、用 **stride 卷积替代部分池化**、用 **BN 稳训练**、用**深度可分离卷积省算力**。
+**主线中的可比规律(见时间线图):** 从 AlexNet 到 VGG 再到 ResNet，设计重心依次是可训练的深网络、规整的小卷积核堆叠、以及残差连接；它们的论文实验使用的模型、训练配方与集成设置并不相同，不能把 $16\%\to7\%\to3.57\%$ 简化为「层数单独造成的收益」。池化/GAP 是这条线中的空间聚合手段；是否改用 stride 卷积取决于任务、特征图尺寸与计算预算。
 
 ![[cnn-经典网络时间线.png]]
 
@@ -102,13 +97,12 @@ print(type(resnet).__name__)
 
 - **「池化的作用?max 和 avg 区别?」** 下采样(省算力、扩大感受野)+ 局部平移鲁棒,且**无参数**。max 取最强响应(保显著特征,中间层主流);avg 取平均(更平滑,GAP 常替代末端全连接)。
 - **「最大池化怎么反向传播?」** 梯度只回传给 argmax 那个位置,其余为 0(需缓存索引);平均池化把梯度均分。
-- **「能按时间线讲讲经典 CNN 吗?」** LeNet(1998,确立 conv-pool-FC)→ AlexNet(2012,ReLU+Dropout+GPU,引爆深度学习)→ VGG(2014,全 3×3、做深)→ ResNet(2015,残差连接,上百层)。错误率 26→16→7→3.57%。
+- **「能按时间线讲讲经典 CNN 吗?」** LeNet(1998,确立 conv-pool-FC)→ AlexNet(2012,ReLU+Dropout+GPU,引爆深度学习)→ VGG(2014,全 3×3、做深)→ ResNet(2015,残差连接,上百层)。可补充：AlexNet、VGG、ResNet 各篇论文在各自模型、训练配方和是否集成的条件下报告了约 16%、7%、3.57% 的 top-5 错误；这些数字不是同一控制实验，不能归因成「层数越深，误差必然按此下降」。
 - **「VGG 为什么全用 3×3?」** 堆两层 3×3 ≈ 一层 5×5 感受野,但参数更少、非线性更多、更规整。
 - **「AlexNet 相比 LeNet 的关键改进?」** ReLU(缓解梯度消失、训练快)、Dropout(正则)、数据增强、GPU 训练、更大更深;加上 ImageNet 大数据。
 - **「GAP(全局平均池化)解决什么?」** 把末端巨大全连接换成无参数聚合,大幅减参、抗过拟合,还让输入尺寸更灵活。
 - **「现在还用池化吗?」** 仍用,但很多网络改用 stride2 卷积做下采样(可学习);GAP 几乎是标准末端。
-- **「按时间线把演进讲全?」** LeNet(1998)→ AlexNet(2012, ReLU+Dropout+GPU)→ VGG(2014, 全3×3)→ GoogLeNet/Inception(2014, 多尺度+1×1降维+GAP)→ ResNet(2015, 残差)→ DenseNet(2017, 密集跳连)→ MobileNet/EfficientNet(2017–19, 高效)→ ConvNeXt/ViT(2020–22, 与 Transformer 融合/竞争)。
-- **「Inception 的核心创新?」** 同层并联多种核大小做多尺度感知,$1{\times}1$ 卷积降维省算力,GAP 替代全连接;比 AlexNet 更深却参数更少。
+- **「按时间线讲经典 CNN 主线?」** LeNet(1998，卷积+下采样范式)→AlexNet(2012，ReLU、Dropout、GPU 训练)→VGG(2014，全 $3\times3$ 堆叠)→ResNet(2015，残差连接)。要延伸到 DenseNet、MobileNet、EfficientNet、ConvNeXt 或 ViT 时，先说明比较维度（特征复用、端侧效率、训练配方或视觉范式），不要把它们当成这条线的单一排名。
 - **「池化和 stride 卷积哪个会丢信息?」** 都做有损下采样;池化是固定规则(max 只留最强、avg 抹平),stride 卷积可学但同样丢空间细节。要保分辨率又扩感受野用空洞卷积。
 - **「为什么 GAP 让输入尺寸更灵活?」** GAP 把任意 $H\times W$ 压成 $1\times1$,后接的全连接只依赖通道数 $C$、与空间尺寸无关,所以网络能吃不同分辨率输入。
 
@@ -119,6 +113,4 @@ print(type(resnet).__name__)
 - **VGG**:Simonyan & Zisserman, *Very Deep Convolutional Networks for Large-Scale Image Recognition*(ICLR 2015,arXiv:1409.1556, 2014),全 3×3 卷积,16/19 层,~1.38 亿参数。
 - **ResNet**:He, Zhang, Ren & Sun, *Deep Residual Learning for Image Recognition*(CVPR 2016,arXiv:1512.03385, 2015),最深 152 层,ILSVRC-2015 集成 top-5 错误 **3.57%**,FLOPs 低于 VGG。
 - **全局平均池化**:Lin, Chen & Yan, *Network In Network*(ICLR 2014),提出用 GAP 替代末端全连接。
-- **Inception / GoogLeNet**:Szegedy et al., *Going Deeper with Convolutions*(CVPR 2015),22 层、多尺度并联、$1{\times}1$ 降维,ILSVRC-2014 冠军 top-5 ~6.7%。
-- **DenseNet**:Huang et al.(CVPR 2017);**MobileNet**:Howard et al.(2017);**EfficientNet**:Tan & Le(ICML 2019,复合缩放)。
-- **ConvNeXt**:Liu et al.(CVPR 2022);**ViT**:Dosovitskiy et al., *An Image Is Worth 16×16 Words*(ICLR 2021)——视觉 Transformer,挑战 CNN 主导地位。
+- **后续架构的定位**：DenseNet（Huang et al., CVPR 2017）、MobileNet（Howard et al., 2017）、EfficientNet（Tan & Le, ICML 2019）、ConvNeXt（Liu et al., CVPR 2022）和 ViT（Dosovitskiy et al., ICLR 2021）是延伸阅读的原始论文；本篇不比较其跨论文指标或宣称统一的当前最优。
