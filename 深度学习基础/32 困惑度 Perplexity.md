@@ -1,4 +1,4 @@
-[[32 困惑度 Perplexity]]:**困惑度 $\mathrm{PPL}=e^{\text{交叉熵}}$,是语言模型评估的根本指标**,直观含义是"模型预测下一个词时,平均在几个候选里犹豫"——越小越好,下界是 1。
+[[32 困惑度 Perplexity]]:**困惑度 $\mathrm{PPL}=e^{\text{交叉熵}}$,是经典自回归（因果）语言模型的内在评估指标**,直观含义是"模型预测下一个词时,平均在几个候选里犹豫"——越小越好,下界是 1。
 
 ## 直觉
 
@@ -51,7 +51,8 @@ $$\boxed{\ \mathrm{PPL}=\exp\!\left(-\frac{1}{N}\sum_{t=1}^{N}\ln p(w_t\mid w_{<
 
 1. $\mathrm{PPL}\ge 1$,等号当且仅当模型对每个真词都给概率 1。
 2. $\mathrm{PPL}\le V$ 不一定成立——若模型对真词给了极低概率,PPL 可远超 $V$。乱猜(均匀)才恰好 = $V$。
-3. **强烈依赖分词(tokenizer)**:同一模型,子词切得越细、序列越长,逐 token 的 PPL 一般越低,**不同分词的 PPL 不可直接比较**。
+3. **强烈依赖分词(tokenizer)**:同一模型,子词切得越细、序列越长,逐 token 的 PPL 一般越低,**不同分词的 PPL 不可直接比较**；还必须固定测试集、预处理、上下文窗口和计分策略。
+4. **不适用于所有预训练目标**:上述链式分解只定义了自回归 / 因果 LM 的 PPL；BERT 一类 masked LM 不能直接用这个标准 PPL，若报告 pseudo-perplexity，也必须单独说明其掩码与计分方法。
 
 **跨分词比较:bits-per-byte / bits-per-char**。为了让不同 tokenizer 的模型可比,改用"每字节比特数"(BPB)或"每字符比特数"(BPC):把整段的总负对数似然(以 bit 计)除以**字节数/字符数**而非 token 数(LLM 评估里 PPL 与 BPB 的完整用法见 [[LLM/109 语言模型评估：困惑度与 bits-per-byte|语言模型评估]])。因为字节/字符是与分词无关的物理单位,BPB 才能横向比较 LLaMA、GPT 等不同分词的模型。换算:$\text{BPB}=\frac{\text{总 nat}}{\ln 2\times\text{字节数}}$。
 
@@ -91,15 +92,15 @@ print("BPB 示例:", round(bits_per_byte(100.0, 200), 3))   # 总 100 nat / 200 
 ```
 
 ```python
-# 从 logits 直接算(LM 评估常见写法)
+# 从 logits 直接算(LM 评估常见写法)：全零 logits = 严格均匀分布，示例可复现
 def ppl_from_logits(logits, targets):
     # logits: [N, V],targets: [N] 真实下一个 token
     ce = F.cross_entropy(logits, targets, reduction='mean')  # 已是平均 nat 交叉熵
     return torch.exp(ce)
 
-logits = torch.randn(5, 1000)          # 随机未训练 → 接近均匀
-targets = torch.randint(0, 1000, (5,))
-print(ppl_from_logits(logits, targets))  # ≈ 1000 量级(乱猜)
+logits = torch.zeros(5, 1000)          # 每类相等，softmax 后严格为 1/1000
+targets = torch.tensor([0, 17, 42, 314, 999])
+print(ppl_from_logits(logits, targets))  # tensor(1000.)，严格等于 V
 ```
 
 ## 面试高频
@@ -108,6 +109,7 @@ print(ppl_from_logits(logits, targets))  # ≈ 1000 量级(乱猜)
 - **"PPL 的取值范围?"** 下界 1(完美);均匀乱猜 = 词表大小 $V$;预测得比乱猜还差时可超过 $V$。
 - **"为什么用 PPL 而不直接看交叉熵?"** 数学等价,但 PPL 在"词数"尺度上人类可解释,便于横向对比。
 - **"两个模型的 PPL 能直接比吗?"** 只有**相同 tokenizer + 相同测试集 + 相同上下文长度**才能比;换分词后逐 token PPL 不可比(常改用 bits-per-byte 等做跨分词比较)。
+- **"BERT 能直接报这个 PPL 吗?"** 不行。标准 PPL 是自回归条件概率的连乘；masked LM 没有同一条左到右分解，必须改报并注明 pseudo-perplexity 或换合适指标。
 - **"跨 tokenizer 怎么比?"** 用 bits-per-byte / bits-per-char(除以字节/字符数而非 token 数),物理单位与分词无关,才可比。
 - **"PPL 和压缩什么关系?"** 每词交叉熵 = 算术编码每词比特数,好的 LM 就是好的无损压缩器;"语言建模即压缩"。
 - **"长文本怎么算 PPL?"** 滑动窗口:右移窗口,只对有足够左侧上下文的 token 计 loss,避免开头无上下文导致虚高。
@@ -116,7 +118,7 @@ print(ppl_from_logits(logits, targets))  # ≈ 1000 量级(乱猜)
 
 ## 关键事实
 
-- 困惑度 $\mathrm{PPL}=\exp(\text{每词交叉熵})$,是语言模型内在评估的标准指标(Jelinek et al. 1977 引入;Jurafsky & Martin《Speech and Language Processing》第 3 版,LM 章节)。
+- 困惑度 $\mathrm{PPL}=\exp(\text{每词交叉熵})$,是经典自回归语言模型的内在评估指标(Jelinek et al. 1977 引入;Jurafsky & Martin《Speech and Language Processing》第 3 版,LM 章节)。
 - $\mathrm{PPL}=\bigl(\prod_t p(w_t\mid w_{<t})\bigr)^{-1/N}$,即文本概率几何平均的倒数。
-- PPL 强依赖分词,跨 tokenizer 不可直接比较;HuggingFace 文档明确建议固定分词与滑动窗口计算(2024)。
+- PPL 强依赖分词,跨 tokenizer 不可直接比较；Hugging Face《Perplexity of fixed-length models》文档（2026-07-17 查阅）说明标准 PPL 特指自回归 / 因果 LM、对 masked LM 未良好定义，并建议固定长度模型使用滑动/步长窗口、只累计新预测 token 的 NLL。
 - 现代 LLM 报告中 PPL 已不是唯一指标,需配合下游基准与人类评估(GPT/LLaMA 等技术报告通行做法)。

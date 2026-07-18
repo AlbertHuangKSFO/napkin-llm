@@ -17,10 +17,10 @@
 翻译"我 爱 猫 → I love cats",编码器给出 $h_1$(我)、$h_2$(爱)、$h_3$(猫)。解码到要生成 **love** 这一步,用上一解码状态 $s_{t-1}$ 去和每个 $h_j$ 打分(加性打分),假设得到原始分数:
 $$e_1=0.2,\quad e_2=2.1,\quad e_3=0.5$$
 过 [[27 Softmax 与温度|softmax]] 归一化成权重:
-$$\alpha=\text{softmax}([0.2,2.1,0.5])\approx[0.10,\ 0.78,\ 0.12]$$
-(算法:$\frac{e^{0.2}}{e^{0.2}+e^{2.1}+e^{0.5}}=\frac{1.22}{1.22+8.17+1.65}=\frac{1.22}{11.04}\approx0.11$,余类推,数值略。)
-**权重集中在"爱"($\alpha_2=0.78$)**——正是 love 该对齐的词。上下文向量:
-$$c_t=0.10\,h_1+0.78\,h_2+0.12\,h_3\ \approx\ h_2$$
+$$\alpha=\text{softmax}([0.2,2.1,0.5])\approx[0.111,\ 0.740,\ 0.149]$$
+(算法:$\frac{e^{0.2}}{e^{0.2}+e^{2.1}+e^{0.5}}=\frac{1.221}{1.221+8.166+1.649}=\frac{1.221}{11.036}\approx0.111$,余类推。)
+**权重集中在"爱"($\alpha_2\approx0.740$)**——正是 love 该对齐的词。上下文向量:
+$$c_t=0.111\,h_1+0.740\,h_2+0.149\,h_3$$
 解码器拿这个**聚焦于"爱"的 $c_t$** 去预测,自然输出 love。把每个目标词的 $\alpha$ 行堆起来,就是对齐热图(下图右),对角线附近发亮 = 词序大致单调对齐。
 
 **softmax 权重的完整手算(把分数变权重)**。原始分数 $e=[0.2,2.1,0.5]$。
@@ -59,8 +59,8 @@ $$e_{tj}=\begin{cases}s_t^\top h_j & \text{dot(点积)}\\ s_t^\top W\,h_j & \tex
 还区分 **global**(看源句全部位置)与 **local**(只看预测出的一个窗口,省算力)注意力。**点积打分**计算最省,直接启发了后来的缩放点积注意力。
 
 **加性 vs 乘性的取舍(高频对比)**:
-- **加性(Bahdanau)**:$e=v^\top\tanh(W_s s+W_h h)$。query 和 key **维度可不同**(各自有投影矩阵),有额外参数 $v,W_s,W_h`;表达灵活,但每对 $(s,h)$ 要过一个小网络,**不易矩阵化、较慢**,高维下数值更稳。
-- **乘性/点积(Luong)**:$e=s^\top h$(或 $s^\top W h`)。**无额外参数(dot 版)、能整批矩阵乘、最快**;但要求 query/key 同维,且**高维时点积方差大**($\sim d$),softmax 易进饱和区、梯度小——这正是 Transformer 加 $\frac1{\sqrt d}$ 缩放的动机。
+- **加性(Bahdanau)**:$e=v^\top\tanh(W_s s+W_h h)$。query 和 key **维度可不同**(各自有投影矩阵),有额外参数 $v,W_s,W_h$；表达灵活,但每对 $(s,h)$ 要过一个小网络,**不易矩阵化、较慢**,高维下数值更稳。
+- **乘性/点积(Luong)**:$e=s^\top h$(或 $s^\top W h$)。**无额外参数(dot 版)、能整批矩阵乘、最快**;但要求 query/key 同维,且**高维时点积方差大**($\sim d$),softmax 易进饱和区、梯度小——这正是 Transformer 加 $\frac1{\sqrt d}$ 缩放的动机。
 结论:小模型/维度不齐用加性,大规模/可并行用缩放点积(现代主流)。
 
 **global vs local 注意力(Luong)**:
@@ -69,9 +69,9 @@ $$e_{tj}=\begin{cases}s_t^\top h_j & \text{dot(点积)}\\ s_t^\top W\,h_j & \tex
 
 **注意力的"可解释性"陷阱**:把 $\alpha$ 画成热图很诱人,但 **注意力权重 ≠ 因果重要性**(Jain & Wallace 2019)——同一预测可能对应多组不同的注意力分布,高权重位置未必是模型"真正依赖"的。面试若被追问,要点出这一争议,别把热图当成模型决策的金标准。
 
-**通往 Transformer(关键事实里再点)**:把 $s_{t-1}$ 抽象成 **query** $Q$,把 $h_j$ 既当 **key** $K$ 又当 **value** $V$,注意力就是 $\text{softmax}(QK^\top)V$。Transformer 做了两步质变:① 把打分换成**缩放点积** $\frac{QK^\top}{\sqrt{d}}$;② 让序列**内部**每个位置互相 attend(**自注意力**),彻底去掉 RNN 的循环,从而**可并行**、长程一跳直达。注意力从"RNN 的附件"变成"整个架构的主干"。
+**通往 Transformer(关键事实里再点)**:把 $s_{t-1}$ 抽象成 **query** $Q$,把 $h_j$ 既当 **key** $K$ 又当 **value** $V$,注意力就是 $\text{softmax}(QK^\top)V$。Transformer 做了两步质变:① 把打分换成**缩放点积** $\frac{QK^\top}{\sqrt{d}}$;② 在其编码器/解码器层内让序列位置做**自注意力**。这使 Transformer 可在训练时按位置并行计算、长程信息一跳可达；它并未让所有现代模型都完全不含循环模块。
 
-**[[LLM/003 Query、Key、Value 的设计|Q/K/V]] 抽象(为后面 Transformer 打底)**:在 Bahdanau 里 query=解码状态 $s_{t-1}$、key=value=编码隐状态 $h_j`;Transformer 把三者**各自用一个投影矩阵**从同一输入生成($Q=XW_Q,K=XW_K,V=XW_V$),并区分 key(用来打分匹配)和 value(用来加权聚合)。"用 query 去匹配 key、按匹配度聚合 value"这个三件套,从 Bahdanau 的跨编解码注意力,一路用到 Transformer 的自注意力、交叉注意力,是理解一切现代注意力的统一模板。
+**[[LLM/003 Query、Key、Value 的设计|Q/K/V]] 抽象(为后面 Transformer 打底)**:在 Bahdanau 里 query=解码状态 $s_{t-1}$、key=value=编码隐状态 $h_j$；Transformer 把三者**各自用一个投影矩阵**从同一输入生成($Q=XW_Q,K=XW_K,V=XW_V$),并区分 key(用来打分匹配)和 value(用来加权聚合)。"用 query 去匹配 key、按匹配度聚合 value"这个三件套,从 Bahdanau 的跨编解码注意力,一路用到 Transformer 的自注意力、交叉注意力,是理解现代注意力的统一模板。
 
 ![[rnn-seq2seq瓶颈.png]]
 

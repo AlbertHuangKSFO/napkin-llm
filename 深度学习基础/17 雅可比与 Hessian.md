@@ -70,7 +70,7 @@ $$H\in\mathbb R^{n\times n},\qquad H_{ij}=\frac{\partial^2 f}{\partial x_i\parti
 
 - **Hessian-向量积(HVP)**:不显式建 $H$,用两次自动微分直接算 $H\mathbf{v}$,$O(n)$ 而非 $O(n^2)$;用于共轭梯度、信赖域。
 - **Gauss-Newton / Fisher 近似**:用 $J^\top J$ 近似 Hessian(丢掉二阶残差项),正定且只需一阶雅可比;自然梯度、K-FAC、二阶优化器(如 Shampoo)的基础。
-- **对角近似**:Adam 用梯度平方的滑动平均近似 Hessian 对角线,实现"每参数自适应学习率"——这是一阶方法偷偷借了二阶信息。
+- **对角预条件**:Adam 用梯度平方的指数滑动平均 $v_t$ 来缩放各参数步长；它**不是 Hessian 对角线的估计**。在随机梯度、接近最优点及特定模型假设下，$E[gg^T]$ 可与经验 Fisher / Gauss-Newton 的曲率信息有联系，因此这是有界、启发式的对角预条件，而非真正二阶方法。
 
 ## 代码
 
@@ -144,7 +144,7 @@ print("牛顿一步:", x_newton)   # [0. 0.] 直达最小值
 - **"condition number(Hessian 最大/最小特征值之比)和训练有什么关系?"** 比值大 = 损失面"又长又窄的峡谷",梯度下降会震荡变慢,这正是要做特征缩放/归一化的原因。
 - **"$2\times2$ Hessian 怎么不算特征值判极值?"** 看 $\det H$ 和 $H_{11}$:$\det>0\,\&\,H_{11}>0$ 极小、$\det>0\,\&\,H_{11}<0$ 极大、$\det<0$ 鞍点。
 - **"牛顿法 vs 梯度下降?"** 牛顿用 $H^{-1}\nabla f$,二阶、对二次函数一步到位、不挑学习率;但 $H^{-1}$ 是 $O(n^3)$,深度学习用一阶或 Gauss-Newton/对角近似。
-- **"怎么不建 Hessian 也用上二阶信息?"** Hessian-向量积(两次 AD,$O(n)$)、Gauss-Newton 用 $J^\top J$、Adam 用梯度平方近似对角线。
+- **"怎么不建 Hessian 也用上二阶信息?"** Hessian-向量积(两次 AD,$O(n)$)、Gauss-Newton 用 $J^\top J$；Adam 的梯度二阶矩只提供经验 Fisher 式的对角预条件直觉，**不能说它等于 Hessian 对角线**。
 - **"雅可比行列式在 ML 哪出现?"** 归一化流的密度变量替换因子 $|\det J|$;设计三角雅可比让它易算。
 
 ## 关键事实
@@ -152,3 +152,4 @@ print("牛顿一步:", x_newton)   # [0. 0.] 直达最小值
 - 雅可比矩阵作为向量值函数的一阶导、Hessian 作为标量函数的二阶导及二阶极值判据,见 James Stewart《Calculus》(8th ed., 2015)第 14 章与多元微积分标准教材。
 - 克莱罗(Schwarz)定理:二阶偏导连续则混合偏导可交换,Hessian 对称。
 - 高维非凸损失面以鞍点为主、二阶方法在深度学习中难以直接使用,见 Dauphin et al., 《Identifying and attacking the saddle point problem in high-dimensional non-convex optimization》(NeurIPS, 2014)及 Goodfellow, Bengio & Courville《Deep Learning》(2016)第 4.3、8 章。
+- Adam 的 $v_t$ 是随机梯度逐坐标平方的指数滑动平均，而非 Hessian 对角估计；其与 Fisher / 曲率的关系需要额外条件，见 Kingma & Ba《Adam: A Method for Stochastic Optimization》(2015)及 Martens《New insights and perspectives on the natural gradient method》(2014)。
