@@ -1,113 +1,188 @@
-[[090 RLAIF、宪法 AI 与过程奖励 PRM]]:三种给 [[085 RLHF 全流程与 KL 约束、奖励黑客|RLHF]] 「换奖励来源」的方法——**RLAIF** 用 AI(LLM 裁判)替人标偏好降成本、**宪法 AI**(Bai 2022,arXiv 2212.08073)用明文原则 + AI 自我批判修订做无害对齐、**PRM 过程奖励**(Lightman 2023)逐步打分而非只看结果,让复杂推理监督更密、更准。
+[[090 RLAIF、宪法 AI 与过程奖励 PRM|RLAIF、宪法 AI 与 PRM]]:它们都在回答同一个问题——RLHF 的奖励信号到底从哪来；但三者解决的是不同层次：RLAIF 换掉“谁来打偏好分”，宪法 AI 换掉“按什么原则修正输出”，PRM 换掉“奖励只看最终结果还是看中间步骤”。
 
-## 直觉:奖励信号从哪来?人太贵,改用 AI 和「逐步打分」
+## 直觉：不是都在“替代人类”，而是在改奖励颗粒度
 
-[[083 奖励模型 RM|RM]] 的偏好标注靠人,**贵、慢、难规模化**。三条优化路线:
+[[083 奖励模型 RM|RM]] 与 [[085 RLHF 全流程与 KL 约束、奖励黑客|RLHF]] 的瓶颈之一是人类偏好标注：慢、贵、风格不稳定。于是有三条常见改法：
 
-- **RLAIF(RL from AI Feedback)**:把「人选哪个回答更好」换成「**LLM 裁判**按规则选」。AI 标注便宜、可批量、一致性高——只要裁判够强,质量逼近甚至匹敌人标。
-- **宪法 AI(Constitutional AI,CAI)**:Anthropic 的做法。写一组明文**「宪法」原则**(如「不要有害、不要歧视」),让模型**自我批判 + 自我修订**违规回答,再用 AI 按宪法给偏好——**无害性几乎不靠人标**,且原则透明可审计。
-- **PRM(Process Reward Model,过程奖励模型)**:不只看最终答案对错(那是 ORM,结果奖励),而是**给推理的每一步打分**。信号更密、能定位错在哪一步,对长推理([[089 推理模型与 RL：o1、R1 的长 CoT 与自我反思|长 CoT]])尤其有用。
+- **RLAIF**：让 LLM 裁判代替人类偏好标注者。
+- **宪法 AI**：把“无害原则”写成显式文本，再让模型自我批判、自我修订。
+- **PRM**：不只看最后答案对不对，而是给“做到这一步时，这条路径还靠谱吗”打分。
 
-一句话:**RLAIF/CAI 换『谁来标偏好』,PRM 换『在哪个粒度给奖励』**。
+这里也有个常见误区要纠正：**PRM 不是“普适优于 ORM 的通用真理”**。更准确的说法是：在像 MATH 这类可以明确标注中间步骤正确性的任务上，过程监督常常更有信息量；但换任务、换步骤切分方式、换搜索/聚合器，结论不一定自动成立。
 
 ![[post-rlaif-cai.png]]
 
-## 例子:三种方法各做什么(小数字)
+## 小数字手算：为什么 PRM 能发现“过程错但最后蒙对”
 
-**RLAIF**:prompt 配两个回答 $A,B$。不找人,而是给一个强 LLM 裁判看 $(A,B)$ + 评判准则,它输出「$A$ 更好,置信 0.8」。把这条 AI 偏好当 $(y_w{=}A,y_l{=}B)$ 训 [[083 奖励模型 RM|RM]](或直接 [[086 DPO 直接偏好优化(推导)|DPO]])。标 10 万条:人标可能要 $\$50$k 起、数周;AI 标几小时、成本几十分之一。
-
-**宪法 AI 的自我修订**:用户问危险问题,模型初答含有害内容。系统按宪法让它**自我批判**:「上面回答违反了『不协助危害』原则」;再**自我修订**:重写成拒答 + 安全解释。用修订后的版本做 SFT——**无害样本由模型自己造,不用人写**。
-
-**PRM vs ORM**:一道四步数学题,模型步骤 1、2 对,步骤 3 算错,但**最后蒙对了答案**。
-- **ORM**(只看结果):答案对 → +1。**误导**:把含错误步骤的解法当满分样本强化。
-- **PRM**(逐步):步骤 1 +1、步骤 2 +1、**步骤 3 −1**、步骤 4 即便答案对也因前置错误打折。信号精确指出「错在第 3 步」。
-
-## 原理
-
-**1)RLAIF**。流程与 [[085 RLHF 全流程与 KL 约束、奖励黑客|RLHF]] 完全一致,**只把偏好标注者从人换成 LLM**:
+看一道四步数学题，假设模型生成 4 个步骤，逐步正确性标签是
 
 $$
-(y_w,y_l)\ \xleftarrow{\ \text{LLM 裁判按准则判定}\ }\ (A,B),\qquad \text{其余 RM/PPO/DPO 不变}
+\ell=\{1,1,0,1\}.
 $$
 
-LLM 裁判常用「位置随机化 + 多次投票」减偏置。研究(Lee et al. 2023)显示 RLAIF 在多任务上可与 RLHF 持平。风险:**AI 裁判的系统性偏见(偏长、偏自家风格、谄媚)会被放大**。
+如果你只做 ORM（Outcome Reward Model），只看最后答案恰好写对了，那么整条解法可能拿到
 
-**LLM 裁判的已知偏置(面试常考,务必能列举)**:① **位置偏置**——同样两个回答,放前面的更易被选(用 A/B 交换两次、取一致判定来消);② **长度偏置**——倾向选更长更啰嗦的回答;③ **自我偏好(self-enhancement)**——倾向选和裁判自己风格相似/同源模型生成的回答;④ **谄媚(sycophancy)**——倾向附和提示里的暗示立场。这些偏置一旦进入偏好数据,会被 RM/DPO **系统性放大**(模型学会「写长、迎合」而非「写好」),与 [[085 RLHF 全流程与 KL 约束、奖励黑客|奖励黑客]] 同源——所以 RLAIF 在高风险场景仍需人抽检把关。
+$$
+r_{\text{ORM}}=1.
+$$
 
-**2)宪法 AI 两阶段**(Bai et al. 2022):
+但这会掩盖第 3 步已经走歪。
 
-- **监督阶段(SL-CAI)**:模型生成回答 → 按宪法**批判**自己哪里违规 → **修订**成更无害版本 → 用修订样本 **SFT**。这是一轮「自我对齐」。
-- **RL 阶段(RL-CAI = RLAIF)**:模型生成一对回答 → **AI 按宪法选更优者**(无害性)→ 这些 AI 偏好(+ 人标的有用性)训 [[083 奖励模型 RM|RM]] → 跑 [[085 RLHF 全流程与 KL 约束、奖励黑客|RLHF]]。
+若使用 PRM，把每一步是否仍“在正确轨道上”建模为
 
-收益:无害对齐**几乎零人标有害样本**(降低标注员心理负担)、原则**透明可改**。
+$$
+q_t=p_\phi(\ell_t=1\mid x,s_{\le t}),
+$$
+
+例如某条轨迹得到
+
+$$
+q=\{0.95,0.90,0.20,0.70\}.
+$$
+
+那么你可以用乘积近似“整条路径都靠谱”的概率：
+
+$$
+\prod_{t=1}^4 q_t
+=0.95\times0.90\times0.20\times0.70
+=0.1197.
+$$
+
+或者更保守，直接取最弱一步：
+
+$$
+\min_t q_t=0.20.
+$$
+
+这时即便最后答案蒙对，PRM 也会把“第 3 步已经明显跑偏”暴露出来。**这就是 PRM 的价值：它把信用分配从“只在终点算总账”改成“沿路分段记账”**。
+
+## 公式推导：PRM 学的是“前缀条件下的下一步质量”
+
+PRM 不是给孤立的某一步打分，而是给**题目 + 已有前缀 + 当前候选步**打分。更准确的形式应写成：
+
+$$
+q_t=p_\phi(\ell_t=1\mid x,s_{\le t}),
+$$
+
+其中 $x$ 是题目，$s_{\le t}$ 是到第 $t$ 步为止的推理前缀，$\ell_t$ 是“当前步是否把路径保持在正确轨道上”的标签。
+
+训练损失常写成逐步二分类：
+
+$$
+\mathcal{L}_{\text{PRM}}
+=-\sum_t
+\Big[
+\ell_t\log q_t+(1-\ell_t)\log(1-q_t)
+\Big].
+$$
+
+注意这里的条件是 **$(x,s_{\le t})$**，而不是孤立地看某个 step 文本。少掉这个条件，就会把 PRM 错写成“判断一句话本身是否正确”，这不对，因为同一句操作在不同题目、不同前缀下意义完全不同。
+
+整条路径怎么聚合，各家实现并不统一，常见有两类：
+
+$$
+\text{score}_{\prod}(y)=\prod_t q_t,
+\qquad
+\text{score}_{\min}(y)=\min_t q_t.
+$$
+
+前者更平滑，后者更像“木桶短板”。**PRM 的有效性不仅取决于模型本身，还取决于：步骤如何切分、标签怎么造、聚合器怎么选、以及它是被用于训练奖励还是用于推理时重排。**
 
 ![[cai-两阶段.png]]
 
-**3)PRM(过程奖励)**。给推理轨迹 $y=(s_1,s_2,\dots,s_T)$ 的**每一步** $s_t$ 一个标签(正确/错误/中性),PRM 学逐步打分。训练即逐步分类:
+**RLAIF** 则保持 RLHF 主流程不变，只把偏好标注者从人换成 LLM：
 
 $$
-\mathcal{L}_{\text{PRM}}=-\sum_t\Big[\ell_t\log p_\phi(s_t)+(1-\ell_t)\log(1-p_\phi(s_t))\Big]
+(y_w,y_l)\xleftarrow{\text{LLM judge}}(A,B),
+\qquad
+\text{后续仍可接 RM / PPO / DPO}.
 $$
 
-整段得分常取「**所有步都对的概率**」(各步乘积)或最小步分。**Lightman et al. 2023(*Let's Verify Step by Step*)证明:在 MATH 上过程监督(PRM)显著优于结果监督(ORM)**,并开源 80 万步级标注的 PRM800K。用途:① RL 奖励整形(更密);② 推理时按步搜索/打分(best-of-N、束搜索),挑可靠路径。代价:逐步标注**贵**(后续 Math-Shepherd 等用自动化造步级标签缓解)。
+**宪法 AI** 把“对齐原则”显式化，再让模型基于原则先批判、后修订。监督阶段做自我修订样本，RL 阶段再用 AI feedback 做偏好比较。它解决的是**原则可审计**与**减少人类暴露有害内容**的问题，不等于 PRM，也不等于普通 RLAIF。
 
-**PRM 解决的本质是「信用分配(credit assignment)」**。ORM 只给整段一个 0/1,模型无法知道「错在哪一步」——这是稀疏奖励的经典难题:正确答案里可能混着错误步骤(蒙对),错误答案里可能前几步全对(只栽在最后)。PRM 把奖励**铺到每一步**,等于把一个稀疏的最终信号拆成密集的逐步信号,大幅降低 RL 的方差、加速收敛,也让推理时搜索能**提前剪掉**走错的分支(不必等到最后才知道这条路废了)。
+## 能力边界：Lightman 2023 的结果是“特定设置有效”，不是“到处必胜”
 
-**Math-Shepherd 怎么自动造步级标签(免人标)**。人标 80 万步太贵,Math-Shepherd(arXiv 2312.08935)用**蒙特卡洛 rollout** 自动打分:对推理到第 $t$ 步的前缀,从这里**继续随机采样多条完整解**,看有多大比例最终答对——答对比例高 ⇒ 这一步「有前途」⇒ 标正,反之标负。这把「这一步对不对」转成「从这一步出发能不能答对」的可验证统计,**无需人逐步标注**,让 PRM 能规模化。本质是用结果奖励(可验证)反推过程标签。
+OpenAI 的 *Let’s Verify Step by Step*（2023）展示了：在数学推理数据上，过程监督可优于只看最终答案的结果监督。PRM800K 仓库还公开了大规模 step-level 标注及 held-out 评测拆分。
+
+但面试里更成熟的回答应当是：
+
+- **在可清晰切步、可稳定标注中间正确性的任务上**，PRM 往往比 ORM 更有信息量；
+- **在步骤边界模糊、答案开放、语言风格影响更大的任务上**，PRM 的标签质量和聚合规则会变得不稳；
+- **PRM 不天然替代终态 verifier**，尤其在代码/Agent 任务里，最终环境状态仍比“看起来像正确步骤”更重要。
+
+因此，PRM 更适合被描述成：**对某些推理任务极有价值的更细粒度奖励器，而不是一个跨任务普适压制 ORM 的金科玉律**。
+
+**Math-Shepherd 为什么重要**：它用 rollouts 把“这一步未来还有没有希望”转成统计标签，降低了逐步人工标注成本。但这本质上仍然依赖任务可验证性和 rollout 质量，不是零前提自动成立。
 
 ![[prm-MathShepherd树.png]]
 
 ![[post-prm-vs-orm.png]]
 
-## 代码:LLM 裁判偏好 + PRM 打分(伪代码)
+## 代码/配置：PRM 的输入必须包含前缀
 
 ```python
-# ---- RLAIF:用 LLM 裁判替人标偏好 ----
-def ai_preference(prompt, resp_a, resp_b, constitution):
-    # ❌ 误区:固定把 A 放前面 —— LLM 裁判有强位置偏置,会系统性偏向某一侧
-    # verdict = judge(f"{prompt}\nA:{resp_a}\nB:{resp_b}\n哪个更好?")
+# ---- RLAIF: 用 LLM 裁判替代人类偏好标注 ----
+def ai_preference(prompt, resp_a, resp_b, rubric):
+    # ❌ 固定 A/B 顺序，容易吃位置偏置
+    # return judge(prompt, resp_a, resp_b, rubric)
 
-    # ✅ 位置随机化 + 双向投票,降偏置
-    v1 = judge(prompt, resp_a, resp_b, rule=constitution)   # A 在前
-    v2 = judge(prompt, resp_b, resp_a, rule=constitution)   # 交换顺序再判
-    return aggregate(v1, flip(v2))            # 一致才采纳,得到 (y_w, y_l)
+    # ✅ 顺序交换 + 规则明确 + 分歧时丢弃或复判
+    v1 = judge(prompt, resp_a, resp_b, rubric=rubric)
+    v2 = judge(prompt, resp_b, resp_a, rubric=rubric)
+    return aggregate_pairwise_votes(v1, flip(v2))
 
-# ---- 宪法 AI 自我修订(监督阶段) ----
+
+# ---- Constitutional AI: 先按原则自我批判，再自我修订 ----
 def self_revise(prompt, draft, principle):
-    critique = model(f"指出下文违反『{principle}』之处:\n{draft}")   # 自我批判
-    revised  = model(f"按批判重写得更无害:\n{draft}\n批判:{critique}") # 自我修订
-    return revised                            # 用 revised 做 SFT,无需人写无害样本
+    critique = model(f"按原则指出问题：{principle}\n\n{draft}")
+    revised = model(f"基于批判重写答案：\n原文：{draft}\n批判：{critique}")
+    return revised
 
-# ---- PRM:逐步打分 vs ORM ----
-def score_solution(steps, prm):
-    # ❌ ORM:只看最终答案 —— 过程错、蒙对答案也满分,信号稀疏且误导
-    # return 1.0 if final_correct(steps) else 0.0
 
-    # ✅ PRM:每步打分,整段取「全步正确」概率(各步乘积),能定位错误步
-    step_p = [prm(step) for step in steps]    # 每步对的概率
-    return min(step_p)                         # 或 prod(step_p):一步错则整体低分
+# ---- PRM: 题目 + 前缀 + 当前步 -> 当前步质量 ----
+def prm_step_score(question, prefix_steps, next_step):
+    # ❌ 错：只给 next_step 打分，忽略题目与前缀
+    # return prm(next_step)
+
+    # ✅ 对 (question, prefix_steps, next_step) 条件化
+    return prm(question=question, prefix=prefix_steps, step=next_step)
+
+
+def path_score(question, steps):
+    prefix = []
+    scores = []
+    for step in steps:
+        q = prm_step_score(question, prefix, step)
+        scores.append(q)
+        prefix.append(step)
+    return min(scores)  # 也可以改成 prod(scores)
 ```
 
-要点:LLM 裁判务必**消位置偏置**;CAI 的无害样本由**自我批判→修订**生成;PRM 比 ORM 信号密但标注贵。
+要点：
+
+- PRM 的判断对象必须是“前缀条件下的下一步”，不是孤立 step。
+- RLAIF 重点是**降低偏好标注的人力依赖**，但 judge 偏置会直接传给下游模型。
+- 宪法 AI 重点是**显式原则 + 自我修订流程**，适合无害对齐语境。
 
 ## 面试高频
 
-- **RLAIF 和 RLHF 的区别?** 唯一区别是**偏好标注者**:RLHF 用人,RLAIF 用 LLM 裁判。其余 RM/PPO/DPO 流程不变。RLAIF 更便宜、可规模化、一致性高;风险是放大 AI 裁判的系统性偏见(偏长、谄媚、偏自家风格)。
-- **宪法 AI 两阶段分别做什么?** ① 监督阶段:模型按宪法**自我批判 + 修订**违规回答,用修订样本 SFT;② RL 阶段(=RLAIF):AI 按宪法标偏好训 RM,再跑 RLHF。无害性几乎零人标,原则透明可审计。
-- **PRM 和 ORM 的区别?为什么 PRM 更好?** ORM 只给整段一个分(看最终答案);PRM 逐步打分。PRM 信号更密、能定位错误步、避免「过程错却蒙对」拿满分;Lightman 2023 在 MATH 上证明过程监督 > 结果监督。代价:逐步标注贵。
-- **PRM 在推理模型里怎么用?** ① RL 训练时当更细的奖励([[088 GRPO 与可验证奖励|GRPO]] 的结果奖励之外);② 推理时按步给候选路径打分,做 best-of-N / 树搜索,挑可靠推理链。对 [[089 推理模型与 RL：o1、R1 的长 CoT 与自我反思|长 CoT]] 尤其有用。
-- **RLAIF/CAI 有什么风险?** AI 裁判/宪法的偏见会被系统性放大;宪法写不好 → 一致性偏差;高风险场景仍需人把关。与[[085 RLHF 全流程与 KL 约束、奖励黑客|奖励黑客]]、[[06 Jailbreak 越狱|越狱]]同属「目标错置/对齐」范畴。
-- **可验证奖励、PRM、神经 RM 怎么选?** 有客观判据(数学/代码)→ 可验证奖励([[088 GRPO 与可验证奖励|RLVR]]),最抗黑客;要细到步→ PRM;开放式主观任务→ 神经 RM / RLAIF。
-- **LLM 裁判有哪些偏置?怎么缓解?** 位置偏置(交换 A/B 双判)、长度偏置、自我偏好、谄媚。缓解:位置随机化 + 双向投票、控制长度、用异源裁判、明确评分准则、人抽检。这些偏置会被下游 RM/DPO 放大,属奖励黑客范畴。
-- **PRM 怎么免人标?** Math-Shepherd 用蒙特卡洛 rollout:从某步前缀继续采样多条完整解,以「最终答对比例」自动给该步打标签,把过程标注转成可验证的结果统计,无需人逐步标。
-- **ORM/PRM 在推理时怎么用?** ORM 给整条候选打一个分,做 best-of-N 重排;PRM 逐步打分,可在束搜索/树搜索时**提前剪枝**走错的分支,搜索更高效——对长 CoT 尤其值。
-- **宪法 AI 解决了人标的什么痛点?** 无害样本若靠人写,标注员要反复接触有害内容(心理负担)且难规模化;CAI 让模型**自我批判+修订**生成无害样本,几乎零人标有害内容,且原则明文、可审计可改。
+- 题库路由：[[LLM 面试题库]]
+- **RLAIF、宪法 AI、PRM 分别解决什么问题？** RLAIF 换偏好标注者，宪法 AI 把对齐原则显式化并用来做自我修订，PRM 把奖励从“只看终点”细化到“沿途分段打分”。
+- **PRM 和 ORM 的根本差异是什么？** ORM 对整条输出给一个终态分；PRM 对每个前缀上的下一步质量建模，核心是更细粒度的信用分配。
+- **为什么说 PRM 不是普适优于 ORM？** 因为它依赖可稳定切步、可标注中间正确性、合适聚合器与具体任务；在开放式任务里，这些前提可能不成立。
+- **PRM 的输入为什么必须带前缀？** 因为同一句 step 在不同题目或不同前序步骤下含义不同；孤立打分会丢失逻辑上下文。
+- **Lightman 2023 证明了什么，没证明什么？** 证明了在其数学推理与 held-out 评测设置中，过程监督可优于结果监督；没证明“所有任务、所有 PRM 设计都优于 ORM”。
+- **Math-Shepherd 的价值是什么？** 用 rollouts 自动近似步级标签，降低人类逐步标注成本，但前提仍是任务可验证且 rollout 质量足够。
+- **RLAIF 的主要风险是什么？** 位置偏置、长度偏置、自我偏好和谄媚会被 judge 放大后传给下游模型。
+- **宪法 AI 的主要优势是什么？** 原则显式、可审计，能减少人工编写有害样本与人工暴露风险。
+- **代码/Agent 任务里，PRM 能替代终态验证吗？** 不能。PRM 更像路径质量估计器；真正的交付正确性仍要看测试、引用和环境终态。
 
 ## 关键事实
 
-- RLAIF:把 RLHF 偏好标注从人换成 LLM 裁判;Lee et al. 2023(arXiv 2309.00267)示其多任务可比 RLHF;需消位置偏置。
-- 宪法 AI:Bai et al.(Anthropic)2022,*Constitutional AI: Harmlessness from AI Feedback*,arXiv **2212.08073**;两阶段=SL-CAI(自我批判+修订+SFT)+ RL-CAI(AI 按宪法标偏好→RM→RLHF);无害几乎零人标。
-- PRM:Lightman et al.(OpenAI)2023,*Let's Verify Step by Step*,arXiv **2305.20050**;过程监督 > 结果监督(MATH),开源 PRM800K(80 万步级人标)。后续 Math-Shepherd(arXiv 2312.08935)自动造步级标签。
-- ORM = 整段一个分(看结果);PRM = 逐步打分(信号密、可定位错误步、贵)。
-- 用途:RLAIF/CAI 降标注成本与无害对齐;PRM 用于 RL 奖励整形 + 推理时搜索/打分。
-- 关联:[[085 RLHF 全流程与 KL 约束、奖励黑客|RLHF]]、[[083 奖励模型 RM|RM]]、[[088 GRPO 与可验证奖励|可验证奖励]]、[[089 推理模型与 RL：o1、R1 的长 CoT 与自我反思|长 CoT/R1]]、[[086 DPO 直接偏好优化(推导)|DPO]]、[[06 Jailbreak 越狱|越狱]]、[[110 下游基准：MMLU、GSM8K、HumanEval、MT-Bench|MATH/GSM8K]]、[[30 交叉熵与负对数似然|交叉熵]]、[[32 Agentic RL 与训练|Agentic RL]]。
+- Bai et al.（Anthropic）, *Constitutional AI: Harmlessness from AI Feedback*, 2022，arXiv **2212.08073**：提出显式宪法原则、自我批判/修订与 AI feedback 结合的对齐流程。
+- Lightman et al.（OpenAI）, *Let’s Verify Step by Step*, 2023，arXiv **2305.20050**：展示在数学推理设定下，过程监督可优于结果监督，并发布 PRM800K。
+- OpenAI `prm800k` 仓库（核验于 **2026-07-19**）说明其为 step-level correctness labels 数据，并在 held-out 500 题上评估大规模 ORM/PRM；这支持“该结论依赖具体评测设置”的限定说法。
+- Wang et al., *Math-Shepherd: Verify and Reinforce LLMs Step-by-step without Human Annotations*, 2023，arXiv **2312.08935**：用 rollout 统计构造近似步级标签，降低 PRM 标注成本。
+- Lee et al., *RLAIF: Scaling Reinforcement Learning from Human Feedback with AI Feedback*, 2023，arXiv **2309.00267**：展示 AI feedback 可用于替代部分人类偏好标注，但 judge 偏置仍是核心风险。
+- 对推理/代码/Agent 任务，PRM 常用于“路径重排、搜索剪枝、奖励整形”；终态正确性仍需 [[088 GRPO 与可验证奖励|RLVR]] 或独立 verifier 兜底。
+- 关联：[[085 RLHF 全流程与 KL 约束、奖励黑客|RLHF]]、[[083 奖励模型 RM|RM]]、[[088 GRPO 与可验证奖励|GRPO / RLVR]]、[[089 推理模型与 RL：o1、R1 的长 CoT 与自我反思|推理模型]]、[[086 DPO 直接偏好优化(推导)|DPO]]、[[32 Agentic RL 与训练|Agentic RL]]

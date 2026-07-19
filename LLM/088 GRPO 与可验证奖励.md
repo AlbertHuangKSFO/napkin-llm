@@ -1,126 +1,221 @@
-[[088 GRPO 与可验证奖励]]:GRPO(Group Relative Policy Optimization,组相对策略优化,Shao 2024 DeepSeekMath,arXiv 2402.03300)是 [[084 策略梯度与 PPO 基础|PPO]] 的省钱变体——**去掉 critic 价值网络**,改用「同一道题采一组答案、谁比组内平均好就给正优势」来估优势;配上**可验证奖励**(数学对答案、代码跑单测,无需 [[083 奖励模型 RM|RM]]),成了 [[089 推理模型与 RL：o1、R1 的长 CoT 与自我反思|DeepSeek-R1]] 训练的主力算法。
+[[088 GRPO 与可验证奖励|GRPO]]:GRPO（Group Relative Policy Optimization，组相对策略优化）是 [[084 策略梯度与 PPO 基础|PPO]] 在大模型推理任务上的一种省显存做法——它不再训练 critic，而是对同一题采样一组答案，用组内相对奖励做更新；当奖励来自可判真的答案检查、单元测试或终态验证时，就进入 [[088 GRPO 与可验证奖励|RLVR]] 的范畴。
 
-## 直觉:不养一个会估错的 critic,直接看「组内名次」
+## 直觉：不用 critic，不等于“天然无偏”
 
-[[084 策略梯度与 PPO 基础|PPO]] 算优势 $A$ 要靠 **critic**(价值网络 $V_\phi$)当基线:$A=$ 回报 $-V(s)$。但 critic 本身要训、要占一份显存,且在长文本上常**估不准**。
+[[084 策略梯度与 PPO 基础|PPO]] 想降低方差，常见办法是训练一个价值网络 $V_\phi(s)$ 当基线。但大模型 RL 里，critic 本身要占显存、要训稳定，还容易在长文本上估偏。
 
-GRPO 的偷懒法很聪明:**同一道题,用当前策略采 $G$ 个答案(一组),把这组答案奖励的平均值当基线**。某个答案比组内平均好 → 正优势(下次多生成这类);比平均差 → 负优势。**组均值天然就是一个无偏基线,根本不用训 critic**。
+GRPO 的工程直觉是：同一题一次采 $G$ 个完整答案，直接拿这一组奖励做相对比较，不再额外养 critic。这样做很省事，但有个常见误区要纠正：**“组均值天然是严格无偏 baseline”不对**。对 REINFORCE 来说，严格无偏的 baseline 必须在条件于当前动作时与该动作独立；而 GRPO 的组均值里包含当前样本自己的奖励，属于**低成本近似基线**，不是教科书式的无偏控制变量。若要严格满足这条，应该用 leave-one-out baseline。
 
-再配一个关键搭档:**可验证奖励**。数学题有标准答案、代码有单元测试——奖励可以**客观、自动、批量**判定(对=1,错=0),不需要训一个会被钻空子的 [[083 奖励模型 RM|RM]],从源头削弱[[085 RLHF 全流程与 KL 约束、奖励黑客|奖励黑客]]。一句话:**GRPO = PPO 去掉 critic（用组内相对优势替代）+ 客观奖励**。
+一句话：**GRPO 的价值在于“去 critic + 组内对比 + 配合可验证奖励”，不是“它在理论上等价于无偏 REINFORCE”**。
 
 ![[post-grpo-group.png]]
 
-## 例子:组内相对优势(小数字)
+## 小数字手算：组均值 baseline 和 leave-one-out baseline 差在哪
 
-题目「$3+5\times2=?$」(正确答案 13)。策略采 $G=4$ 个答案,可验证奖励(对=1 错=0):
-
-$$
-r_1=1\ (\text{=13}),\quad r_2=0\ (\text{=16}),\quad r_3=1\ (\text{=13}),\quad r_4=0\ (\text{=11})
-$$
-
-组内统计:均值 $\mu=\frac{1+0+1+0}{4}=0.5$,标准差 $\sigma=0.5$。**组内标准化**得优势:
+题目「$3+5\times2=?$」，正确答案是 13。对同一个 prompt 采 $G=4$ 个答案，得到奖励
 
 $$
-A_i=\frac{r_i-\mu}{\sigma}\ \Rightarrow\ A_1=A_3=\frac{1-0.5}{0.5}=+1,\qquad A_2=A_4=\frac{0-0.5}{0.5}=-1
+r=\{1,0,1,0\}.
 $$
 
-于是对答错的 $y_2,y_4$ **压低概率**,对答对的 $y_1,y_3$ **抬高概率**——全程没有 critic、没有 RM,基线就是这组的平均分。注意:**若一组全对或全错,$\sigma=0$、优势全为 0,这一组不产生梯度**(没有对比信号)——所以要采到难度适中、组内有对有错的题才高效。
-
-**把标准差的计算补全(不跳步)**。组内奖励 $\{1,0,1,0\}$,均值 $\mu=0.5$。方差 $=\frac14[(1-0.5)^2+(0-0.5)^2+(1-0.5)^2+(0-0.5)^2]=\frac14[0.25\times4]=0.25$,标准差 $\sigma=\sqrt{0.25}=0.5$。于是 $A_1=\frac{1-0.5}{0.5}=+1$,$A_2=\frac{0-0.5}{0.5}=-1$,正负对称。**直觉**:标准化把「答对率」无关的尺度抹掉——不管这道题平均答对 50% 还是 80%,只要你比组内平均好,优势就是正的;这让不同难度的题产生**可比**的梯度信号。
-
-**再看一道更不平衡的组**:$\{1,1,1,0\}$(4 个里 3 对)。$\mu=0.75$,方差 $=\frac14[3\times(0.25)^2+(0.75)^2]=\frac14[0.1875+0.5625]=0.1875$,$\sigma\approx0.433$。则对的 $A=\frac{1-0.75}{0.433}\approx+0.577$、错的 $A=\frac{0-0.75}{0.433}\approx-1.73$。**那唯一答错的样本拿到了很大的负优势**(被狠狠压低),三个答对的各拿小正优势——这正是组相对优势的好处:稀有的「错」被重点纠正。
-
-## 原理:GRPO 目标
-
-**1)采样**。对每个 prompt $x$,用旧策略 $\pi_{\theta_{\text{old}}}$ 采一组 $\{y_1,\dots,y_G\}$,各得奖励 $\{r_1,\dots,r_G\}$。
-
-**2)组内相对优势**(核心,替代 critic)。对每个答案,用组内均值方差标准化:
+先算 **GRPO 常见写法**里的组均值：
 
 $$
-\hat A_i=\frac{r_i-\operatorname{mean}(\{r_1,\dots,r_G\})}{\operatorname{std}(\{r_1,\dots,r_G\})}
+\mu=\frac{1+0+1+0}{4}=0.5.
 $$
 
-同一组所有 token 共享这个答案级优势(结果奖励 outcome-level)。**组均值就是基线**——这正是 PPO 里 critic 想估却估不准的那个 $V(s)$,GRPO 用蒙特卡洛组均值直接替了。
-
-**3)PPO-clip 目标 + KL**。优势之外,仍沿用 PPO 的概率比 clip(防一步走太远),并加 [[31 KL 散度与 JS 散度|KL]] 把策略拴在参考模型附近:
+如果用**总体标准差**（不是 PyTorch 默认的样本标准差）：
 
 $$
-\mathcal{J}_{\text{GRPO}}=\mathbb{E}\Big[\frac{1}{G}\sum_{i=1}^{G}\frac{1}{|y_i|}\sum_{t}\min\big(\rho_{i,t}\hat A_i,\ \mathrm{clip}(\rho_{i,t},1\!-\!\varepsilon,1\!+\!\varepsilon)\hat A_i\big)\Big]-\beta\,\mathbb{D}_{\mathrm{KL}}[\pi_\theta\|\pi_{\text{ref}}]
+\sigma=\sqrt{\frac{(1-0.5)^2+(0-0.5)^2+(1-0.5)^2+(0-0.5)^2}{4}}
+=\sqrt{0.25}=0.5.
 $$
 
-其中 $\rho_{i,t}=\frac{\pi_\theta(y_{i,t}\mid x,y_{i,<t})}{\pi_{\theta_{\text{old}}}(y_{i,t}\mid x,y_{i,<t})}$ 是逐 token 概率比。与 [[084 策略梯度与 PPO 基础|PPO]] 唯一的大区别就是 $\hat A_i$ 来自**组内标准化**而非 critic。
+于是标准化优势是
 
-其中 KL 项 GRPO 用的是**无偏低方差估计**(k3 估计):$\mathbb{D}_{\mathrm{KL}}\approx\frac{\pi_{\text{ref}}}{\pi_\theta}-\log\frac{\pi_{\text{ref}}}{\pi_\theta}-1\ge0$,直接逐 token 加到损失里(而非像 PPO 早期那样把 KL 折进奖励),这样 KL 罚项恒为正、梯度更稳。
+$$
+\hat A_i^{\text{GRPO}}=\frac{r_i-\mu}{\sigma}
+\Rightarrow
+\{+1,-1,+1,-1\}.
+$$
 
-**4)显存账**。GRPO 只需 **actor + ref**(+ 奖励来源);**省掉 critic** 那份与 actor 同等大小的网络 → 约省一半训练显存,这对大模型 RL 至关重要。代价:每题采 $G$ 个样本(典型 $G=8\sim64$),**采样成本上升**。
+再看 **leave-one-out** baseline。第 1 个样本的 baseline 不该包含它自己，所以
+
+$$
+b_1^{\text{LOO}}=\frac{0+1+0}{3}=\frac13,\qquad
+A_1^{\text{LOO}}=1-\frac13=\frac23.
+$$
+
+类似地：
+
+$$
+b_2^{\text{LOO}}=\frac{1+1+0}{3}=\frac23,\qquad
+A_2^{\text{LOO}}=0-\frac23=-\frac23.
+$$
+
+这一组的 leave-one-out 优势就是
+
+$$
+\Big\{\frac23,-\frac23,\frac23,-\frac23\Big\}.
+$$
+
+你会发现它和“只减组均值、不做标准化”的结果 $\{+0.5,-0.5,+0.5,-0.5\}$ 方向相同，但数值不同。对 $G=4$ 而言：
+
+$$
+A_i^{\text{mean}}=r_i-\mu=\frac{G-1}{G}\,A_i^{\text{LOO}}=\frac34 A_i^{\text{LOO}}.
+$$
+
+这说明：**组均值基线和 leave-one-out 基线在有限组下只差一个缩放，不代表前者就成了严格无偏控制变量；再叠加标准差归一、PPO clip 与长度归一后，更不能把它说成“精确无偏梯度”**。
+
+## 公式推导：GRPO 为什么好用，以及它的边界
+
+对同一题 $x$，旧策略 $\pi_{\theta_{\text{old}}}$ 采样 $G$ 个完整答案 $\{y_1,\dots,y_G\}$，每个答案对应一个序列级奖励 $r_i$。
+
+GRPO 的常见组内标准化优势写法是
+
+$$
+\hat A_i^{\text{GRPO}}=
+\frac{r_i-\mu}{\sigma},
+\qquad
+\mu=\frac1G\sum_{j=1}^G r_j,\quad
+\sigma=\sqrt{\frac1G\sum_{j=1}^G(r_j-\mu)^2}.
+$$
+
+如果改成严格 leave-one-out baseline，则
+
+$$
+b_i^{\text{LOO}}=\frac{1}{G-1}\sum_{j\neq i} r_j,
+\qquad
+A_i^{\text{LOO}}=r_i-b_i^{\text{LOO}}.
+$$
+
+两者关系可以直接展开：
+
+$$
+\mu=\frac1G r_i+\frac{G-1}{G}b_i^{\text{LOO}}
+\Rightarrow
+r_i-\mu=\frac{G-1}{G}(r_i-b_i^{\text{LOO}}).
+$$
+
+也就是
+
+$$
+A_i^{\text{mean}}=\frac{G-1}{G}A_i^{\text{LOO}}.
+$$
+
+所以在**不做标准差归一**时，组均值版本和 leave-one-out 版本方向一致，只差一个常数缩放；但因为组均值含有当前样本自己的 $r_i$，它不是“动作无关”的 baseline。GRPO 在实践上仍然有效，是因为它把 RL 目标改写成了一个好优化、低内存、与多采样推理任务匹配的 surrogate objective，而不是因为它完美复刻了无偏 REINFORCE。
+
+其 PPO-clip 目标可写成
+
+$$
+\mathcal{J}_{\text{GRPO}}
+=
+\mathbb{E}\Bigg[
+\frac{1}{G}\sum_{i=1}^{G}\frac{1}{|y_i|}
+\sum_t
+\min\Big(
+\rho_{i,t}\hat A_i,\,
+\operatorname{clip}(\rho_{i,t},1-\varepsilon,1+\varepsilon)\hat A_i
+\Big)
+\Bigg]
+-\beta\,\mathbb{D}_{\mathrm{KL}}[\pi_\theta\|\pi_{\text{ref}}],
+$$
+
+其中
+
+$$
+\rho_{i,t}=
+\frac{\pi_\theta(y_{i,t}\mid x,y_{i,<t})}
+{\pi_{\theta_{\text{old}}}(y_{i,t}\mid x,y_{i,<t})}.
+$$
+
+这里再叠加了两层工程近似：一是**同一序列的所有 token 共享同一个序列级优势**，二是**长度归一 $\frac{1}{|y_i|}$**。这正是 Dr.GRPO（2025，COLM）指出偏差来源的地方：标准差归一会引入难度偏差，长度归一会引入长度偏差。
 
 ![[post-GRPO显存对比.png]]
 
-**5)GRPO 的归一化偏差(进阶,Dr.GRPO)**。2025 年的批判性研究(*Understanding R1-Zero-Like Training*,arXiv 2503.20783,COLM 2025)指出 GRPO 的两处归一化引入**偏差**:① **除以 std**——把奖励除以组标准差会引入**题目难度偏差**(std 小的题——即过难全错或过易全对的边缘组——优势被异常放大);② **除以回答长度** $\frac1{|y_i|}$——引入**长度偏差**:对答对样本鼓励变短、对答错样本鼓励变长,导致训练中**错误回答越变越长**(虚胖)。**Dr.GRPO** 的修法很简单:**去掉这两个归一化项**(不除 std、不按长度归一),用更朴素的优势聚合,结果 token 效率更高、缓解了「错答变长」的优化偏差,精度不降。考点:面试若问「GRPO 有什么已知缺陷」,答这两处归一化偏差 + Dr.GRPO 的去归一化修法,是加分项。
-
 ![[post-DrGRPO归一化.png]]
 
-## 可验证奖励(RLVR)
+## 可验证奖励（RLVR）：真正要防的是“骗过 verifier”
 
-GRPO 在 DeepSeekMath/R1 上的威力,一半来自**可验证奖励(RL with Verifiable Rewards)**:
+GRPO 在推理任务里常与可验证奖励绑定使用：
 
-- **数学**:抽取最终答案,与标准答案精确/符号匹配,对=1 错=0。
-- **代码**:跑单元测试,全过=1,否则按通过比例或 0。
-- **格式**:是否把推理放进 `<think>` 标签、是否给出最终框等(R1 用的格式奖励)。
+- 数学：抽取最终答案，与标准答案精确或符号等价匹配。
+- 代码：在干净环境中运行公开测试与隐藏测试，按通过情况计分。
+- 终态任务：检查文件、数据库、API 调用、日志或环境终态是否满足规范。
 
-好处:**客观、可批量、无需训 RM、难被钻空子**——从源头压制[[085 RLHF 全流程与 KL 约束、奖励黑客|奖励黑客]](毕竟「答案对不对」没有漏洞可钻)。局限:只适用于**有客观判据**的任务;开放式对话、写作仍需 RM 或 RLHF/[[086 DPO 直接偏好优化(推导)|DPO]]。
+这里也有一个常见误区：**“可验证奖励天然不会被钻空子”不对**。更准确的说法是，它通常比神经 RM 更抗作弊，但仍取决于 verifier 是否足够强。典型失败面有三类：
 
-**可验证奖励也不是没坑**:① **答案抽取**本身可能出错(正则没匹配到、格式不一致),把对的判成错 → 引入标签噪声;② 模型可能学会**钻验证器的空子**(如代码恰好过了给的单测但逻辑错、数学最终框对但过程胡来)——所以常配格式奖励、过程检查([[090 RLAIF、宪法 AI 与过程奖励 PRM|PRM]])收紧;③ **奖励太稀疏**(0/1)时难题长期全错、无梯度,需课程式难度调度。即便如此,它仍比神经 RM 抗黑客得多,是推理 RL 的首选奖励来源。
+1. **抽取错误**：答案明明对了，但解析器没抓到最终框或没做 canonicalization。
+2. **局部过拟合**：代码只过了公开单测，真实终态仍错。
+3. **格式投机**：模型学会迎合某个弱 verifier 的模板，而不是完成任务本身。
 
-## 代码:组内相对优势(❌ vs ✅)
+因此，2025–2026 年更稳妥的做法不是“只看最后一句”，而是做**terminal-state verifier**：在隔离环境里重放执行，检查最终状态是否满足任务要求，必要时配隐藏测试、幂等检查和副作用审计。对代码 Agent 来说，**“我已经修好了”不是奖励信号，测试通过且终态正确才是**。
+
+## 代码/配置：`torch.std` 默认值就是一个坑
 
 ```python
 import torch
 
-def grpo_advantages(rewards):
-    # rewards: [G] 同一 prompt 一组答案的可验证奖励(如对=1 错=0)
-    # ❌ 误区一:训一个 critic 估 V(s) 当基线 —— 那就回到 PPO 了,多一份模型、还可能估不准
-    # ❌ 误区二:不标准化,直接拿 raw reward 当优势 —— 量纲/方差乱,训练不稳
-    # adv = rewards                                  # 错
+def grpo_advantages(rewards: torch.Tensor) -> torch.Tensor:
+    rewards = rewards.float()
 
-    # ✅ GRPO:组内均值当基线,标准差归一 → 相对优势
-    mu  = rewards.mean()
-    std = rewards.std() + 1e-6                       # 防全对/全错时除零
-    adv = (rewards - mu) / std                       # [G];组内全相同则 ≈ 0(无信号)
-    return adv                                       # 同一答案的所有 token 共享此优势
+    # ❌ 错误 1：把 PyTorch 默认 std() 当成总体标准差
+    # 它默认 unbiased=True，算的是样本标准差；
+    # 对 [1,0,1,0] 会得到 0.577...，和手算 0.5 不一致。
+    # bad_std = rewards.std()
 
-# 主循环(概念)
-for x in prompts:
-    group = policy.sample(x, num=G)                  # 一组 G 个答案
-    r = verifiable_reward(x, group)                  # 数学对答案 / 代码跑单测,无需 RM
-    A = grpo_advantages(r)                           # 组内相对优势(替代 critic)
-    loss = ppo_clip_loss(policy, group, A) + beta * kl(policy, ref)  # clip + KL,见 [[084]]
-    loss.backward()
+    # ❌ 错误 2：把“组均值 baseline”说成严格无偏控制变量
+    # 组均值包含当前样本自己的 reward，只是工程上常用近似。
+
+    # ✅ 若要复现 GRPO 常见写法，手算对应的是总体标准差
+    mu = rewards.mean()
+    sigma = rewards.std(unbiased=False)
+    if sigma < 1e-6:
+        return torch.zeros_like(rewards)
+    return (rewards - mu) / (sigma + 1e-6)
+
+
+def rloo_advantages(rewards: torch.Tensor) -> torch.Tensor:
+    rewards = rewards.float()
+    group_size = rewards.numel()
+    loo_baseline = (rewards.sum() - rewards) / (group_size - 1)
+    return rewards - loo_baseline
+
+
+def terminal_state_reward(task, completion):
+    # ❌ 只信模型自述，容易被“口头完成”骗过
+    # return 1.0 if "fixed" in completion else 0.0
+
+    # ✅ 真正执行 verifier：解析最终答案 / 跑隐藏测试 / 检查终态
+    result = run_isolated_verifier(task, completion)
+    return float(result.passed)
 ```
 
-要点:**标准差归一别漏**(否则不同题奖励尺度不一);**全对/全错的组没梯度**,数据要含难度适中、组内有分化的题;采样数 $G$ 越大优势估计越稳但越贵。
+要点：
+
+- 手算若按 $\frac{1}{G}$ 定义方差，代码里就该用 `std(unbiased=False)`。
+- 若你要讲“严格无偏 baseline”，应讲 **RLOO / leave-one-out**，不是组均值。
+- 若你要讲“可靠奖励”，应讲 **verifier 的终态覆盖面**，不是只说“可验证”三个字。
 
 ## 面试高频
 
-- **GRPO 和 PPO 的核心区别?** GRPO **去掉 critic**:不训价值网络估基线,而是「同题采一组、用组内均值当基线、标准差归一得相对优势」。其余(clip、KL 约束)与 PPO 相同。好处:省一份模型显存、避免 critic 估不准;代价:每题多采 $G$ 个样本。
-- **为什么叫『组相对』?** 优势是**相对同组其他答案**算的($\frac{r-\mu}{\sigma}$),不是相对一个绝对价值函数。一组全对或全错就没有对比信号(优势为 0)。
-- **可验证奖励是什么?和 RM 比好在哪?** 数学对答案、代码跑单测这类**客观、自动、可批量**的奖励,对=1 错=0。比 RM 好在:无需训练、不易被钻空子(从源头抑制奖励黑客)。局限:只适用有客观判据的任务。
-- **GRPO 适合什么场景?** 奖励能客观批量判定的推理任务(数学、代码、逻辑)——正是 DeepSeekMath、[[089 推理模型与 RL：o1、R1 的长 CoT 与自我反思|R1]] 的主战场。开放式对话仍偏向 RM-RLHF / [[086 DPO 直接偏好优化(推导)|DPO]]。
-- **GRPO 省显存为什么重要?** 大模型 RL 里 critic 与 actor 同量级,去掉它直接砍掉约一半训练显存与一份前后向,使更大模型的 RL 训练可行。
-- **GRPO 的优势是 token 级还是序列级?** 结果奖励版本是**序列级**:同一答案所有 token 共享一个 $\hat A_i$。若引入过程奖励 [[090 RLAIF、宪法 AI 与过程奖励 PRM|PRM]] 可做更细的 token/步骤级。
-- **GRPO 有哪些已知偏差?怎么修?** 两处归一化:除 std 引入**难度偏差**、除长度引入**长度偏差**(错答越变越长)。Dr.GRPO(arXiv 2503.20783)去掉这两项归一化即可缓解,token 效率更高。
-- **组均值当基线为什么是无偏的?** 基线只要与动作无关就不改变策略梯度的期望(只降方差),组内其他样本的平均奖励对当前样本而言是「同分布的独立估计」,满足这个条件,所以用它当基线无偏——这等价于 PPO 里 critic 想估的 $V(s)$,只是用蒙特卡洛组均值替代了函数逼近。
-- **$G$(组大小)怎么选?有什么权衡?** $G$ 越大,组均值/方差估计越准、优势越稳,但**每题采样成本线性上升**(GRPO 的主要开销)。典型 $G=8\sim64$;太小则基线噪声大、容易整组全对/全错无梯度。
-- **GRPO 里 KL 怎么加的?** 用 k3 无偏估计逐 token 直接加进损失(恒非负),而非折进奖励;$\beta$ 控制贴参考的强度,防止策略在追高可验证奖励时跑偏(语言退化、奖励黑客)。
+- 题库路由：[[LLM 面试题库]]
+- **GRPO 和 PPO 的核心区别？** GRPO 去掉 critic，用同题多采样后的组内相对优势替代价值网络；clip 与 KL 约束仍保留。
+- **为什么说“组均值天然无偏 baseline”不严谨？** 因为组均值里含当前样本自己的奖励，不满足“baseline 对当前动作独立”的严格条件；严格无偏应使用 leave-one-out baseline。
+- **组均值版和 leave-one-out 版到底差多少？** 对 raw reward 而言，$A_i^{\text{mean}}=\frac{G-1}{G}A_i^{\text{LOO}}$，方向相同但有限组下不是同一个估计器；加上标准差归一、clip 后差异进一步扩大。
+- **GRPO 为什么在工程上仍然常用？** 它省掉 critic，显存和实现复杂度都更低，而且天然适配“同题多采样 + 序列级奖励”的推理训练。
+- **GRPO 的已知偏差是什么？** Dr.GRPO 指出两类：标准差归一带来难度偏差，长度归一带来长度偏差，尤其会让错误回答虚胖变长。
+- **什么是 RLVR？** 用可程序化判真的 verifier 给奖励，如数学答案匹配、代码测试、终态检查；它通常比神经 RM 更抗奖励黑客，但 verifier 自己仍可能被钻空子。
+- **为什么现在强调 terminal-state verifier？** 因为“答对最后一句”不足以保证任务真正完成；代码和 Agent 任务要看最终环境状态、隐藏测试与副作用约束。
+- **GRPO 的优势是 token 级还是序列级？** 常见实现里是序列级：同一条 completion 的所有 token 共享同一个序列级优势。
+- **什么时候不用 GRPO？** 当奖励开放、主观、难以程序验证时，往往需要 [[083 奖励模型 RM|RM]]、[[090 RLAIF、宪法 AI 与过程奖励 PRM|RLAIF/PRM]] 或更复杂的混合奖励。
 
 ## 关键事实
 
-- Shao et al.(DeepSeek-AI), *DeepSeekMath: Pushing the Limits of Mathematical Reasoning in Open Language Models*, 2024,arXiv **2402.03300**:提出 GRPO,去 critic、组内相对优势。
-- 优势:$\hat A_i=\frac{r_i-\operatorname{mean}(r_{1:G})}{\operatorname{std}(r_{1:G})}$;目标 = PPO-clip(用 $\hat A_i$)$-\ \beta\,\mathbb{D}_{\mathrm{KL}}[\pi_\theta\|\pi_{\text{ref}}]$。
-- 只需 **actor + ref**(对比 PPO 的 actor/critic/RM/ref 四模型),省约一半训练显存;代价是每题采 $G$ 个样本。
-- 可验证奖励(RLVR):数学对答案、代码跑单测、格式奖励;客观、批量、抗奖励黑客;是 [[089 推理模型与 RL：o1、R1 的长 CoT 与自我反思|R1-Zero]] 的奖励来源。
-- 后续变体众多(去 std 归一的 Dr.GRPO、token 级归一等),但「组内相对优势 + 去 critic」是不变内核。
-- **最新进展(2025-2026)**:GRPO 之后涌现一批改进——**DAPO**(字节,2025,arXiv:2503.14476)用 Clip-Higher + 动态采样 + token 级梯度损失,在 Qwen2.5-32B 上 AIME 2024 拿 50 分、超过 GRPO 基线;**GSPO**(Qwen 团队,2025)把重要性比从 token 级改成**序列级**以匹配序列级奖励、稳定 MoE RL 训练(DAPO、GSPO,2025)。
-- Dr.GRPO:*Understanding R1-Zero-Like Training: A Critical Perspective*(Sea AI Lab,2025,arXiv **2503.20783**,COLM 2025):指出除 std 的难度偏差与除长度的长度偏差(尤其使错误回答虚胖变长),去掉这两归一化即修复,提升 token 效率。
-- KL 用 k3 无偏估计 $\frac{\pi_{\text{ref}}}{\pi_\theta}-\log\frac{\pi_{\text{ref}}}{\pi_\theta}-1\ge0$ 逐 token 加入损失;优势对同一答案所有 token 共享(结果奖励 → 序列级)。
-- 关联:[[084 策略梯度与 PPO 基础|PPO]]、[[083 奖励模型 RM|RM]]、[[085 RLHF 全流程与 KL 约束、奖励黑客|RLHF/奖励黑客]]、[[089 推理模型与 RL：o1、R1 的长 CoT 与自我反思|R1 长 CoT]]、[[090 RLAIF、宪法 AI 与过程奖励 PRM|PRM]]、[[31 KL 散度与 JS 散度|KL]]、[[110 下游基准：MMLU、GSM8K、HumanEval、MT-Bench|GSM8K/HumanEval]]、[[32 Agentic RL 与训练|Agentic RL]]。
+- Shao et al., *DeepSeekMath: Pushing the Limits of Mathematical Reasoning in Open Language Models*, 2024，arXiv **2402.03300**：提出 GRPO，并在数学推理场景中使用组相对优势替代 critic。
+- Ahmadian et al., *Back to Basics: Revisiting REINFORCE-Style Optimization for Learning from Human Feedback in LLMs*, 2024，arXiv **2402.14740**：RLOO 明确采用 leave-one-out baseline，适合作为“严格无偏控制变量”对照项。
+- Liu et al., *Understanding R1-Zero-Like Training: A Critical Perspective*, 2025，arXiv **2503.20783**，COLM 2025：指出 GRPO 的标准差归一和长度归一会引入优化偏差，并提出 Dr.GRPO 修正。
+- DeepSeek-R1（技术报告 2025，arXiv **2501.12948**）的推理 RL 依赖可验证奖励；但“可验证”不代表“不可作弊”，verifier 设计仍是可靠性核心。
+- 代码实现里 `torch.std()` 默认 `unbiased=True`，会给出样本标准差；若笔记手算按总体标准差，应显式写 `std(unbiased=False)`。
+- 对代码/Agent 任务，2025–2026 更可靠的奖励对象是**终态验证**而不是模型自述；这也是防奖励黑客的关键工程边界。
+- 关联：[[084 策略梯度与 PPO 基础|PPO]]、[[085 RLHF 全流程与 KL 约束、奖励黑客|RLHF/奖励黑客]]、[[083 奖励模型 RM|RM]]、[[089 推理模型与 RL：o1、R1 的长 CoT 与自我反思|推理模型]]、[[090 RLAIF、宪法 AI 与过程奖励 PRM|PRM]]、[[31 KL 散度与 JS 散度|KL]]、[[32 Agentic RL 与训练|Agentic RL]]
