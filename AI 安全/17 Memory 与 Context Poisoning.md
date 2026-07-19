@@ -1,102 +1,91 @@
-[[17 Memory 与 Context Poisoning|记忆投毒]]是 [[05 Prompt Injection 提示注入|提示注入]] 最阴险的延时形态:被污染的不是**一次回答**,而是「未来每次决策」的输入。当 agent 把外部内容当事实写进**长期记忆**,这条毒数据**跨会话持久化**,在之后每次召回时反复复发——一次投毒,长期复发。它对应 OWASP ASI06(上下文管理与检索操纵 / 记忆投毒)。
+[[17 Memory 与 Context Poisoning|记忆投毒]]的本质是：攻击者不再只争夺“这一轮 prompt”，而是争夺 **未来会被再次检索、再次采信的状态**。OWASP 在 2025-12 发布的 Agentic Top 10 中把它单列为 **ASI06 Memory & Context Poisoning**，因为一旦不可信内容被写进 durable memory、共享摘要或长期检索层，影响面会从单轮回答扩到后续决策。
 
-## 三种投毒入口
-- **长期记忆投毒**:agent 把对话、工具返回或外部文档当「事实」写入持久记忆;毒指令藏在其中,跨会话存活。
-- **上下文投毒**:当前轮拉进的上下文被注入文本污染,影响本轮规划。
-- **RAG 记忆投毒**:检索库里被植入恶意文档,召回即触发——与 [[11 向量与嵌入弱点与 RAG 投毒|RAG 投毒]] 同源,区别在它进入的是会**累积、复用**的记忆而非一次性检索。
+直觉类比是“便签本污染”。一次性 prompt injection 像有人在你桌上放了一张误导纸条；session 结束纸条就没了。记忆投毒像有人把那句话抄进了你的常用笔记本、通讯录或 SOP 卡片里，以后每次翻本子都可能再信一次。
 
-## 一次投毒,跨会话复发
+先把持久化边界算清。假设一条低可信记忆每天被召回 5 次、保留 14 天、被 10 个共享同一团队记忆空间的用户都可能命中，那么潜在触发次数是
+
+$$
+5 \times 14 \times 10 = 700
+$$
+
+次。一次写入，不是“一次攻击”，而是**700 次未来决策暴露机会**。这也是为什么 durable memory 的写入门禁，比单轮 prompt 过滤更要保守。
+
+更一般地，若某条记忆的日均召回次数为 $r$、驻留天数为 $d$、潜在受影响主体数为 $u$，则暴露面可粗略写成
+
+$$
+E = r \cdot d \cdot u
+$$
+
+其中 session-only context 的 $d$ 往往接近 0，而 durable memory、共享摘要、长期向量记忆的 $d$ 可能很大。**不是所有 context 都会持久化**；真正危险的是那些会跨会话、跨任务、跨主体复用的部分。
+
 ![[sec-记忆投毒持久化.png]]
 
-关键差异在持久性:① 一次写入毒数据进长期记忆/向量库 → ② 记忆跨会话驻留(无 TTL、无溯源、无隔离)→ ③ 会话 A、B 乃至**别的用户的会话 C** 反复召回同一毒数据,错误决策不断复现、横向扩散。这正是「污染的记忆不再只是偏见,它变成一个工作流决策」——记忆系统的设计细节(见 [[19 Agent 记忆系统|Agent 记忆系统]])直接决定攻击面大小。
+工程上最好把它拆成三层：
 
-**放大倍数手算**。普通 prompt injection 的"触发次数"= 1(单轮即消)。记忆投毒则是"召回频率 × 驻留天数 × 受影响用户数"。设一条毒记忆被某场景日均召回 10 次、驻留 30 天、命中共享记忆下 100 个用户:$10\times30\times100=30000$ 次毒触发——一次写入撬动 **3 万次**错误决策。对比之下注入的放大比是 $30000:1$。这也解释了为何防御重心从"拦那一次写入"挪到"召回侧分级 + provenance 可回滚":写入只发生一次、难全堵,而召回会发生 3 万次、每一次都是止损点。
+- **session context poisoning**：污染当前会话窗口，本轮结束通常消失。
+- **durable memory poisoning**：污染长期记忆、摘要、偏好、项目状态、向量记忆，后续会反复召回。
+- **retrieval-fed memory poisoning**：先污染 RAG，再被“总结”“写回”到长期记忆，形成二次持久化。
 
-## 对比表:一次性注入 vs 记忆投毒
+成立条件也要讲清：
 
-| 维度 | 上下文/一次性注入 | 长期记忆投毒(ASI06) |
-|---|---|---|
-| 存活时长 | 单轮/单会话 | 跨会话持久 |
-| 影响范围 | 当前任务 | 未来所有相关任务,可能跨用户 |
-| 触发方式 | 当场生效 | 召回时延时触发 |
-| 清除难度 | 会话结束即消 | 需主动定位、删除、追溯 |
-
-## 防御
-- **写入校验**:不把外部内容(网页、工具返回、他人输入)当事实直接写记忆;区分「可信事实」与「待核内容」。
-- **溯源(provenance)**:每条记忆记来源,出问题可定位并批量清除。
-- **隔离**:按用户/会话/租户分区记忆,杜绝跨用户横向扩散(会话 C 那条线)。
-- **TTL 过期**:记忆有寿命,毒数据随时间自衰减,不无限驻留。
-- **召回时复核**:高风险决策不全信记忆,必要时回到一手来源验证。
-- 配合输入输出护栏:见 [[21 Guardrails 与输入输出防护|Guardrails]]。
-
-## 关键事实(含出处)
-- OWASP **ASI06 Context Management and Retrieval Manipulation**:被检索或被存储的上下文被投毒、误导、过期或篡改,影响 agent 未来行为(OWASP Top 10 for Agentic Applications 2026, genai.owasp.org)。社区与本库沿用「记忆投毒 / Memory Poisoning」作通称。
-- 与 LLM 层的 RAG/嵌入投毒同根:恶意文档进入检索或记忆即可在召回时操纵决策(对应 OWASP LLM 向量与嵌入弱点,详见 [[11 向量与嵌入弱点与 RAG 投毒|RAG 投毒]])。
-
-## 工业界实践
-记忆投毒最难的不是「检测一条毒数据」,而是「事后定位它污染了哪些下游决策」——所以工业界把重心放在**写入门禁**和**可追溯/可回滚**上。
-
-**1. 写入门禁:不让外部内容直接成「事实」**
-关键设计是给每条记忆打**可信度标签**,外部来源(网页、工具返回、他人输入)默认进「待核区」而非「事实区」,只有经校验/人审/多源印证才升级:
+1. 系统必须存在**写入路径**，例如自动总结、偏好学习、对话沉淀、项目状态回写。
+2. 该路径缺少**信任分级**，把网页、工具输出、他人输入与经验证事实同等处理。
+3. 后续检索缺少 **provenance、TTL、撤权和回滚**，导致错误状态能被持续复用。
 
 ```python
-def write_memory(content, source, agent_ctx):
-    trust = classify_source(source)          # tool_output / web / user / verified
-    if trust in ("web", "tool_output", "other_user"):
-        # 外部内容:不当事实,带来源、TTL、隔离域写入「待核区」
-        store.put(content,
-                  provenance=source,          # 溯源:出问题能定位+批量清
-                  trust="unverified",         # 召回时按低可信处理
-                  tenant=agent_ctx.tenant,    # 租户隔离,防跨用户扩散
-                  ttl=days(7))                # TTL:毒数据自衰减
-    else:
-        store.put(content, provenance=source, trust="fact")
-    # 写入前再过一道注入扫描,拦「忽略以上指令…」之类祈使句
-    if injection_scanner.is_suspicious(content):
-        quarantine(content); alert("memory_write_blocked")
+# ❌ 朴素：任何外部内容都可直接写成长效记忆
+def save_memory(text, source, store):
+    store.put({"text": text, "source": source})
+
+
+# ✅ 分级：不可信内容先进待核区，带 provenance / TTL / 租户边界
+def save_memory(text, source, principal, store):
+    trust = classify_source(source)  # verified_doc / user / tool / web / other_agent
+    record = {
+        "text": text,
+        "source": source,
+        "tenant": principal.tenant,
+        "owner": principal.user_id,
+        "trust": trust,
+        "provenance": make_provenance(source),
+        "ttl_hours": 24 if trust != "verified_doc" else 24 * 30,
+        "state": "pending_review" if trust != "verified_doc" else "active",
+    }
+    if looks_like_instruction_payload(text):
+        quarantine(record)
+        return "blocked"
+    store.put(record)
+    return record["state"]
 ```
 
-**2. 召回时按可信度分级使用**
-高风险/不可逆决策(转账、删数据、改配置)**不全信记忆**,对低可信记忆回到一手来源复核;给记忆条目设「召回需达到的可信门槛」。这呼应 RAG 里的 provenance-aware retrieval。
+防御重点不是“绝不记忆”，而是**把记忆当数据库对象治理**：
 
-**3. 隔离与多租户**
-按 user / session / tenant 硬分区记忆与向量库,杜绝「会话 C 召回别人写入的毒数据」这条横向扩散线。共享记忆(团队/全局知识)单独审更严的写入策略。
-
-**4. 检测与响应**
-- **写入侧扫描**:对入库内容跑 prompt-injection 分类器 + 启发式(检测祈使句、角色扮演诱导、隐藏 Unicode/零宽字符)。
-- **召回侧异常基线**:某条记忆被异常频繁召回、或召回后行为偏离基线 → 告警。
-- **事件响应靠 provenance**:一旦确认某来源被投毒,按 provenance 批量定位并清除其所有衍生记忆,再回放受影响的决策评估损失。
-- 厂商:**Lasso、Lakera、HiddenLayer、Protect AI** 等把记忆/RAG 投毒检测纳入 LLM 运行时防护;开源侧用 NeMo Guardrails / Llama Guard 做写入与召回门禁。
-
-**真实案例(2026-02,微软披露)**:**AI Recommendation Poisoning** —— 攻击者投毒 AI 助手的记忆/推荐信号,让其在后续对话里持续把用户导向恶意品牌/网站牟利,且毒数据移除后仍在已污染记忆里复发。这正是「一次投毒、跨会话复发」的真实商业化形态。MITRE ATLAS 已将其形式化为 **AML.T0080 Memory Poisoning**,并指出一种**一键攻击向量**:恶意链接里塞 URL 参数预填 prompt,用户一点就把毒指令写进助手长期记忆。
+- durable memory 与 session scratchpad 分开。
+- 写入时强制 `trust tier / provenance / tenant / ttl / revocation handle`。
+- 召回时对低可信记忆降权，关键动作回源验证，不直接当事实。
+- 团队共享记忆比个人记忆更高风险，应有更严格审批与更短默认 TTL。
 
 ## 面试高频
 
-**Q1:记忆投毒和普通 prompt injection 有什么本质区别?**
-标准答:普通注入是**单轮/单会话**、当场生效、会话结束即消;记忆投毒是把毒数据**持久化进长期记忆/向量库**,**跨会话延时触发**,在之后每次召回时反复复发,甚至跨用户横向扩散。一句话:「从一次回答的污染,变成未来每次决策的污染」。
-- 追问「为什么更危险」:影响面从当前任务扩到未来所有相关任务+其他用户;清除难(需主动定位、溯源、回滚),不像会话结束自动消。
+回链：[[AI 安全面试题库]]
 
-**Q2:三种投毒入口分别是什么?**
-标准答:① 长期记忆投毒(把对话/工具返回/外部文档当事实写入持久记忆);② 上下文投毒(当前轮拉进的上下文被注入污染);③ RAG 记忆投毒(检索库被植入恶意文档,召回即触发)。区别在「存活时长」与「是否累积复用」。
+**Q1：记忆投毒和普通 prompt injection 的本质差别是什么？**
+prompt injection 主要影响当前轮；记忆投毒影响之后的多轮、多任务甚至多主体，因为被污染的是会复用的状态，而不是一次性输入。
 
-**Q3:怎么防?为什么不能彻底防?**
-标准答:写入校验(外部内容不当事实)+ provenance 溯源 + 多租户隔离 + TTL 过期 + 召回时复核。不彻底的原因:① agent 的价值就在于「从交互中学习/记忆」,把外部内容一律拒之门外等于阉割能力,所以总要在「可用性 vs 可信」间折中,留口子就有攻击面;② 注入分类器会被对抗样本(改写、编码、隐藏字符)绕过;③ 隔离也挡不住「合法写入的内容本身是诱导性的」(看似事实实则误导)。所以记忆投毒是**纵深防御**问题,要叠 [[21 Guardrails 与输入输出防护|Guardrails]] 和 [[14 Excessive Agency 与 Goal Hijack|动作侧的人审/最小权限]]。
-- 陷阱:只答「加输入过滤」不够——记忆投毒的延时性决定了必须同时管**召回侧**和**可追溯/可回滚**,光堵写入挡不住已入库的毒数据。
+**Q2：是不是所有上下文污染都算记忆投毒？**
+不是。只有进入 durable memory、长期摘要、共享状态或可反复检索层，才具备记忆投毒的持续性风险。临时上下文污染更接近一次性注入。
 
-**Q4(追问)毒记忆怎么变成真实损害?**
-标准答:记忆只是输入,真正造成损害是 [[14 Excessive Agency 与 Goal Hijack|过度代理]] 把毒记忆转成真实动作(执行命令、转账、删数据)。所以即使记忆被污染,只要动作侧有最小权限 + 人审闸门 + 沙箱,损害可被截断——这是为什么防御不能只盯记忆层。
+**Q3：为什么 provenance 和 TTL 比“更强分类器”更关键？**
+分类器会漏报。provenance 决定你能否事后追溯来源，TTL 决定错误能活多久，revocation handle 决定你能否批量撤回。它们是止损与回滚的基础设施。
 
-## 知识拓展
-- **框架定位**:OWASP **ASI06 Context Management & Retrieval Manipulation**(Top 10 for Agentic Applications,2025-12);MITRE ATLAS **AML.T0080 Memory Poisoning** + **AI Agent Context Poisoning**(2025-10 随 Zenity Labs 合作新增);与 LLM 层的 [[11 向量与嵌入弱点与 RAG 投毒|RAG/嵌入投毒]] 同根。
-- **真实研究**:微软安全团队 2026-02《AI Recommendation Poisoning》披露记忆投毒的商业化变现路径;学界已有 PoisonGPT / 针对 agent 记忆的持久化注入实证。
-- **工具**:Invariant / Lakera / Lasso / HiddenLayer 的运行时记忆防护;NeMo Guardrails、Llama Guard 做写入召回门禁;mem0 / LangMem 等记忆框架开始内建可信度与隔离原语。
-- **对抗演化**:攻击从「一次性注入」→「写进记忆求持久」→「跨用户/跨 agent 横向扩散」→「商业化变现(推荐投毒)」;防御从「会话级过滤」→「写入门禁 + provenance + TTL」→「召回时可信度分级 + 可回滚审计」。下一步是**记忆完整性证明**(给记忆条目签名、可验证未被篡改)。
+**Q4：共享团队记忆为什么比个人记忆危险？**
+因为 $u$ 变大了。按 $E=r \cdot d \cdot u$ 看，跨用户共享会把同一条毒记忆的影响面直接放大。
 
-## Agent 与 RAG 导航
-- 实现与回灌路径见 [[19 Agent 记忆系统|Agent 记忆系统]]、[[20 上下文工程|上下文工程]]；检索语料的生命周期治理见 [[17 检索数据治理|检索数据治理]]。
+## 关键事实
 
-## 兄弟链
-- [[14 Excessive Agency 与 Goal Hijack|过度代理]] — 毒记忆转成真实动作的放大器
-- [[11 向量与嵌入弱点与 RAG 投毒|RAG 投毒]] — 检索侧的同源攻击
-- [[19 Agent 记忆系统|Agent 记忆系统]] — 被攻击对象的机制原理
-- [[21 Guardrails 与输入输出防护|Guardrails]] — 写入/召回处的护栏
+- OWASP 在 **2025-12-09** 发布的 Top 10 for Agentic Applications 中将 **ASI06** 定义为 **Memory & Context Poisoning**；官方后续说明强调，风险核心不是“看见恶意内容一次”，而是“系统把它持续带到未来推理与行动里”（OWASP，2026-07-19 核验）。
+- OWASP 在 **2026-05-13** 的《Memory Is a Feature. It Is Also an Attack Surface》明确指出：memory file、hook、local configuration 都可能成为 agent 的 trusted operating environment，一旦被污染，会持续影响 planning、tool use 与行为。
+- 这类风险通常与 [[11 向量与嵌入弱点与 RAG 投毒|RAG 投毒]] 串联：恶意检索内容先被召回，再被自动摘要或偏好学习写回长期状态，形成“先检索污染，再记忆固化”。
+- OpenTelemetry GenAI 语义约定已把 `gen_ai.retrieval.documents` 等属性纳入可观测范围；因此 durable memory 与 retrieval memory 的治理需要监控“写入了什么、从哪来、之后又被谁召回”。
+
+如果把模型当作“推理引擎”，那记忆系统就是它的“状态数据库”。数据库不做租户隔离、字段来源、TTL 与撤权，迟早会从准确率问题演变成权限问题、审计问题和事故响应问题。这也是它和 [[19 Agent 记忆系统|Agent 记忆系统]]、[[20 上下文工程|上下文工程]]、[[25 监控、可观测与事件响应|监控与 IR]] 必须一起设计的原因。
