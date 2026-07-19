@@ -5,9 +5,9 @@
 
 ## 小数字例子
 算 `y = relu(a*x + b)`,x 有 $N$ 个元素(每个 4B):
-- **朴素 3 个 kernel**:`t1=a*x`(读 x 写 t1)、`t2=t1+b`(读 t1 写 t2)、`y=relu(t2)`(读 t2 写 y)。HBM 流量 ≈ 读 4N + 写 3N = **7N** 次元素往返。
+- **朴素 3 个 kernel**:`t1=a*x`(读 x、写 t1)、`t2=t1+b`(读 t1、写 t2)、`y=relu(t2)`(读 t2、写 y)。忽略标量 $a,b$ 与缓存命中，HBM 流量为读 $3N$ + 写 $3N$ = **6N** 个元素。
 - **融合 1 个 kernel**:读 x、写 y,中间 t1/t2 只在寄存器。HBM 流量 = 读 N + 写 N = **2N**。
-- 省下约 **7N→2N ≈ 71%** 的 HBM 流量;对纯 memory-bound 算子,耗时近似按这个比例下降。
+- 省下 $(6N-2N)/(6N)=\mathbf{66.7\%}$ 的理想 HBM 流量；对确实被 HBM 主导的链，耗时才可能近似按这个比例下降。
 
 ## 原理:算术强度与 IO 主导
 逐元素算子的算术强度极低:
@@ -23,7 +23,7 @@ $$\text{流量}_{\text{融合}} = \underbrace{N_\text{in} + N_\text{out}}_{\text
 ## 图
 ![[kern-融合前后HBM往返对比.png]]
 
-把上面 `y=relu(a·x+b)` 的流量逐算子记成账,7N→2N 一目了然(末尾也标了融合的代价):
+把上面 `y=relu(a·x+b)` 的流量逐算子记成账,6N→2N 一目了然(末尾也标了融合的代价):
 
 ![[kern-021融合流量手算表.png]]
 
@@ -34,10 +34,10 @@ t1 = a * x          # 读 x, 写 t1
 t2 = t1 + b         # 读 t1, 写 t2
 y  = torch.relu(t2) # 读 t2, 写 y      → 中间张量全进出 HBM
 
-# ✅ 融合:torch.compile / Triton 把链合成单 kernel,中间值不落 HBM
+# ✅ 候选融合:让编译器尝试把链合成 kernel；用 profiler 验证是否真的融合
 @torch.compile
 def f(x, a, b):
-    return torch.relu(a * x + b)   # 一个融合 kernel:读 x, 写 y
+    return torch.relu(a * x + b)   # 理想情况下:读 x、寄存器内计算、写 y
 ```
 ```python
 # Triton 里手写融合 kernel 的核心:load 一次、算完链、store 一次
@@ -47,12 +47,13 @@ tl.store(y_ptr + offs, yi, mask=mask)
 ```
 
 ## 面试高频
-- **融合为什么快?** 省掉中间张量的 HBM 读写;对 memory-bound 算子,耗时随 HBM 流量近线性下降。
+- **融合为什么快?** 省掉中间张量的 HBM 读写;对 memory-bound 算子，收益上界可由减少的流量估算，但需要 profiler 确认编译器实际融合和带宽瓶颈。
+- **Q:三段逐元素链为什么是 $6N$ 而非 $7N$?** A:每段都读一个长度 $N$ 的主张量、写一个长度 $N$ 的结果，合计读 $3N$ + 写 $3N$。把第一段错误地算成读两个长度 $N$ 张量会重复计入标量 $a$；若 $a,b$ 真是逐元素向量，则必须在账本中显式加上它们的读取。
 - **哪些算子最值得融合?** 逐元素(bias+激活)、归一化(LayerNorm/RMSNorm)、softmax、注意力——都低算术强度、memory-bound。
 - **融合的代价?** 寄存器/SRAM 压力上升,可能压低 [[019 CUDA 执行模型：grid、block、warp|occupancy]];融合粒度过大反而溢出寄存器(register spilling)。
 - **compute-bound 算子(大 GEMM)融合还有用吗?** 收益小,因为它本就被算力而非带宽卡住。
 
 ## 关键事实
-- 融合的收益正比于省下的中间张量 HBM 流量;memory-bound 算子最受益。
-- torch.compile / TorchInductor、Triton、TensorRT 都把"算子融合"作为核心优化 pass。
+- 对标量 $a,b$ 的三段逐元素链，朴素 HBM 流量为 $6N$、理想融合为 $2N$，理论节省 $66.7\%$；向量广播、缓存命中、读写合并和 spilling 会改变实测值。
+- torch.compile / TorchInductor、Triton、TensorRT 都支持融合路径，但是否生成一个 kernel 依赖图、版本、形状、设备与编译设置；应以 profiler 轨迹为准。来源:PyTorch `torch.compile` / TorchInductor 官方文档(核验于 2026-07-18)。
 - FlashAttention(Dao 2022)是融合思想的巅峰:把 QKᵀ、softmax、×V 融成单 kernel,n×n 中间矩阵全不落 HBM。

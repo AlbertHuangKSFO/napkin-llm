@@ -13,12 +13,12 @@ T5 还有个统一的大招:**所有任务都写成“文本→文本”**。翻
 ## 例子:一句话的去噪流程(小数字)
 原句 `Thank you for inviting me to your party`(8 个词)。
 
-T5 随机选中两段连续片段 `you for` 和 `to`,各换成一个哨兵 `<X>`、`<Y>`:
+T5 选中两段**连续且互不重叠**的片段 `you for` 和 `to`，各换成一个按出现顺序编号的哨兵 `<extra_id_0>`、`<extra_id_1>`：
 
-- Encoder 输入(被破坏):`Thank <X> inviting me <Y> your party`(7 个 token)
-- Decoder 目标(只生成被遮内容):`<X> you for <Y> to <Z>`(`<Z>` 是结束哨兵)
+- Encoder 输入(被破坏):`Thank <extra_id_0> inviting me <extra_id_1> your party`
+- Decoder 目标(只生成被遮内容):`<extra_id_0> you for <extra_id_1> to <extra_id_2>`(`<extra_id_2>` 收束目标，训练时再接 EOS)
 
-注意 decoder **只产出被挖掉的那几个词**,不是重写整句——目标序列短,训练算力省。T5 论文实测:被遮比例约 **15%**、span 平均长度约 **3** 时效果最好。
+注意 decoder **只产出被挖掉的 span 与边界哨兵**,不是重写整句。若噪声比例为 $r$、有 $s$ 个 span，目标大约含 $rn+s$ 个 token（外加 EOS），所以 decoder 序列通常短于整句；具体训练成本还取决于 encoder 长度、batch 和实现。T5 论文的默认 span-corruption 配方使用 15% 噪声密度和平均 span 长度 3。
 
 BART 对同一句话可能这样加噪:`Thank ___ me your party .`(遮挡 + 删除 + 句子旋转),然后要求 decoder 输出**完整原句** `Thank you for inviting me to your party`。
 
@@ -43,9 +43,9 @@ BART 对同一句话可能这样加噪:`Thank ___ me your party .`(遮挡 + 删�
 ## 原理:双向编码 + 自回归解码 + 去噪损失
 **结构**:标准 [[012 交叉注意力 Cross-Attention|encoder-decoder]] Transformer。Encoder 用双向自注意力(无掩码,token 互相全可见);decoder 用[[007 因果掩码与 padding 掩码|因果掩码]]的自注意力 + 对 encoder 输出做 [[012 交叉注意力 Cross-Attention|cross-attention]]。
 
-**去噪目标(以 T5 为例)**:设原序列 $x=(x_1,\dots,x_n)$,被破坏后的输入为 $\tilde{x}$,被遮片段拼成目标 $y=(y_1,\dots,y_m)$($m\ll n$)。模型最小化目标的[[30 交叉熵与负对数似然|交叉熵]]:
+**去噪目标(以 T5 为例)**:设原序列 $x=(x_1,\dots,x_n)$，掩掉的连续 span 为 $S_0,\dots,S_{s-1}$。把每个 $S_j$ 在 encoder 输入中替换成唯一哨兵 $z_j$；decoder 目标为 $z_0,S_0,z_1,S_1,\dots,z_{s-1},S_{s-1},z_s,\mathrm{EOS}$。设其长度为 $m$，模型最小化目标的[[30 交叉熵与负对数似然|交叉熵]]:
 $$\mathcal{L} = -\sum_{t=1}^{m}\log P_\theta\big(y_t \mid y_{<t},\,\tilde{x}\big)$$
-其中 $y_{<t}$ 是 decoder 已生成的前缀,$\tilde{x}$ 经 encoder 编码后由 cross-attention 注入。这和 [[036 GPT 系列：自回归与规模化|GPT]] 的 next-token 损失形式一致,差别只在**条件**多了一个 encoder 端的 $\tilde{x}$,以及目标 $y$ 是“被遮片段”而非整条续写。
+其中 $y_{<t}$ 是 decoder 已生成的前缀,$\tilde{x}$ 经 encoder 编码后由 cross-attention 注入。这和 [[036 GPT 系列：自回归与规模化|GPT]] 的 next-token 损失形式一致,差别只在**条件**多了一个 encoder 端的 $\tilde{x}$,以及目标 $y$ 是按 span 顺序串接的“哨兵 + 被遮片段”，而非整条原文续写。
 
 **为什么 span 比单 token 好**:遮单个词(BERT 式)信息泄露多——上下文几乎确定了答案;遮连续 span 迫使模型建模**多词的联合分布**,更接近真实生成。T5 论文系统对比了多种破坏方式,得出 span corruption 是 encoder-decoder 上的最优配方。
 
@@ -64,41 +64,49 @@ $$\mathcal{L} = -\sum_{t=1}^{m}\log P_\theta\big(y_t \mid y_{<t},\,\tilde{x}\big
 import random
 
 def t5_span_corrupt(tokens, mask_ratio=0.15, mean_span=3, seed=0):
-    """把连续片段换成哨兵 <X>,<Y>...;返回 (encoder 输入, decoder 目标)。"""
-    random.seed(seed)
+    """教学实现：采样不重叠连续 span；返回 encoder 与按 span 顺序的 decoder 目标。"""
+    rng = random.Random(seed)
     n = len(tokens)
-    n_mask = max(1, round(n * mask_ratio))      # 要遮的 token 总数
-    # 随机决定每个位置是否被遮(简化:伯努利后再合并相邻为 span)
-    masked = sorted(random.sample(range(n), n_mask))
-    spans, cur = [], [masked[0]]
-    for p in masked[1:]:
-        if p == cur[-1] + 1: cur.append(p)      # 相邻 → 合并成同一 span
-        else: spans.append(cur); cur = [p]
-    spans.append(cur)
+    assert n > 0 and 0 < mask_ratio < 1 and mean_span >= 1
+    n_noise = max(1, round(n * mask_ratio))
+    # 约束 span 之间至少留一个未遮 token；这不是逐 token Bernoulli mask 再事后合并。
+    n_spans = min(max(1, round(n_noise / mean_span)), n_noise, n - n_noise + 1)
+    lengths = [1] * n_spans
+    for _ in range(n_noise - n_spans):
+        lengths[rng.randrange(n_spans)] += 1              # 总遮罩 token 精确为 n_noise
+    clean = n - n_noise
+    gaps = [0] + [1] * (n_spans - 1) + [0]                 # 内部 gap 防止两个 span 相连
+    for _ in range(clean - (n_spans - 1)):
+        gaps[rng.randrange(n_spans + 1)] += 1
+
+    spans, cursor = [], gaps[0]
+    for i, length in enumerate(lengths):
+        spans.append((cursor, cursor + length))
+        cursor += length + gaps[i + 1]
 
     sentinel = lambda i: f"<extra_id_{i}>"
-    enc, tgt, i, covered = [], [], 0, set(p for s in spans for p in s)
-    for pos in range(n):
-        if pos in covered:
-            if pos == 0 or (pos - 1) not in covered:   # span 起点 → 放一个哨兵
-                enc.append(sentinel(i)); tgt.append(sentinel(i)); i += 1
-            tgt.append(tokens[pos])                     # 被遮词进 decoder 目标
-        else:
-            enc.append(tokens[pos])                     # 没遮的词留在 encoder 输入
-    tgt.append(sentinel(i))                             # 收尾哨兵
+    enc, tgt, cursor = [], [], 0
+    for i, (start, end) in enumerate(spans):
+        enc.extend(tokens[cursor:start])
+        enc.append(sentinel(i))                            # encoder：每段只留一个哨兵
+        tgt.extend([sentinel(i), *tokens[start:end]])      # decoder：同一哨兵后接完整连续 span
+        cursor = end
+    enc.extend(tokens[cursor:])
+    tgt.append(sentinel(len(spans)))                       # 收束目标；训练 tokenizer 再添加 EOS
     return enc, tgt
 
 words = "Thank you for inviting me to your party".split()
 enc, tgt = t5_span_corrupt(words, seed=3)
-print("encoder 输入:", " ".join(enc))   # 例: Thank <extra_id_0> inviting me <extra_id_1> your party
-print("decoder 目标:", " ".join(tgt))   # 例: <extra_id_0> you for <extra_id_1> to <extra_id_2>
+print("encoder 输入:", " ".join(enc))
+print("decoder 目标:", " ".join(tgt))
+assert tgt[-1].startswith("<extra_id_")
 ```
 
 ```python
 # ❌ 错误理解:以为 decoder 要重写整句(那是 BART,不是 T5,且白白多算很多 token)
 tgt_wrong = words                          # 整句作目标 → 序列长、训练慢、信息冗余
 
-# ✅ T5:decoder 只生成“被遮片段 + 哨兵”,目标短、信号纯
+# ✅ T5:decoder 只生成“每个完整被遮 span 前的哨兵 + span 内容 + 收束哨兵”，不是逐 token 随机 mask
 #    BART 才是“加噪后重建完整原句”;两者目标不同,别混
 ```
 
@@ -106,10 +114,10 @@ tgt_wrong = words                          # 整句作目标 → 序列长、训
 # 三种预训练目标的「目标序列长度」对比(同一句 8 词,看谁算得多)
 sent = "Thank you for inviting me to your party".split()   # 8 词
 print("BERT MLM  目标长度 =", round(8*0.15))   # ≈1，只预测被遮的 15%
-print("T5  span  目标长度 =", "约 2~3 词 + 哨兵")  # 只生成被挖片段，短
+print("T5  span  目标长度 =", "被遮 token + span 数 + 收束哨兵")
 print("BART      目标长度 =", len(sent))        # 8，重建整句,最长
 print("GPT  自回归 目标长度 =", len(sent))       # 8，每个位置都预测下一个
-# 结论:T5 目标最短(省算),BART/GPT 要写满整句;但 GPT 每位置都有监督信号
+# 结论：T5 decoder 目标通常较短；完整训练成本仍须把 encoder、decoder 与 batch 一起计算
 ```
 
 ## 去噪目标家族:一张对照表
@@ -135,7 +143,8 @@ print("GPT  自回归 目标长度 =", len(sent))       # 8，每个位置都预
 
 ## 面试高频
 - **T5 和 BERT、GPT 的关系?** 三者都用 Transformer:BERT 是 encoder-only(双向、只填空、不擅生成);GPT 是 decoder-only(单向、只续写);T5/BART 是 encoder-decoder(双向编码 + 自回归解码,理解与生成兼顾)。见 [[011 Encoder-Decoder、Decoder-Only 与 Encoder-Only|三种结构]]。
-- **T5 的“span corruption”比 BERT 的 MLM 好在哪?** 遮**连续片段**而非单词,迫使模型建模多词联合分布,更贴近生成;且 decoder 只生成被遮内容,目标序列短、训练高效。
+- **T5 的 span corruption 到底怎么编码?** encoder 中每个连续被遮 span 用一个按出现顺序编号的哨兵替换；decoder 按顺序生成“同一哨兵 + 该 span token”，最后以额外哨兵收束并接 EOS。不能把它写成独立 token mask 后只随机拼接。
+- **它与 BERT MLM 的区别?** T5 遮**连续片段**、让 decoder 建模 span 内的自回归联合分布；BERT 通常只监督被选 token 的恢复。T5 decoder 目标常更短，但训练效率要用实际 encoder/decoder 长度和实现测量。
 - **T5 与 BART 去噪目标的区别?** T5:挖空→只补空(输出短)。BART:加多种噪声(遮/删/打乱/旋转)→重建整句(输出 = 完整原文)。BART 的 decoder 因此更像一个标准自回归 LM。
 - **既然 encoder-decoder 这么强,为什么后来主流是 decoder-only?** decoder-only 训练目标更简单(纯 next-token)、能直接吃海量无标注文本、in-context learning 强、scaling 曲线更平滑且参数利用率高;cross-attention 与单独 encoder 的额外结构在超大规模上性价比下降。这是 [[040 现代 decoder-only 配方汇总|现代配方]]的历史背景。
 - **T5 用什么位置编码?** 相对位置偏置(分桶标量),不是 [[031 RoPE 旋转位置编码(推导与实现)|RoPE]]——常被拿来和现代模型对比。
@@ -148,7 +157,7 @@ print("GPT  自回归 目标长度 =", len(sent))       # 8，每个位置都预
 - T5 出处:Raffel et al.,*Exploring the Limits of Transfer Learning with a Unified Text-to-Text Transformer*,JMLR 2020(arXiv:1910.10683,2019 年放出)。核心:**text-to-text** 统一框架 + **span corruption** 去噪;系统对比了架构、目标、数据后给出最优配方。
 - BART 出处:Lewis et al.,*BART: Denoising Sequence-to-Sequence Pre-training…*,ACL 2020(arXiv:1910.13461,2019 年放出)。核心:**多种噪声 + 重建完整原文**;在生成类任务(摘要、翻译)上很强。
 - T5 规模:从 60M(small)到 11B(T5-XXL);多语种版 mT5。BART-large 约 400M。
-- 去噪超参(T5 最优):破坏比例约 **15%**、span 平均长度约 **3**。
+- 去噪超参:T5 论文的默认 span-corruption 配方是噪声密度 **15%**、平均 span 长度 **3**；它是该研究的配方，换 tokenizer、语言或任务时应复验。
 - BART 五种噪声:token masking / deletion / **text infilling** / sentence permutation / document rotation;最优组合是 text infilling + sentence permutation。
 - T5 位置编码:**相对位置偏置**,相对距离对数分桶(32 桶),每桶每头一个可学习标量加到注意力 logits。
 - 衍生:**mT5**(101 语言,Unigram 25 万词表)、**Flan-T5**(大规模指令微调)、**ByT5**(字节级无分词器)、**UL2**(混合去噪器统一目标)。

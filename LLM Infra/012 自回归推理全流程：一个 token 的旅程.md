@@ -68,12 +68,12 @@ def autoregressive(model, prompt_ids, n_new, use_cache=True):
 def autoregressive_bad(model, prompt_ids, n_new):
     seq = prompt_ids
     for _ in range(n_new):
-        out = model(seq)                  # 每步重算整段 → O(L^2) FLOPs，慢几十倍
+        out = model(seq)                  # 线性层/FFN累计 O(L^2)，attention score/value 累计 O(L^3)
         seq = torch.cat([seq, out.logits[:, -1].argmax(-1, keepdim=True)], 1)
     return seq
 ```
 
-`❌` 每步把整段序列重新 forward,prefill 计算被白白重复 $L$ 次;`✅` 用 `past_key_values` 让 decode 每步只算新 token,这正是 [[LLM/102 KV-Cache|KV-Cache]] 的意义。
+令最终生成长度为 $L$(忽略初始 prompt 的常数):不带 cache 时第 $\ell$ 步重算长度 $\ell$ 的线性层/FFN,累计 $\sum_{\ell=1}^{L}O(\ell)=O(L^2)$；attention 的 score 与 $\mathrm{softmax}(QK^\top)V$ 每步为 $O(\ell^2)$,累计 $\sum_{\ell=1}^{L}O(\ell^2)=O(L^3)$。带 cache 后,每步只对新 token 做线性层/FFN,累计 $O(L)$；但新 query 仍要同长度约为 $\ell$ 的历史 KV 做 attention,累计 $O(L^2)$。`❌` 重算了已知历史；`✅` `past_key_values` 消除重复投影,却不会把自回归 attention 的历史读取变成常数。
 
 ## 面试高频
 
@@ -81,9 +81,10 @@ def autoregressive_bad(model, prompt_ids, n_new):
 - **Q:一个 token 从输入到输出经过哪些张量操作?** embedding 查表 → N×(attention+FFN+残差/LN)→ LM Head 投影到词表 → 采样。
 - **Q:为什么 decode 比 prefill 慢得多(按 token 算)?** decode 每步 $S=1$,权重搬运字节不被复用,是 [[014 Decode 阶段：访存受限|访存受限]];prefill 大 batch 摊薄了权重搬运。
 - **Q:自回归的"串行"为何无法绕开?** 第 $t+1$ token 的输入是第 $t$ 的采样结果,数据依赖天然串行(投机解码只是用小模型猜、大模型批量校验来缓解)。
+- **Q:KV-Cache 把复杂度从什么降到什么?** A:要分算子答。对从头重算的 $L$ 次生成,线性层/FFN 的累计计算从 $O(L^2)$ 降为 $O(L)$；attention score/value 的累计计算从 $O(L^3)$ 降为 $O(L^2)$。追问陷阱:把整次无 cache 推理一概说成 $O(L^2)$,漏掉了每次重算自注意力矩阵。
 
 ## 关键事实
 
 - 续写 $L$ 个 token = **1 次 prefill + (L−1) 次 decode**;这是推理成本结构的根本拆分(2023 起成为服务系统标准心智模型)。
 - vLLM/TensorRT-LLM 等(截至 2025)均把 prefill 与 decode 分别调度;DistServe(2024)进一步在不同 GPU 上**物理分离**两阶段以优化 goodput。
-- 不带 KV-Cache 的朴素自回归是 $O(L^2)$ 投影计算;带 cache 降到 $O(L)$,实际加速数倍到数百倍。
+- 对最终长度 $L$ 的朴素重算,线性层/FFN 累计为 $O(L^2)$、attention score/value 累计为 $O(L^3)$；使用 KV-Cache 后分别为 $O(L)$ 与 $O(L^2)$。这是渐近算子账,实际时延还取决于 prompt 长度、batch、KV 带宽、模型与实现。来源:Attention Is All You Need(Vaswani et al., 2017)；vLLM(Kwon et al., SOSP 2023)。

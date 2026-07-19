@@ -26,11 +26,11 @@
 
 ## 原理
 
-**1. 输出投影 = 与词向量做内积**。设最终(LN 后)hidden 张量 $H\in\mathbb{R}^{B\times L\times d}$,输出权重 $W_{\text{out}}\in\mathbb{R}^{d\times V}$:
+**1. 输出投影 = 与词向量做内积,可另带类别 bias。** 设最终(LN 后)hidden 张量 $H\in\mathbb{R}^{B\times L\times d}$,输出权重 $W_{\text{out}}\in\mathbb{R}^{d\times V}$、类别 bias $b\in\mathbb{R}^{V}$:
 
-$$\text{logits}=H\,W_{\text{out}}\in\mathbb{R}^{B\times L\times V}$$
+$$\text{logits}=H\,W_{\text{out}}+b\in\mathbb{R}^{B\times L\times V}$$
 
-逐元素看,$\text{logits}_{b,i,v}=\langle H_{b,i},\,(W_{\text{out}})_{:,v}\rangle$:位置 $(b,i)$ 的 hidden 和「词 $v$ 对应的列向量」的内积。通常不加偏置(很多实现 `bias=False`)。
+逐元素看,$\text{logits}_{b,i,v}=\langle H_{b,i},\,(W_{\text{out}})_{:,v}\rangle+b_v$:位置 $(b,i)$ 的 hidden 和「词 $v$ 对应的列向量」的内积，加上该类别的独立偏置。许多 decoder-only 实现选择 `bias=False`，但这是架构选择，不是 tied embedding 的数学要求。
 
 **2. softmax 把分数变概率**(见 [[27 Softmax 与温度|Softmax]]):
 
@@ -43,6 +43,12 @@ $$P(\text{下一词}=v\mid \text{上文})=\frac{\exp(\text{logits}_{b,i,v})}{\su
 $$\text{logits}=H\,E^\top,\qquad \text{logit}_{b,i,v}=\langle H_{b,i},\,E_v\rangle$$
 
 **同一个 $E$,前向用两次**:入口按行索引(查表),出口转置后做投影。反向传播时,$E$ 的梯度来自**两条路**——输入侧(被查到的那些行)和输出侧(所有行,因为 softmax 涉及全词表)——所以词向量训得更充分。
+
+若模型还使用 $b\in\mathbb{R}^{V}$，绑定的是 $E$ 与 $W_{\text{out}}$，**不是**把 $b$ 也“共享掉”。只有给全部类别同时加同一标量 $c$ 才有
+
+$$\mathrm{softmax}(z+c\mathbf 1)=\mathrm{softmax}(z).$$
+
+实际的输出 bias 是 $b_v$ 随词表类别变化的向量，通常会改变相对 logit 与概率，不能以 softmax 不变性为由把它当成无效常数。
 
 **4. 维度匹配的硬约束**。绑定要求输出投影维度 = 嵌入维度 = $d$。若想让嵌入维 $d_{\text{emb}}$ 与模型维 $d_{\text{model}}$ 不同(如 ALBERT 的因子分解嵌入),需在中间插一个 $d_{\text{emb}}\to d_{\text{model}}$ 的小投影,再绑定 $V\times d_{\text{emb}}$ 那一份。
 
@@ -95,7 +101,7 @@ emb  = nn.Embedding(V, d)
 head = nn.Linear(d, V, bias=False)     # 独立权重,与 emb 无关
 #（也不会从输出端给词向量额外梯度,通常 perplexity 略差）
 
-# ✅ 对:绑定权重(GPT-2 / BERT / T5 默认)
+# ✅ 对:绑定权重；是否另带 output bias 由具体架构决定
 head.weight = emb.weight
 ```
 
@@ -105,17 +111,18 @@ head.weight = emb.weight
 - **Q:什么是 tied embedding / 权重绑定?为什么用?** A:让输出投影矩阵 = 输入嵌入表的转置 $E^\top$,共享同一份权重。好处:① 省一份 `V×d` 参数(小模型里可达总量 20–30%);② 输入输出共享词义空间、词向量从两端都得梯度,常降 perplexity(Press & Wolf 2017)。
 - **Q:绑定省了多少参数,举个数?** A:`V=50k, d=768` 时,不绑两份 `7680 万`,绑定一份 `3840 万`,省一半;占 GPT-2 small(124M)约 31%。
 - **Q:绑定有什么前提/限制?** A:要求输出投影维 = 嵌入维 = $d$。若嵌入维想和模型维不同,得加中间投影(如 ALBERT 因子分解嵌入)再绑定。
-- **Q:输出层为什么常不加 bias?** A:softmax 对所有 logit 同加常数不变,bias 的全局分量被吸收;且绑定时 $E^\top$ 本身无 bias,加了反而破坏对称性。多数实现 `bias=False`。
+- **Q:输出层为什么有的实现不加 bias?bias 对 softmax 没用吗?** A:`bias=False` 是一种架构取舍，常与参数规模、已有层归一化和 checkpoint 兼容有关。softmax 只对“所有类别同加一个标量”不变；输出 bias $b_v$ 是每个类别不同的向量，会改变相对概率，绝非自动无效。权重绑定也不禁止保留独立 bias。
 - **Q:推理时怎么从 logits 得到下一个词?** A:温度调节 $\text{softmax}(z/T)$ 后采样;$T\to0$ 趋贪心、$T>1$ 更随机;再用 top-k(取最高 $k$ 个)或 top-p(累积概率 $p$ 的最小集)砍长尾。训练用全分布算交叉熵,推理用采样,共用同一组 logits。
 - **Q:tied embedding 时词向量梯度来自几条路?** A:两条——输入侧(被查到的行)和输出侧(softmax 涉及全词表,所有行都更新);所以词向量训得更充分,常降 perplexity。
 - **Q:什么是 logit lens?** A:把中间层 hidden 也乘 $E^\top$ 提前翻成词分布,观察模型第几层就"决定"了下一词;依赖 tied embedding 让中间表示与词表同空间。
 - **Q:词表很大时输出层为什么贵?有什么省法?** A:输出投影是 $d\times V$,$V$ 达十万级时是显存/算力大头;省法有 adaptive softmax(按词频分层)、采样 softmax(训练时只算部分负样本)、以及把 $V$ 用 BPE/分词控制在合理规模。
-- **陷阱**:① 别忘了 softmax 的数值稳定(减 max);② logits 不是概率,别直接当概率用,要 softmax;③ tied 后改其中一个就改了另一个(共享内存),调试时易踩;④ 词表巨大时输出投影是显存/算力大头,有 adaptive softmax / 采样 softmax 等省法;⑤ 嵌入乘 $\sqrt{d}$ 缩放是原版细节,绑定时输入侧缩放、输出侧不缩放,别搞混。
+- **追问:如何快速证明输出 bias 不是常数平移?** A:令 $z=[0,0]$、$b=[1,0]$，则 softmax 前为 $[0,0]$ 时概率为 $[0.5,0.5]$，加 $b$ 后为 $[e/(e+1),1/(e+1)]$；只有 $b=[c,c]$ 才抵消。
+- **陷阱**:① 别忘了 softmax 的数值稳定(减 max);② logits 不是概率,别直接当概率用,要 softmax;③ tied 后改其中一个就改了另一个(共享内存),调试时易踩;④ 别把类别 bias 与全局常数平移混为一谈；⑤ 词表巨大时输出投影是显存/算力大头,有 adaptive softmax / 采样 softmax 等省法。
 
 ## 关键事实
 
 - 权重绑定出自 Press & Wolf《Using the Output Embedding to Improve Language Models》(EACL 2017,arXiv:1608.05859):绑定后多个语言模型基准 perplexity 显著下降、参数更少;翻译模型可缩小到原来不到一半而不掉点。
 - 已成默认实践:GPT-2、BERT、RoBERTa、T5 等普遍绑定输入嵌入与输出投影。
-- 原始 Transformer(Vaswani 等,2017,arXiv:1706.03762)即在两处嵌入与 pre-softmax 线性层间共享权重,并把嵌入乘 $\sqrt{d}$ 缩放。
+- 原始 Transformer(Vaswani 等,2017,arXiv:1706.03762)在两处嵌入与 pre-softmax 线性层间共享权重,并把嵌入乘 $\sqrt{d}$ 缩放；输出 bias 是否存在需按具体实现核对。
 - 输出投影与 softmax 是交叉熵训练目标的最后一环;logit = hidden 与词向量内积,这也是「相似词得相近分」的来源。
 - 关联:嵌入与查表 [[04 Embedding 与向量数据库|Embedding]] 与 [[054 词嵌入层与权重绑定|词嵌入层与权重绑定]];softmax/温度 [[27 Softmax 与温度|Softmax]];交叉熵 [[30 交叉熵与负对数似然|交叉熵]] 与 [[32 困惑度 Perplexity|困惑度]];语言模型基础 [[53 语言模型基础(n-gram→神经 LM)|语言模型基础]];整体位置见 [[013 Transformer 整体数据流(逐张量形状)|整体数据流]]。
