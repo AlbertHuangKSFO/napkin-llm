@@ -27,17 +27,27 @@
 
 token 少一半,序列短一半,注意力 $O(L^2)$ 成本约降到 1/4,同样上下文窗口装得下两倍内容。代价:那个大词表多出来的几万个 token 都要在嵌入矩阵和输出 softmax 里各占一行,$|V|\times d$ 的参数随 $|V|$ 线性涨。
 
+**Unigram 的小数字手算。** 令候选词表的概率为 $p(a)=0.4,p(b)=0.1,p(ab)=0.3,p(ba)=0.2$。字符串 `aba` 有三条合法切分:
+
+$$[a,ba]:0.4\times0.2=0.08,\quad [ab,a]:0.3\times0.4=0.12,\quad [a,b,a]:0.4\times0.1\times0.4=0.016$$
+
+故训练时的句子概率是三者**求和** $P(\texttt{aba})=0.08+0.12+0.016=0.216$;Viterbi 只在编码时选最大的一条 $[ab,a]$(概率 $0.12$)。最大路径不是总概率,更不是 EM 的训练目标。
+
 **经验数值**:英文 ~32k 词表足够;多语言模型常取 64k(LLaMA-2 的 32k → LLaMA-3 扩到 128k,Qwen 用 ~152k,Gemma 用 256k),给非英语足够 token 配额来压低 fertility。
 
 ## 原理
 
 **1. BPE 训练(频次贪心,回顾)。** 见 [[051 BPE 与 Byte-level BPE|BPE]]:每步合并当前**频次最高**的相邻对,记入有序规则表,直到 $|V|$ 达标。合并次数 = 目标词表 − 基词表(字节级基为 256)。
 
-**2. Unigram 训练(似然剪枝,反向)。** 与 BPE 相反:**先建一个超大候选子词集合,再逐步删除**。每个子词 $u$ 有概率 $p(u)$,一段文本 $x$ 的概率是某种切分下子词概率之积,取最优切分:
+**2. Unigram 训练(似然剪枝,反向)。** 与 BPE 相反:**先建一个超大候选子词集合,再逐步删除**。每个子词 $u$ 有概率 $p(u)$,而一段文本 $x$ 的合法切分集合为 $\mathcal S(x)$。模型的句子概率必须把所有切分的概率相加:
 
-$$P(x)=\max_{\text{seg}(x)}\prod_{u\in\text{seg}(x)}p(u)$$
+$$P(x)=\sum_{s\in\mathcal S(x)}P(s)=\sum_{s\in\mathcal S(x)}\prod_{u\in s}p(u),\qquad \mathcal L=-\sum_{x\in D}\log P(x)$$
 
-用 EM 估 $p(u)$,然后删掉「删掉后总似然损失最小」的一批子词,重复到 $|V|$ 达标。Unigram 在 $|V|=32k$ 时与 BPE 接近,但**词表很大时 token-to-word 比会变差**,且概率模型偶有数值不稳(NaN)。详见 [[052 WordPiece、Unigram 与 SentencePiece|Unigram]]。
+EM/forward-backward 以这一个**和**计算期望出现次数,再估 $p(u)$;随后删掉令总对数似然损失最小的一批子词,重复到 $|V|$ 达标。部署时常用 Viterbi:
+
+$$s^\star=\arg\max_{s\in\mathcal S(x)}\prod_{u\in s}p(u)$$
+
+它只给一个确定的最高概率切分,不能替代上式训练中的边际化。详见 [[052 WordPiece、Unigram 与 SentencePiece|Unigram]]。
 
 **3. 词表大小的代价模型。** 嵌入层 + 输出层参数 $\approx 2|V|d$(若 [[054 词嵌入层与权重绑定|权重绑定]] 则 $|V|d$)。序列长度 $L\propto 1/\text{(平均 token 覆盖字符数)}$,大致随 $|V|$ 增大而减小(边际递减)。总算力既含 $O(L^2)$ 的注意力(偏好大 $|V|$ 缩短 $L$),也含 $O(|V|d)$ 的输出投影(偏好小 $|V|$)。最优 $|V|$ 是这两项的折中,且依赖语言数:**英文 ~33k 够,多语言需数倍**(arXiv:2310.08754)。
 
@@ -82,6 +92,36 @@ def fertility(tok, texts):
 ```
 
 ```python
+# —— Unigram：训练边际化全部切分；部署 Viterbi 只选一条最大路径 ——
+from math import inf
+
+pieces = {"a": 0.4, "b": 0.1, "ab": 0.3, "ba": 0.2}
+def unigram_sum_and_viterbi(text, probs):
+    # alpha[j] = 前 j 个字符所有合法切分的概率和
+    alpha = [0.0] * (len(text) + 1); alpha[0] = 1.0
+    best = [-inf] * (len(text) + 1); best[0] = 0.0
+    back = [None] * (len(text) + 1)
+    for i in range(len(text)):
+        if alpha[i] == 0.0:
+            continue
+        for piece, p in probs.items():
+            j = i + len(piece)
+            if text.startswith(piece, i):
+                alpha[j] += alpha[i] * p
+                score = best[i] + __import__("math").log(p)
+                if score > best[j]:
+                    best[j], back[j] = score, (i, piece)
+    path, j = [], len(text)
+    while j:
+        j, piece = back[j]; path.append(piece)
+    return alpha[-1], list(reversed(path))
+
+total, path = unigram_sum_and_viterbi("aba", pieces)
+assert round(total, 3) == 0.216
+assert path == ["ab", "a"]  # 最大路径 0.12；不是句子总概率 0.216
+```
+
+```python
 # ❌ 错：单语英文语料训分词器，却拿去训多语言模型
 #    → 中文/泰文 fertility 爆表、序列暴长、算力浪费
 # ✅ 对：按目标语言比例混采语料再训分词器，给小语种足够 token 配额
@@ -116,20 +156,21 @@ for V, f in [(32000, 1.5), (64000, 1.3), (256000, 1.1)]:
 
 - **Q:tokenizer 是怎么"训练"的?和模型训练一样吗?** A:在语料上**纯统计**学出固定切法(BPE 合并规则 / Unigram 子词概率),无梯度、无反向传播,和神经网络训练完全两回事。
 - **Q:词表大小怎么权衡?** A:小词表参数省但序列长(fertility 高)、算力贵($O(L^2)$)、长依赖难;大词表序列短、多语言友好但嵌入/softmax 参数暴涨、长尾 token 易成故障 token。英文 ~32k 够,多语言 64k~256k。
-- **Q:BPE 和 Unigram 训练方向有何不同?** A:BPE 自底向上,从字符反复合并最高频对;Unigram 自顶向下,从超大候选集按似然损失逐步剪枝。$|V|=32k$ 时接近,大词表下 Unigram token-to-word 比变差。
+- **Q:BPE 和 Unigram 训练方向有何不同?** A:BPE 自底向上,从字符反复合并最高频对;Unigram 自顶向下,从超大候选集按似然损失逐步剪枝。关键是 Unigram 的训练概率要对所有合法切分求和,不是只取一条最佳路径。
+- **Q:Unigram 的 EM 与 Viterbi 分别做什么?** A:EM/forward-backward 用 $P(x)=\sum_s\prod_{u\in s}p(u)$ 边际化全部切分,据此估子词期望计数和剪枝损失;Viterbi 在部署编码时求 $\arg\max_s\prod p(u)$,输出一个确定切分。把 Viterbi 最大值写成训练概率会低估句子似然并改变学习目标。
 - **Q:为什么词表太大反而有害?** A:① 嵌入/softmax 参数 $\approx |V|d$ 线性暴涨;② 更多 token 落长尾、训练不足 → 故障 token;③ 序列缩短的边际收益递减。
 - **Q:分词器训练语料有什么讲究?** A:必须与模型训练数据同分布、按目标语言比例采样;否则小语种 fertility 爆、或出现训练不足的长尾 token。
 - **Q:训练好的词表能改吗?** A:基本不能。词表冻结后是模型的"眼睛",改了已训嵌入/输出层全对不上;扩词表需从头训或专门的加 token+微调流程。
 - **Q:词表大小有没有「最优值」?** A:有,且服从 scaling law(Tao 2024):计算最优词表随模型变大而变大(但比非词表参数增长慢)。多数模型词表偏小——Llama2-70B 用 32k,最优应 ≥216k(~7×)。「大模型配大词表」。
 - **Q:字节回退是什么,解决什么?** A:词表外字符回退成 UTF-8 字节(256 字节 token 兜底),永不产 UNK;LLaMA 等用它处理任意 emoji/生僻字/二进制,代价是罕见字符 fertility 高。
 - **Q:encode 是确定性的吗?训练有梯度吗?** A:训练纯统计无梯度;BPE/WordPiece 编码确定(贪心),Unigram 推理用 Viterbi 确定、训练可按后验采样(子词正则化)。
-- **陷阱**:词表与训练语料必须同分布;别用单语分词器去训多语言模型;按算力预算选 $V_{\text{opt}}$ 而非一律 32k;Unigram 概率连乘在 log 域算防下溢。
+- **陷阱**:词表与训练语料必须同分布;别用单语分词器去训多语言模型;按算力预算选 $V_{\text{opt}}$ 而非一律 32k;Unigram 训练要边际化全部切分,Viterbi 只是部署解码;实现中在 log 域做求和以防下溢。
 
 ## 关键事实
 
 - 词表大小影响算力与多语言:**《Tokenizer Choice For LLM Training: Negligible or Crucial?》(arXiv:2310.08754, NAACL Findings 2024)**——英文 ~33k 足够,多语言需约 3 倍;高 fertility 使训练算力增加约 68%。
 - 词表 scaling law:**Tao et al.《Scaling Laws with Vocabulary: Larger Models Deserve Larger Vocabularies》(NeurIPS 2024,arXiv:2407.13623)**——计算最优词表随算力/模型增大而增大(亚线性于非词表参数);多数 LLM 词表偏小,Llama2-70B 最优应 ≥216k(约 7×)。
-- BPE:**Sennrich et al.(arXiv:1508.07909, ACL 2016)**,频次贪心合并;Byte-level BPE 见 GPT-2(2019)。Unigram:**Kudo(arXiv:1804.10959, ACL 2018)**,似然剪枝。SentencePiece 库(Kudo & Richardson, arXiv:1808.06226)直接在原始文本上训,适合多语言。
+- BPE:**Sennrich et al.(arXiv:1508.07909, ACL 2016)**,频次贪心合并;Byte-level BPE 见 GPT-2(2019)。Unigram:**Kudo(arXiv:1804.10959, ACL 2018)**,以 unigram LM 的所有切分概率之和训练,再做似然损失剪枝;SentencePiece 库(Kudo & Richardson, arXiv:1808.06226)直接在原始文本上训,适合多语言。
 - 现实词表规模:GPT-2/3 ~50k,LLaMA-1/2 32k,LLaMA-3 128k,Qwen ~152k,Gemma 256k——多语言/代码模型倾向更大词表。
 - 长尾 token 训练不足是 [[055 分词的坑：数字、代码、多语言与 token 攻击面|故障 token]] 的根因;词表须与训练语料同分布。
 - 关联:子词算法 [[051 BPE 与 Byte-level BPE|BPE]] / [[052 WordPiece、Unigram 与 SentencePiece|Unigram、SentencePiece]];词表与特殊 token [[053 词表、特殊 token 与对话模板|词表]];嵌入层与权重绑定 [[054 词嵌入层与权重绑定|词嵌入]];分词实战坑 [[055 分词的坑：数字、代码、多语言与 token 攻击面|分词的坑]];词表大小与参数/算力配比关联 [[079 Scaling Law 与 Chinchilla 最优|Scaling Law]]。
